@@ -1,8 +1,7 @@
 
 import { create } from 'zustand';
 import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product } from './types';
-import { INITIAL_INTAKE, INITIAL_OUTPUT, PRODUCTS, INITIAL_SUPPLIERS, INITIAL_BUYERS, DEFAULT_CONFIG } from './constants';
-import { parsePackagingString } from './utils/parser';
+import { DEFAULT_CONFIG } from './constants';
 
 interface AppState {
   activeTab: 'input' | 'preview' | 'trends' | 'ai' | 'inventory' | 'settings';
@@ -63,6 +62,7 @@ interface AppState {
   removeDispatchEntry: (id: string) => void;
   
   generateAIInsights: () => Promise<string>;
+  hydrateFromApi: () => Promise<void>;
 }
 
 const calculateMilkCost = (quantity: number, fat: number, protein: number, supplier: Supplier | undefined, defaultConfig: GlobalConfig) => {
@@ -85,12 +85,11 @@ export const useStore = create<AppState>((set, get) => ({
   activeTab: 'input',
   setActiveTab: (tab) => set({ activeTab: tab }),
   
-  globalConfig: DEFAULT_CONFIG,
   updateGlobalConfig: (config) => set((state) => ({ globalConfig: { ...state.globalConfig, ...config } })),
 
-  suppliers: INITIAL_SUPPLIERS,
-  buyers: INITIAL_BUYERS,
-  products: PRODUCTS,
+  suppliers: [],
+  buyers: [],
+  products: [],
   milkTypes: [
     'Skim milk concentrate',
     'Skim milk',
@@ -100,8 +99,8 @@ export const useStore = create<AppState>((set, get) => ({
     'Cream'
   ],
   
-  intakeEntries: INITIAL_INTAKE,
-  outputEntries: INITIAL_OUTPUT,
+  intakeEntries: [],
+  outputEntries: [],
   dispatchEntries: [],
   alerts: [
     { id: 'a1', type: 'info', message: 'Shift started: Morning Shift (Supervisor: J. Jonaitis)', timestamp: Date.now() }
@@ -114,39 +113,82 @@ export const useStore = create<AppState>((set, get) => ({
   setEditingOutputId: (id) => set({ editingOutputId: id }),
 
   // --- Database Actions ---
-  addSupplier: (supplier) => set((state) => ({
+  addSupplier: (supplier) => {
+    // Persist to server then update local state
+    fetch('/api/suppliers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(supplier) })
+      .then(r => r.json())
+      .then((created) => set((state) => ({ suppliers: [...state.suppliers, { ...created, createdOn: created.createdOn ? new Date(created.createdOn).getTime() : created.createdOn }] })))
+      .catch(err => console.error('Failed to add supplier', err));
+  },
     suppliers: [...state.suppliers, { ...supplier, id: Math.random().toString(36).substr(2, 9) }]
   })),
 
-  updateSupplier: (id, updates) => set((state) => ({
+  updateSupplier: (id, updates) => {
+    fetch(`/api/suppliers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(r => r.json())
+      .then((updated) => set((state) => ({ suppliers: state.suppliers.map(s => s.id === id ? { ...s, ...updated } : s) })))
+      .catch(err => console.error('Failed to update supplier', err));
+  },
     suppliers: state.suppliers.map(s => s.id === id ? { ...s, ...updates } : s)
   })),
 
-  removeSupplier: (id) => set((state) => ({
+  removeSupplier: (id) => {
+    fetch(`/api/suppliers/${id}`, { method: 'DELETE' })
+      .then(() => set((state) => ({ suppliers: state.suppliers.filter(s => s.id !== id) })))
+      .catch(err => console.error('Failed to delete supplier', err));
+  },
     suppliers: state.suppliers.filter(s => s.id !== id)
   })),
 
-  addBuyer: (buyer) => set((state) => ({
+  addBuyer: (buyer) => {
+    fetch('/api/buyers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buyer) })
+      .then(r => r.json())
+      .then((created) => set((state) => ({ buyers: [...state.buyers, { ...created, createdOn: created.createdOn ? new Date(created.createdOn).getTime() : created.createdOn }] })))
+      .catch(err => console.error('Failed to add buyer', err));
+  },
     buyers: [...state.buyers, { ...buyer, id: Math.random().toString(36).substr(2, 9) }]
   })),
 
-  updateBuyer: (id, updates) => set((state) => ({
+  updateBuyer: (id, updates) => {
+    fetch(`/api/buyers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(r => r.json())
+      .then((updated) => set((state) => ({ buyers: state.buyers.map(b => b.id === id ? { ...b, ...updated } : b) })))
+      .catch(err => console.error('Failed to update buyer', err));
+  },
     buyers: state.buyers.map(b => b.id === id ? { ...b, ...updates } : b)
   })),
 
-  removeBuyer: (id) => set((state) => ({
+  removeBuyer: (id) => {
+    fetch(`/api/buyers/${id}`, { method: 'DELETE' })
+      .then(() => set((state) => ({ buyers: state.buyers.filter(b => b.id !== id) })))
+      .catch(err => console.error('Failed to delete buyer', err));
+  },
     buyers: state.buyers.filter(b => b.id !== id)
   })),
 
-  addProduct: (product) => set((state) => ({
+  addProduct: (product) => {
+    fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product) })
+      .then(r => r.json())
+      .then((created) => set((state) => ({ products: [...state.products, created] })))
+      .catch(err => console.error('Failed to add product', err));
+  },
     products: [...state.products, product]
   })),
 
-  updateProduct: (id, updates) => set((state) => ({
+  updateProduct: (id, updates) => {
+    fetch(`/api/products/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(r => r.json())
+      .then((updated) => set((state) => ({ products: state.products.map(p => p.id === id ? { ...p, ...updated } : p) })))
+      .catch(err => console.error('Failed to update product', err));
+  },
     products: state.products.map(p => p.id === id ? { ...p, ...updates } : p)
   })),
 
-  removeProduct: (id) => set((state) => ({
+  removeProduct: (id) => {
+    fetch(`/api/products/${id}`, { method: 'DELETE' })
+      .then(() => set((state) => ({ products: state.products.filter(p => p.id !== id) })))
+      .catch(err => console.error('Failed to delete product', err));
+  },
     products: state.products.filter(p => p.id !== id)
   })),
 
@@ -159,7 +201,17 @@ export const useStore = create<AppState>((set, get) => ({
   })),
 
   // --- Log Actions ---
-  addIntakeEntry: (entry) => set((state) => {
+  addIntakeEntry: (entry) => {
+    fetch('/api/intake-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
+      .then(r => r.json())
+      .then((created) => set((state) => ({
+        intakeEntries: [
+          { ...created, timestamp: created.timestamp ? new Date(created.timestamp).getTime() : created.timestamp },
+          ...state.intakeEntries
+        ],
+      })))
+      .catch(err => console.error('Failed to add intake entry', err));
+  },
     const newAlerts = [...state.alerts];
     if (entry.tempCelsius > 8) {
       newAlerts.push({
@@ -204,7 +256,15 @@ export const useStore = create<AppState>((set, get) => ({
     };
   }),
 
-  updateIntakeEntry: (id, updates) => set((state) => ({
+  updateIntakeEntry: (id, updates) => {
+    fetch(`/api/intake-entries/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(r => r.json())
+      .then((updated) => set((state) => ({
+        intakeEntries: state.intakeEntries.map(e => e.id === id ? { ...e, ...updated, timestamp: updated.timestamp ? new Date(updated.timestamp).getTime() : updated.timestamp } : e),
+        editingIntakeId: null
+      })))
+      .catch(err => console.error('Failed to update intake entry', err));
+  },
     intakeEntries: state.intakeEntries.map(e => {
       if (e.id !== id) return e;
       const updatedEntry = { ...e, ...updates };
@@ -224,51 +284,44 @@ export const useStore = create<AppState>((set, get) => ({
     intakeEntries: state.intakeEntries.map(e => e.id === id ? { ...e, isDiscarded: !e.isDiscarded } : e)
   })),
 
-  removeIntakeEntry: (id) => set((state) => ({
+  removeIntakeEntry: (id) => {
+    fetch(`/api/intake-entries/${id}`, { method: 'DELETE' })
+      .then(() => set((state) => ({ intakeEntries: state.intakeEntries.filter(e => e.id !== id) })))
+      .catch(err => console.error('Failed to delete intake entry', err));
+  },
     intakeEntries: state.intakeEntries.filter(e => e.id !== id)
   })),
 
-  addOutputEntry: (productId, batchId, packagingString) => set((state) => {
-    const product = PRODUCTS.find(p => p.id === productId);
-    if (!product) return {};
+  addOutputEntry: (productId, batchId, packagingString) => {
+    const state = get();
+    const product = state.products.find(p => p.id === productId);
+    fetch('/api/output-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId, batchId, packagingString, timestamp: Date.now(), destination: 'Warehouse' }) })
+      .then(r => r.json())
+      .then((created) => set((s) => ({ outputEntries: [{ ...created, timestamp: created.timestamp ? new Date(created.timestamp).getTime() : created.timestamp }, ...s.outputEntries] })))
+      .catch(err => console.error('Failed to add output entry', err));
+  },
 
-    const parsed = parsePackagingString(packagingString, product.defaultPalletWeight, product.defaultBagWeight);
+  updateOutputEntry: (id, packagingString) => {
+    fetch(`/api/output-entries/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packagingString }) })
+      .then(r => r.json())
+      .then((updated) => set((state) => ({ outputEntries: state.outputEntries.map(e => e.id === id ? { ...e, ...updated, timestamp: updated.timestamp ? new Date(updated.timestamp).getTime() : updated.timestamp } : e), editingOutputId: null })))
+      .catch(err => console.error('Failed to update output entry', err));
+  },
 
-    return {
-      outputEntries: [
-        {
-          id: Math.random().toString(36).substr(2, 9),
-          productId,
-          batchId,
-          packagingString,
-          parsed,
-          destination: 'Warehouse',
-          timestamp: Date.now()
-        },
-        ...state.outputEntries
-      ]
-    };
-  }),
-
-  updateOutputEntry: (id, packagingString) => set((state) => {
-    return {
-      outputEntries: state.outputEntries.map(entry => {
-        if (entry.id !== id) return entry;
-        const product = PRODUCTS.find(p => p.id === entry.productId);
-        const parsed = product 
-          ? parsePackagingString(packagingString, product.defaultPalletWeight, product.defaultBagWeight)
-          : entry.parsed;
-        return { ...entry, packagingString, parsed };
-      }),
-      editingOutputId: null
-    };
-  }),
-
-  removeOutputEntry: (id) => set((state) => ({
+  removeOutputEntry: (id) => {
+    fetch(`/api/output-entries/${id}`, { method: 'DELETE' })
+      .then(() => set((state) => ({ outputEntries: state.outputEntries.filter(e => e.id !== id) })))
+      .catch(err => console.error('Failed to delete output entry', err));
+  },
     outputEntries: state.outputEntries.filter(e => e.id !== id)
   })),
 
-  addDispatchEntry: (entry) => set((state) => ({
+  addDispatchEntry: (entry) => {
+    fetch('/api/dispatch-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
+      .then(r => r.json())
+      .then((created) => set((state) => ({ dispatchEntries: [{ ...created, date: created.date ? new Date(created.date).getTime() : created.date }, ...state.dispatchEntries] })))
+      .catch(err => console.error('Failed to add dispatch entry', err));
+  },
     dispatchEntries: [
       {
         ...entry,
@@ -280,11 +333,40 @@ export const useStore = create<AppState>((set, get) => ({
     ]
   })),
 
-  updateDispatchEntry: (id, updates) => set((state) => ({
+  updateDispatchEntry: (id, updates) => {
+    fetch(`/api/dispatch-entries/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(r => r.json())
+      .then((updated) => set((state) => ({ dispatchEntries: state.dispatchEntries.map(e => e.id === id ? { ...e, ...updated } : e) })))
+      .catch(err => console.error('Failed to update dispatch entry', err));
+  },
     dispatchEntries: state.dispatchEntries.map(e => e.id === id ? { ...e, ...updates } : e)
   })),
 
-  removeDispatchEntry: (id) => set((state) => ({
+  removeDispatchEntry: (id) => {
+    fetch(`/api/dispatch-entries/${id}`, { method: 'DELETE' })
+      .then(() => set((state) => ({ dispatchEntries: state.dispatchEntries.filter(e => e.id !== id) })))
+      .catch(err => console.error('Failed to delete dispatch entry', err));
+  },
+
+  hydrateFromApi: async () => {
+    try {
+      const res = await fetch('/api/bootstrap');
+      const data = await res.json();
+      if (data) {
+        set(() => ({
+          suppliers: data.suppliers.map((s: any) => ({ ...s, createdOn: s.createdOn ?? null })),
+          buyers: data.buyers.map((b: any) => ({ ...b, createdOn: b.createdOn ?? null })),
+          products: data.products,
+          milkTypes: data.milkTypes,
+          intakeEntries: data.intakeEntries.map((i: any) => ({ ...i })),
+          outputEntries: data.outputEntries.map((o: any) => ({ ...o })),
+          dispatchEntries: data.dispatchEntries.map((d: any) => ({ ...d }))
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to hydrate from API', err);
+    }
+  },
     dispatchEntries: state.dispatchEntries.filter(e => e.id !== id)
   })),
 

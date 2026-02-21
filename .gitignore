@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files (do not commit secrets)
+.env
+.env.*
+
+# Prisma local env (if present)
+prisma/.env
+nordic-backend/.env

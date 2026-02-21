@@ -1,14 +1,21 @@
-# Azure Database Configuration
+# Azure Database Configuration (Template)
 
-These are the connection details for the Nordic PMS Azure SQL Database.
+This file provides a sanitized template for configuring an Azure SQL Database connection for local development. Do NOT place secrets here; use a `.env` file with a `DATABASE_URL` environment variable.
+
+Example placeholder values:
 
 | Property | Value |
 | --- | --- |
-| **Resource Group** | `nordic-pms-rg` |
-| **Server Name** | `nordic-pms-server-2026` |
-| **Admin Username** | `nordicadmin2026` |
-| **Password** | `NordPMS_2026` |
-| **Database Name** | `nordic-production-db` |
-| **Connection String (Template)** | `Server=tcp:nordic-pms-server-2026.database.windows.net,1433;Initial Catalog=nordic-production-db;Persist Security Info=False;User ID=nordicadmin2026;Password=NordPMS_2026;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;` |
+| **Server Name** | <your-server-name>.database.windows.net |
+| **Admin Username** | <db-admin-username> |
+| **Password** | <db-password> |
+| **Database Name** | <database-name> |
+| **Connection String (Template)** | Server=tcp:<your-server-name>.database.windows.net,1433;Initial Catalog=<database-name>;Persist Security Info=False;User ID=<db-admin-username>;Password=<db-password>;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30; |
 
-*Note: Ensure firewall rules on Azure allow access from the application environment.*
+Usage notes:
+
+- Add the full connection string to a local `.env` file as `DATABASE_URL` in Prisma format. For example:
+
+	DATABASE_URL="sqlserver://<user>:<password>@<your-server-name>.database.windows.net:1433;database=<database-name>;encrypt=true;trustServerCertificate=false"
+
+- Do not commit your `.env` file to the repository. This document intentionally contains placeholders only.

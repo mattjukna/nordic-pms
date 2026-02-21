@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Package, Truck, Trash2, CheckCircle, Loader2, Scale } from 'lucide-react';
-import { PRODUCTS } from '../constants';
+import { useStore } from '../store';
 import { GlassCard } from './ui/GlassCard';
 import { Product, ProductionLogEntry } from '../types';
 
@@ -9,7 +9,8 @@ interface ProductionFormProps {
 }
 
 const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
-  const [selectedProduct, setSelectedProduct] = useState<Product>(PRODUCTS[0]);
+  const { products } = useStore();
+  const [selectedProduct, setSelectedProduct] = useState<Product>(products[0]);
   
   // Form State
   const [palletCount, setPalletCount] = useState<string>('');
@@ -26,8 +27,8 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
 
   // Update defaults when product changes
   useEffect(() => {
-    setPalletWeight(selectedProduct.defaultPalletWeight.toString());
-    setBagWeight(selectedProduct.defaultBagWeight.toString());
+    setPalletWeight(selectedProduct?.defaultPalletWeight.toString() || '0');
+    setBagWeight(selectedProduct?.defaultBagWeight.toString() || '0');
   }, [selectedProduct]);
 
   // Calculations
@@ -130,7 +131,7 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
       {/* Product Selector */}
       <div className="w-full overflow-x-auto pb-2 scrollbar-hide">
         <div className="flex gap-3 min-w-max">
-          {PRODUCTS.map((prod) => (
+          {products.map((prod) => (
             <button
               key={prod.id}
               onClick={() => setSelectedProduct(prod)}

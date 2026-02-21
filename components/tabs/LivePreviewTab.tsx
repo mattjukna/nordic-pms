@@ -4,7 +4,6 @@ import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { Scale, Truck, ChevronDown, ChevronRight, AlertCircle, Leaf, Package, Calendar, Filter, Factory, Droplets, Info, Ban } from 'lucide-react';
 import { IntakeEntry, OutputEntry } from '../../types';
-import { PRODUCTS } from '../../constants';
 
 // Conservative average yield factor for plant (MPC85 + Permeate)
 const THEORETICAL_YIELD_FACTOR = 0.17; 
@@ -13,7 +12,7 @@ type TimeRange = 'day' | 'week' | 'month' | 'quarter' | 'year';
 type ViewMode = 'intake' | 'production';
 
 export const LivePreviewTab: React.FC = () => {
-  const { intakeEntries, outputEntries, suppliers } = useStore();
+  const { intakeEntries, outputEntries, suppliers, products } = useStore();
   const [viewMode, setViewMode] = useState<ViewMode>('intake');
   const [timeRange, setTimeRange] = useState<TimeRange>('month'); // Default to month for quota context
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('all');
@@ -101,7 +100,7 @@ export const LivePreviewTab: React.FC = () => {
     const totalTanks = entries.reduce((sum, e) => sum + e.parsed.tanks, 0);
 
     // Group by Product
-    const byProduct = PRODUCTS.map(product => {
+    const byProduct = products.map(product => {
       const productEntries = entries.filter(e => e.productId === product.id);
       const productTotal = productEntries.reduce((sum, e) => sum + e.parsed.totalWeight, 0);
       const productPallets = productEntries.reduce((sum, e) => sum + e.parsed.pallets, 0);

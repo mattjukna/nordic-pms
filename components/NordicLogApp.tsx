@@ -10,7 +10,12 @@ import { InventoryTab } from './tabs/InventoryTab';
 import { SettingsTab } from './tabs/SettingsTab';
 
 const NordicLogApp: React.FC = () => {
-  const { activeTab, setActiveTab } = useStore();
+  const { activeTab, setActiveTab, hydrateFromApi } = useStore();
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    hydrateFromApi().finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="w-full max-w-7xl mx-auto flex flex-col min-h-screen bg-slate-50">
@@ -65,12 +70,16 @@ const NordicLogApp: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 relative px-2 md:px-4 pb-8">
-        {activeTab === 'input' && <InputTab />}
-        {activeTab === 'preview' && <LivePreviewTab />}
-        {activeTab === 'inventory' && <InventoryTab />}
-        {activeTab === 'trends' && <TrendsTab />}
-        {activeTab === 'ai' && <AITab />}
-        {activeTab === 'settings' && <SettingsTab />}
+        {loading ? <div className="p-6 text-center">Loading data...</div> : (
+          <>
+            {activeTab === 'input' && <InputTab />}
+            {activeTab === 'preview' && <LivePreviewTab />}
+            {activeTab === 'inventory' && <InventoryTab />}
+            {activeTab === 'trends' && <TrendsTab />}
+            {activeTab === 'ai' && <AITab />}
+            {activeTab === 'settings' && <SettingsTab />}
+          </>
+        )}
       </main>
 
     </div>

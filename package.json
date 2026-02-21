@@ -6,11 +6,17 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "prisma db seed",
     "lint": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@prisma/client": "5.11.1",
     "clsx": "2.1.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -18,7 +24,6 @@
     "jspdf": "2.5.1",
     "jspdf-autotable": "3.5.28",
     "lucide-react": "0.263.1",
-    "mssql": "^12.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "9.0.1",
@@ -27,13 +32,16 @@
     "zustand": "4.5.0"
   },
   "devDependencies": {
+    "prisma": "5.11.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/mssql": "^9.1.9",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

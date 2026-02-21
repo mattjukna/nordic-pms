@@ -1,7 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../store';
-import { PRODUCTS } from '../../constants';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { PackagingWizard } from '../ui/PackagingWizard';
@@ -13,7 +12,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, buyers } = useStore();
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, buyers, products } = useStore();
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState(false);
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);
@@ -27,7 +26,7 @@ export const InventoryTab: React.FC = () => {
   const [dispatchStatus, setDispatchStatus] = useState<'confirmed' | 'planned'>('confirmed');
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedBuyerId, setSelectedBuyerId] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0].id);
+  const [selectedProduct, setSelectedProduct] = useState(products[0]?.id || '');
   const [selectedContractId, setSelectedContractId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [pkgString, setPkgString] = useState('');
@@ -62,7 +61,7 @@ export const InventoryTab: React.FC = () => {
   const currentBuyer = useMemo(() => buyers.find(b => b.id === selectedBuyerId), [buyers, selectedBuyerId]);
   
   // Derived: Active Product Object
-  const activeProduct = useMemo(() => PRODUCTS.find(p => p.id === selectedProduct), [selectedProduct]);
+  const activeProduct = useMemo(() => products.find(p => p.id === selectedProduct), [selectedProduct, products]);
 
   // Derived: Available Contracts for selected Buyer & Product
   const availableContracts = useMemo(() => {
@@ -98,7 +97,7 @@ export const InventoryTab: React.FC = () => {
     if (editingDispatchId && shipmentPkgString) {
       const entry = dispatchEntries.find(e => e.id === editingDispatchId);
       if (entry) {
-        const product = PRODUCTS.find(p => p.id === entry.productId);
+        const product = products.find(p => p.id === entry.productId);
         if (product) {
           const parsed = parsePackagingString(shipmentPkgString, product.defaultPalletWeight, product.defaultBagWeight);
           if (parsed.isValid) {
@@ -111,7 +110,7 @@ export const InventoryTab: React.FC = () => {
 
   // Calculate current stock and Aging
   const stockLevels = useMemo(() => {
-    return PRODUCTS.map(product => {
+    return products.map(product => {
       const productOutputs = outputEntries.filter(e => e.productId === product.id);
       
       const producedKg = productOutputs.reduce((sum, e) => sum + e.parsed.totalWeight, 0);
