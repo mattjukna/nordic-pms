@@ -1,0 +1,921 @@
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { useStore } from '../../store';
+import { GlassCard } from '../ui/GlassCard';
+import { ConfirmationModal } from '../ui/ConfirmationModal';
+import { PackagingWizard } from '../ui/PackagingWizard';
+import { SmartSelect } from '../ui/SmartSelect';
+import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, LayoutGrid, Calculator, Droplets, Factory, Ban } from 'lucide-react';
+import { parsePackagingString } from '../../utils/parser';
+
+// --- Smart Note Input Component ---
+const SUGGESTED_TAGS = ['#HighTemp', '#HighAcid', '#LowProtein', '#DamagedPackaging', '#LateArrival'];
+
+const SmartNoteInput: React.FC<{ 
+  value: string; 
+  onChange: (val: string, tags: string[]) => void 
+}> = ({ value, onChange }) => {
+  const [showMenu, setShowMenu] = useState(false);
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = e.target.value;
+    if (newVal.endsWith('#')) {
+      setShowMenu(true);
+    } else if (newVal.endsWith(' ')) {
+      setShowMenu(false);
+    }
+    
+    const tags = newVal.match(/#[a-zA-Z0-9]+/g) || [];
+    onChange(newVal, tags);
+  };
+
+  const insertTag = (tag: string) => {
+    const cleanValue = value.slice(0, -1); 
+    const finalValue = `${cleanValue}${tag} `;
+    onChange(finalValue, [tag]);
+    setShowMenu(false);
+  };
+
+  return (
+    <div className="relative w-full">
+      <input 
+        type="text" 
+        value={value}
+        onChange={handleChange}
+        placeholder="Add note (type # for tags)..."
+        className="w-full bg-white border border-slate-300 rounded-md px-3 py-2.5 text-base md:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
+      />
+      {showMenu && (
+        <div className="absolute top-full left-0 mt-1 w-full md:w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden animate-fade-in">
+          <div className="bg-slate-50 px-3 py-2 text-[10px] uppercase font-bold text-slate-500 tracking-wider">Select Issue Tag</div>
+          {SUGGESTED_TAGS.map(tag => (
+            <button
+              key={tag}
+              onClick={() => insertTag(tag)}
+              className="w-full text-left px-3 py-3 md:py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center gap-2 border-b md:border-b-0 border-slate-50"
+            >
+              <Hash size={12} className="text-blue-400" /> {tag.replace('#', '')}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- Reusable Input Components ---
+const InputField = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
+  <input 
+    {...props}
+    className={`w-full bg-white border border-slate-300 rounded-md px-3 py-2.5 md:py-2 text-base md:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 ${props.className || ''}`}
+  />
+);
+
+const SelectField = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => (
+  <select 
+    {...props}
+    className={`w-full bg-white border border-slate-300 rounded-md px-3 py-2.5 md:py-2 text-base md:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${props.className || ''}`}
+  />
+);
+
+// --- Filter Component with Range ---
+interface FilterState {
+  search: string;
+  dateStart: string;
+  dateEnd: string;
+}
+
+const FilterSection: React.FC<{
+  isOpen: boolean;
+  onToggle: () => void;
+  filters: FilterState;
+  onFilterChange: (updates: Partial<FilterState>) => void;
+  count: number;
+  label: string;
+}> = ({ isOpen, onToggle, filters, onFilterChange, count, label }) => {
+  
+  const setPreset = (days: number) => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    onFilterChange({
+      dateStart: start.toISOString().split('T')[0],
+      dateEnd: end.toISOString().split('T')[0]
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2 mb-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
+      <div className="flex items-center justify-between cursor-pointer" onClick={onToggle}>
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
+          <Filter size={14} className={isOpen ? 'text-blue-600' : 'text-slate-400'} />
+          <span>{label} History</span>
+          <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{count}</span>
+        </div>
+        <button className="text-slate-400 hover:text-blue-600">
+          {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+      </div>
+      
+      {isOpen && (
+        <div className="grid grid-cols-12 gap-2 pt-2 border-t border-slate-200 animate-slide-up">
+          <div className="col-span-12 relative">
+            <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search..." 
+              className="w-full bg-white text-slate-900 pl-8 pr-2 py-1.5 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-slate-400"
+              value={filters.search}
+              onChange={(e) => onFilterChange({ search: e.target.value })}
+            />
+          </div>
+          
+          <div className="col-span-12 flex gap-2 items-center bg-white p-1.5 rounded border border-slate-200">
+             <Calendar size={14} className="text-slate-400 ml-1" />
+             <div className="flex gap-2 flex-1">
+               <input 
+                  type="date" 
+                  className="w-full bg-white text-slate-700 text-xs outline-none"
+                  value={filters.dateStart}
+                  onChange={(e) => onFilterChange({ dateStart: e.target.value })}
+                />
+                <span className="text-slate-300">-</span>
+                <input 
+                  type="date" 
+                  className="w-full bg-white text-slate-700 text-xs outline-none"
+                  value={filters.dateEnd}
+                  onChange={(e) => onFilterChange({ dateEnd: e.target.value })}
+                />
+             </div>
+          </div>
+          
+          <div className="col-span-12 flex gap-1 justify-between">
+             {[
+               { l: 'Today', d: 0 }, { l: 'Week', d: 7 }, { l: 'Month', d: 30 }, { l: 'Qtr', d: 90 }
+             ].map(p => (
+               <button 
+                  key={p.l}
+                  onClick={() => setPreset(p.d)}
+                  className="flex-1 bg-white border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 text-[10px] py-1 rounded transition-colors uppercase font-semibold"
+                >
+                  {p.l}
+               </button>
+             ))}
+          </div>
+
+          <div className="col-span-12 text-[10px] text-center text-slate-400 italic">
+            Showing all matching results. Clear filters to reset.
+          </div>
+        </div>
+      )}
+      {!isOpen && <div className="text-[10px] text-slate-400 pl-6">Showing recent 5 entries</div>}
+    </div>
+  );
+};
+
+// --- Main Component ---
+
+export const InputTab: React.FC = () => {
+  const { 
+    suppliers,
+    intakeEntries, 
+    addIntakeEntry, 
+    updateIntakeEntry,
+    removeIntakeEntry, 
+    editingIntakeId,
+    setEditingIntakeId,
+    outputEntries, 
+    addOutputEntry, 
+    updateOutputEntry,
+    removeOutputEntry,
+    editingOutputId,
+    setEditingOutputId,
+    products,
+    milkTypes
+  } = useStore();
+
+  // Input Form States (Intake)
+  const [activeMode, setActiveMode] = useState<'intake' | 'output'>('intake');
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
+  const [milkType, setMilkType] = useState(milkTypes[0] || 'Skim milk');
+  const [intakeKg, setIntakeKg] = useState('');
+  const [intakeDate, setIntakeDate] = useState(new Date().toISOString().split('T')[0]); // Default to today
+  const [fat, setFat] = useState('');
+  const [protein, setProtein] = useState('');
+  const [ph, setPh] = useState('');
+  const [temp, setTemp] = useState('');
+  const [isEcological, setIsEcological] = useState(false);
+  const [note, setNote] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  
+  // Input Form States (Output)
+  const [selectedProductId, setSelectedProductId] = useState(products[0]?.id || '');
+  const [batchId, setBatchId] = useState(`MPC-${new Date().toISOString().slice(0,10)}`);
+  const [pkgString, setPkgString] = useState('');
+  const [showWizard, setShowWizard] = useState(false);
+
+  // Supplier Options for SmartSelect
+  const supplierOptions = useMemo(() => suppliers.map(s => ({
+    id: s.id,
+    label: s.name,
+    subLabel: `${s.routeGroup} • ${s.defaultMilkType || 'Milk'}`,
+    tags: [s.isEco ? 'ECO' : '', s.defaultMilkType || ''].filter(Boolean),
+    data: s
+  })), [suppliers]);
+
+  const supplierFilters = useMemo(() => [
+    { id: 'concentrate', label: 'Concentrate', predicate: (s: any) => s.defaultMilkType?.toLowerCase().includes('concentrate') },
+    { id: 'milk', label: 'Raw Milk', predicate: (s: any) => !s.defaultMilkType?.toLowerCase().includes('concentrate') },
+    { id: 'eco', label: 'Ecological', predicate: (s: any) => s.isEco }
+  ], []);
+
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    action: () => void;
+    isDanger?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    action: () => {}
+  });
+
+  // Set default supplier when list loads
+  useEffect(() => {
+    if (suppliers.length > 0 && !selectedSupplierId) {
+      setSelectedSupplierId(suppliers[0].id);
+    }
+  }, [suppliers]);
+
+  // Auto-fill Supplier Details
+  useEffect(() => {
+    const supplier = suppliers.find(s => s.id === selectedSupplierId);
+    if (supplier) {
+      if (supplier.defaultMilkType) setMilkType(supplier.defaultMilkType);
+      if (supplier.isEco !== undefined) setIsEcological(supplier.isEco);
+    }
+  }, [selectedSupplierId, suppliers]);
+
+  // Filtering States
+  const [showIntakeFilter, setShowIntakeFilter] = useState(false);
+  const [intakeFilters, setIntakeFilters] = useState<FilterState>({ search: '', dateStart: '', dateEnd: '' });
+  
+  const [showOutputFilter, setShowOutputFilter] = useState(false);
+  const [outputFilters, setOutputFilters] = useState<FilterState>({ search: '', dateStart: '', dateEnd: '' });
+
+  // Load editing data (Intake)
+  useEffect(() => {
+    if (editingIntakeId) {
+      const entry = intakeEntries.find(e => e.id === editingIntakeId);
+      if (entry) {
+        setSelectedSupplierId(entry.supplierId);
+        setMilkType(entry.milkType || milkTypes[0] || 'Skim milk');
+        setIntakeKg(entry.quantityKg.toString());
+        setIntakeDate(new Date(entry.timestamp).toISOString().split('T')[0]);
+        setFat(entry.fatPct.toString());
+        setProtein(entry.proteinPct.toString());
+        setPh(entry.ph?.toString() || '');
+        setTemp(entry.tempCelsius.toString());
+        setIsEcological(entry.isEcological || false);
+        setNote(entry.note || '');
+        setTags(entry.tags || []);
+      }
+    }
+  }, [editingIntakeId, intakeEntries]);
+
+  // Load editing data (Output)
+  useEffect(() => {
+    if (editingOutputId) {
+      const entry = outputEntries.find(e => e.id === editingOutputId);
+      if (entry) {
+        setSelectedProductId(entry.productId);
+        setBatchId(entry.batchId);
+        setPkgString(entry.packagingString);
+      }
+    }
+  }, [editingOutputId, outputEntries]);
+
+  // Derived Values
+  const activeProduct = products.find(p => p.id === selectedProductId);
+  const parserPreview = useMemo(() => {
+    if (!activeProduct) return null;
+    return parsePackagingString(pkgString, activeProduct.defaultPalletWeight, activeProduct.defaultBagWeight);
+  }, [pkgString, activeProduct]);
+
+  // Filter Logic: Intake
+  const displayedIntake = useMemo(() => {
+    let data = [...intakeEntries].sort((a, b) => b.timestamp - a.timestamp);
+    
+    // Apply Filters
+    if (showIntakeFilter) {
+      if (intakeFilters.search) {
+        const lowerQ = intakeFilters.search.toLowerCase();
+        data = data.filter(e => 
+          e.supplierName.toLowerCase().includes(lowerQ) ||
+          e.quantityKg.toString().includes(lowerQ) ||
+          e.routeGroup.toLowerCase().includes(lowerQ) ||
+          (e.note && e.note.toLowerCase().includes(lowerQ))
+        );
+      }
+      if (intakeFilters.dateStart) {
+        const startTs = new Date(intakeFilters.dateStart).getTime();
+        data = data.filter(e => e.timestamp >= startTs);
+      }
+      if (intakeFilters.dateEnd) {
+        // End of the day
+        const endTs = new Date(intakeFilters.dateEnd).setHours(23, 59, 59, 999);
+        data = data.filter(e => e.timestamp <= endTs);
+      }
+      return data;
+    }
+    return data.slice(0, 5);
+  }, [intakeEntries, showIntakeFilter, intakeFilters]);
+
+  // Filter Logic: Output
+  const displayedOutput = useMemo(() => {
+    let data = [...outputEntries].sort((a, b) => b.timestamp - a.timestamp);
+
+    if (showOutputFilter) {
+      if (outputFilters.search) {
+        const lowerQ = outputFilters.search.toLowerCase();
+        data = data.filter(e => 
+          e.productId.toLowerCase().includes(lowerQ) ||
+          e.batchId.toLowerCase().includes(lowerQ) ||
+          e.parsed.totalWeight.toString().includes(lowerQ)
+        );
+      }
+      if (outputFilters.dateStart) {
+        const startTs = new Date(outputFilters.dateStart).getTime();
+        data = data.filter(e => e.timestamp >= startTs);
+      }
+      if (outputFilters.dateEnd) {
+        const endTs = new Date(outputFilters.dateEnd).setHours(23, 59, 59, 999);
+        data = data.filter(e => e.timestamp <= endTs);
+      }
+      return data;
+    }
+
+    return data.slice(0, 5);
+  }, [outputEntries, showOutputFilter, outputFilters]);
+
+  // Handlers
+  const confirmIntakeSubmit = () => {
+    const supplier = suppliers.find(s => s.id === selectedSupplierId);
+    if (!supplier || !intakeKg) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: editingIntakeId ? "Confirm Update" : "Confirm New Intake",
+      message: `Are you sure you want to ${editingIntakeId ? 'update' : 'add'} this intake entry for ${supplier.name} (${intakeKg}kg) on ${intakeDate}?`,
+      action: executeIntakeSubmit,
+      isDanger: false
+    });
+  };
+
+  const executeIntakeSubmit = () => {
+    const supplier = suppliers.find(s => s.id === selectedSupplierId);
+    if (!supplier || !intakeKg) return;
+
+    // Construct Timestamp
+    const selectedDate = new Date(intakeDate);
+    const now = new Date();
+    const isToday = selectedDate.toDateString() === now.toDateString();
+    
+    if (isToday) {
+       selectedDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+    } else {
+       selectedDate.setHours(12, 0, 0, 0); // Default to noon
+    }
+    
+    const timestamp = selectedDate.getTime();
+
+    const entryData = {
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      routeGroup: supplier.routeGroup,
+      milkType: milkType,
+      quantityKg: parseFloat(intakeKg),
+      ph: parseFloat(ph) || 6.65,
+      fatPct: parseFloat(fat) || 0,
+      proteinPct: parseFloat(protein) || 0,
+      tempCelsius: parseFloat(temp) || 0,
+      isEcological,
+      tags: [...tags, (parseFloat(temp) > 8 ? '#HighTemp' : ''), (parseFloat(ph) > 6.74 || parseFloat(ph) < 6.55 ? '#BadAcidity' : '')].filter(Boolean),
+      note: note,
+      timestamp: timestamp
+    };
+
+    if (editingIntakeId) {
+      updateIntakeEntry(editingIntakeId, entryData);
+      setEditingIntakeId(null);
+    } else {
+      addIntakeEntry(entryData);
+    }
+    
+    // Reset Form
+    setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setNote(''); setTags([]); setIsEcological(false);
+    setMilkType(milkTypes[0] || 'Skim milk');
+    setIntakeDate(new Date().toISOString().split('T')[0]);
+  };
+
+  const confirmIntakeDelete = (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Intake Entry",
+      message: "Are you sure you want to delete this intake entry? This action cannot be undone.",
+      action: () => removeIntakeEntry(id),
+      isDanger: true
+    });
+  };
+
+  const handleCancelIntakeEdit = () => {
+    setEditingIntakeId(null);
+    setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setNote(''); setTags([]); setIsEcological(false);
+    setMilkType(milkTypes[0] || 'Skim milk');
+    setIntakeDate(new Date().toISOString().split('T')[0]);
+  };
+
+  const confirmOutputSubmit = () => {
+    if (!batchId || !pkgString) return;
+    if (!parserPreview || !parserPreview.isValid) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: editingOutputId ? "Confirm Update" : "Confirm Production Log",
+      message: `Are you sure you want to log ${parserPreview.totalWeight.toLocaleString()}kg of ${selectedProductId} (Batch: ${batchId})?`,
+      action: executeOutputSubmit,
+      isDanger: false
+    });
+  };
+
+  const executeOutputSubmit = () => {
+    if (editingOutputId) {
+      updateOutputEntry(editingOutputId, pkgString);
+    } else {
+      addOutputEntry(selectedProductId, batchId, pkgString);
+    }
+    setPkgString('');
+  };
+
+  const confirmOutputDelete = (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Production Log",
+      message: "Are you sure you want to delete this production output log? This will affect stock levels.",
+      action: () => removeOutputEntry(id),
+      isDanger: true
+    });
+  };
+
+  const handleCancelOutputEdit = () => {
+    setEditingOutputId(null);
+    setPkgString('');
+    setBatchId(`MPC-${new Date().toISOString().slice(0,10)}`);
+  };
+
+  const isOutputValid = parserPreview && parserPreview.isValid;
+
+  return (
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <ConfirmationModal 
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.action}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        isDanger={confirmModal.isDanger}
+      />
+
+      <PackagingWizard 
+        isOpen={showWizard} 
+        onClose={() => setShowWizard(false)} 
+        onApply={(str) => setPkgString(str)}
+        defaultPallet={activeProduct?.defaultPalletWeight || 750}
+        defaultBag={activeProduct?.defaultBagWeight || 1000}
+      />
+
+      {/* Mode Toggle */}
+      <div className="flex justify-center md:justify-start bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-fit">
+         <div className="flex bg-slate-100 p-1 rounded-lg w-full md:w-auto">
+            <button
+              onClick={() => setActiveMode('intake')}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 text-sm font-bold rounded-md transition-all ${
+                activeMode === 'intake' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Droplets size={16} /> Milk Intake
+            </button>
+            <button
+              onClick={() => setActiveMode('output')}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 text-sm font-bold rounded-md transition-all ${
+                activeMode === 'output' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Factory size={16} /> Production
+            </button>
+         </div>
+      </div>
+
+      {activeMode === 'intake' && (
+      <div className="flex flex-col lg:flex-row gap-6 animate-slide-up">
+        <div className="flex-1 flex flex-col gap-4">
+        <div className="text-slate-500 uppercase text-xs font-bold tracking-widest px-1 pt-2 md:pt-0">
+          New Intake Entry
+        </div>
+        
+        {/* Entry Form */}
+        <GlassCard className={`p-4 md:p-5 transition-all duration-300 ${editingIntakeId ? 'bg-amber-50/50 border-amber-200 shadow-md ring-2 ring-amber-100' : 'bg-slate-50/50'}`}>
+          <div className="grid grid-cols-12 gap-3 md:gap-4 items-end">
+             {/* ... Form Fields ... */}
+             {/* Note: Kept existing logic mostly same, just ensuring PackagingWizard usage below */}
+             {editingIntakeId && (
+               <div className="col-span-12 flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider mb-[-8px]">
+                 <Pencil size={12} /> Editing Mode
+               </div>
+             )}
+            <div className="col-span-12 md:col-span-4">
+              <SmartSelect 
+                label="Supplier"
+                placeholder="Select Supplier..."
+                options={supplierOptions}
+                value={selectedSupplierId}
+                onChange={setSelectedSupplierId}
+                filters={supplierFilters}
+              />
+            </div>
+            
+            <div className="col-span-12 md:col-span-4">
+               <label className="text-xs font-semibold text-slate-600 block mb-1.5">Milk Type</label>
+               <SelectField value={milkType} onChange={e => setMilkType(e.target.value)}>
+                  {milkTypes.map(t => <option key={t} value={t}>{t}</option>)}
+               </SelectField>
+            </div>
+
+            <div className="col-span-12 md:col-span-4">
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Date</label>
+              <InputField 
+                type="date"
+                value={intakeDate}
+                onChange={(e) => setIntakeDate(e.target.value)}
+              />
+            </div>
+
+            <div className="col-span-4 md:col-span-3">
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Kg</label>
+              <InputField 
+                type="number" 
+                value={intakeKg}
+                onChange={(e) => setIntakeKg(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+
+            <div className="col-span-4 md:col-span-2">
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Fat %</label>
+              <InputField 
+                type="number" 
+                value={fat}
+                onChange={(e) => setFat(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="col-span-4 md:col-span-2">
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Prot %</label>
+              <InputField 
+                type="number" 
+                value={protein}
+                onChange={(e) => setProtein(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="col-span-4 md:col-span-2">
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">pH</label>
+              <InputField 
+                type="number" 
+                step="0.01"
+                value={ph}
+                onChange={(e) => setPh(e.target.value)}
+                placeholder="6.65"
+              />
+            </div>
+            <div className="col-span-4 md:col-span-2">
+                 <label className="text-xs font-semibold text-slate-600 block mb-1.5">Temp °C</label>
+                  <InputField 
+                    type="number" 
+                    value={temp}
+                    onChange={(e) => setTemp(e.target.value)}
+                    placeholder="4.0"
+                  />
+            </div>
+
+            {/* Ecological Toggle */}
+            <div className="col-span-8 md:col-span-3 flex flex-col justify-end">
+               <label className="text-xs font-semibold text-slate-600 block mb-1.5 md:opacity-0">Eco</label>
+               <button
+                  onClick={() => setIsEcological(!isEcological)}
+                  className={`h-[42px] px-3 rounded-md border flex items-center justify-center gap-2 transition-all w-full ${isEcological ? 'bg-green-100 border-green-300 text-green-700' : 'bg-white border-slate-300 text-slate-400'}`}
+                  title="Is Ecological Milk?"
+              >
+                <Leaf size={18} />
+                <span className="text-xs font-bold">ECO</span>
+              </button>
+           </div>
+            
+            <div className="col-span-12 md:col-span-12">
+               <label className="text-xs font-semibold text-slate-600 block mb-1.5">Notes</label>
+               <SmartNoteInput value={note} onChange={(val, newTags) => {
+                 setNote(val);
+                 setTags(prev => Array.from(new Set([...prev, ...newTags])));
+               }} />
+            </div>
+
+            <div className="col-span-12 md:col-span-12 flex gap-2 h-[42px] mt-2">
+              {editingIntakeId ? (
+                <>
+                   <button 
+                    onClick={confirmIntakeSubmit}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all font-bold"
+                    title="Update Entry"
+                  >
+                    <Check size={20} /> Update Entry
+                  </button>
+                  <button 
+                    onClick={handleCancelIntakeEdit}
+                    className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-600 shadow-sm rounded-md flex items-center justify-center transition-all"
+                    title="Cancel"
+                  >
+                    <X size={20} />
+                  </button>
+                </>
+              ) : (
+                <button 
+                  onClick={confirmIntakeSubmit}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] font-bold"
+                >
+                  <Plus size={20} /> Add Intake Entry
+                </button>
+              )}
+            </div>
+          </div>
+        </GlassCard>
+
+        {/* Filter & List */}
+        <div className="flex flex-col gap-2">
+          <FilterSection 
+            isOpen={showIntakeFilter} 
+            onToggle={() => setShowIntakeFilter(!showIntakeFilter)}
+            filters={intakeFilters}
+            onFilterChange={(updates) => setIntakeFilters(prev => ({ ...prev, ...updates }))}
+            count={intakeEntries.length}
+            label="Raw Milk Intake"
+          />
+
+          <div className="space-y-2">
+            {displayedIntake.length === 0 && (
+              <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
+                No intake entries found.
+              </div>
+            )}
+            {displayedIntake.map(entry => (
+              <div key={entry.id} className={`group flex items-center justify-between p-3 border rounded-lg transition-all shadow-sm ${entry.isDiscarded ? 'bg-red-50 border-red-200 opacity-75' : editingIntakeId === entry.id ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-semibold flex flex-wrap items-center gap-2 ${entry.isDiscarded ? 'text-red-800' : entry.isEcological ? 'text-red-600' : 'text-slate-800'}`}>
+                    <span className="truncate">{entry.supplierName}</span>
+                    {entry.isDiscarded && <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">Discarded</span>}
+                    <span className="text-[10px] text-slate-500 font-normal bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{entry.milkType}</span>
+                    {entry.isEcological && <Leaf size={12} className="text-red-500 fill-red-100" />}
+                    {entry.tags.map(t => (
+                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium whitespace-nowrap">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-2">
+                    <span className="whitespace-nowrap">{new Date(entry.timestamp).toLocaleDateString()}</span>
+                    <span className="text-slate-300 hidden md:inline">•</span>
+                    <span className="whitespace-nowrap">{entry.routeGroup}</span>
+                    <span className="text-slate-300 hidden md:inline">•</span> 
+                    <span className="text-slate-700 font-medium whitespace-nowrap">{entry.fatPct}% F</span> 
+                    <span className="text-slate-700 font-medium whitespace-nowrap">{entry.proteinPct}% P</span>
+                    <span className="text-slate-300 hidden md:inline">•</span>
+                    <span className={`font-medium whitespace-nowrap ${
+                      entry.ph > 6.74 || entry.ph < 6.55 ? 'text-red-600 font-bold' :
+                      entry.ph < 6.60 ? 'text-amber-600' : 'text-slate-700'
+                    }`}>pH {entry.ph}</span>
+                    {entry.note && <span className="italic opacity-75 truncate max-w-[150px] md:max-w-none">- {entry.note}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 pl-2">
+                  <div className="text-right shrink-0">
+                    <div className={`font-mono font-bold text-sm md:text-base ${entry.isEcological ? 'text-red-600' : 'text-blue-700'}`}>
+                      {entry.quantityKg.toLocaleString()} kg
+                    </div>
+                    <div className="flex items-center gap-1 justify-end">
+                      <div className={`text-xs font-medium ${entry.tempCelsius > 8 && !entry.isTempAlertDismissed ? 'text-red-600 font-bold' : 'text-slate-500'}`}>
+                        {entry.tempCelsius}°C
+                      </div>
+                      {entry.tempCelsius > 8 && !entry.isTempAlertDismissed && (
+                        <button 
+                          onClick={() => useStore.getState().dismissTempAlert(entry.id)}
+                          className="text-[10px] bg-red-100 text-red-600 px-1 rounded hover:bg-red-200 transition-colors"
+                          title="Dismiss Alert"
+                        >
+                          Dismiss
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                     <button 
+                      onClick={() => useStore.getState().toggleIntakeDiscard(entry.id)}
+                      className={`p-2 md:p-1.5 rounded transition-colors ${entry.isDiscarded ? 'text-red-600 bg-red-100' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}
+                      title={entry.isDiscarded ? "Restore Intake" : "Discard Intake"}
+                    >
+                      <Ban size={16} />
+                    </button>
+                     <button 
+                      onClick={() => setEditingIntakeId(entry.id)}
+                      className="text-slate-400 hover:text-blue-500 p-2 md:p-1.5 rounded hover:bg-blue-50 transition-colors"
+                      title="Edit"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button 
+                      onClick={() => confirmIntakeDelete(entry.id)}
+                      className="text-slate-400 hover:text-red-500 p-2 md:p-1.5 rounded hover:bg-red-50 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      </div>
+      )}
+
+      {activeMode === 'output' && (
+      <div className="flex flex-col lg:flex-row gap-6 animate-slide-up">
+      <div className="flex-1 flex flex-col gap-4">
+        <div className="text-slate-500 uppercase text-xs font-bold tracking-widest px-1">
+          New Output Log
+        </div>
+
+        {/* Output Form */}
+        <GlassCard className={`p-4 md:p-5 transition-all duration-300 relative overflow-visible ${editingOutputId ? 'bg-amber-50/50 border-amber-200 shadow-md ring-2 ring-amber-100' : 'bg-slate-50/50'}`}>
+          <div className="grid grid-cols-1 gap-4">
+            {editingOutputId && (
+               <div className="flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider mb-[-8px]">
+                 <Pencil size={12} /> Editing Mode
+               </div>
+             )}
+            <div className="flex flex-col md:flex-row gap-3">
+              <SelectField 
+                value={selectedProductId}
+                onChange={(e) => setSelectedProductId(e.target.value)}
+                className="flex-1"
+                disabled={!!editingOutputId} 
+              >
+                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </SelectField>
+              <InputField 
+                type="text" 
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
+                className="w-full md:w-1/3 font-mono"
+                disabled={!!editingOutputId}
+              />
+            </div>
+            
+            <div className="relative">
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5 flex items-center gap-2">
+                Log String <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "34,96 pad; 2 bb")</span>
+              </label>
+              <div className="flex gap-2 h-[42px]">
+                <div className="relative flex-1">
+                   <InputField 
+                      type="text" 
+                      value={pkgString}
+                      onChange={(e) => setPkgString(e.target.value)}
+                      placeholder="e.g. 10 pad; 2 bb *1100"
+                      className="font-mono pr-10"
+                    />
+                    <button 
+                       onClick={() => setShowWizard(true)}
+                       className="absolute right-2 top-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded p-1"
+                       title="Open Packaging Wizard"
+                    >
+                       <Calculator size={18} />
+                    </button>
+                </div>
+                
+                {editingOutputId ? (
+                  <>
+                     <button 
+                      onClick={confirmOutputSubmit}
+                      disabled={!isOutputValid}
+                      className={`bg-amber-600 hover:bg-amber-700 text-white shadow-sm rounded-md px-4 flex items-center justify-center transition-all ${!isOutputValid ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      title="Update Output"
+                    >
+                      <Check size={20} />
+                    </button>
+                    <button 
+                      onClick={handleCancelOutputEdit}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-600 shadow-sm rounded-md px-4 flex items-center justify-center transition-all"
+                      title="Cancel"
+                    >
+                      <X size={20} />
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    onClick={confirmOutputSubmit}
+                    disabled={!isOutputValid}
+                    className={`bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm rounded-md px-4 flex items-center justify-center transition-all active:scale-[0.98] ${!isOutputValid ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <Plus size={24} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {parserPreview && (
+              <div className={`mt-0 p-3 rounded-md border flex justify-between items-center text-xs transition-colors ${parserPreview.isValid ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                <div className="flex flex-col md:flex-row gap-1 md:gap-3">
+                  <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.pallets} Pallets</span>
+                  <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.bigBags} Big Bags</span>
+                </div>
+                <div className="font-bold font-mono text-sm">
+                  {parserPreview.totalWeight.toLocaleString()} kg
+                </div>
+              </div>
+            )}
+          </div>
+        </GlassCard>
+
+        {/* Filter & List */}
+        <div className="flex flex-col gap-2">
+          <FilterSection 
+            isOpen={showOutputFilter} 
+            onToggle={() => setShowOutputFilter(!showOutputFilter)}
+            filters={outputFilters}
+            onFilterChange={(updates) => setOutputFilters(prev => ({ ...prev, ...updates }))}
+            count={outputEntries.length}
+            label="Fractionation Output"
+          />
+
+          <div className="space-y-2">
+            {displayedOutput.length === 0 && (
+              <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
+                No output entries found.
+              </div>
+            )}
+            {displayedOutput.map(entry => (
+              <div key={entry.id} className={`group flex items-center justify-between p-3 border rounded-lg transition-all shadow-sm ${editingOutputId === entry.id ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
+                    {entry.productId}
+                    <span className="bg-slate-100 border border-slate-200 text-slate-600 text-[10px] px-1.5 rounded uppercase tracking-wider">{entry.batchId}</span>
+                  </div>
+                  <div className="text-xs text-slate-500 font-mono mt-0.5 truncate max-w-[180px] md:max-w-none">
+                    {new Date(entry.timestamp).toLocaleDateString()} • {entry.packagingString}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 pl-2">
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-bold text-emerald-700 text-sm md:text-base">{entry.parsed.totalWeight.toLocaleString()} kg</div>
+                    <div className="text-xs text-slate-500 font-medium hidden md:block">{entry.parsed.pallets} pl / {entry.parsed.bigBags} bb</div>
+                  </div>
+                  <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => setEditingOutputId(entry.id)}
+                      className="text-slate-400 hover:text-blue-500 p-2 md:p-1.5 rounded hover:bg-blue-50 transition-colors"
+                      title="Edit"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button 
+                      onClick={() => confirmOutputDelete(entry.id)}
+                      className="text-slate-400 hover:text-red-500 p-2 md:p-1.5 rounded hover:bg-red-50 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      </div>
+      )}
+    </div>
+  );
+};
