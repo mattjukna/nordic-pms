@@ -4,6 +4,7 @@ import cors from 'cors';
 import prisma from './services/prisma';
 import { createServer as createViteServer } from 'vite';
 import { parsePackagingString } from './utils/parser';
+import { anyFractional } from './utils/wholeUnits';
 
 // --- Mapping helpers: convert Prisma rows into frontend DTO shapes defined in types.ts
 const mapDate = (d: Date | string | null | undefined): number => {
@@ -504,6 +505,8 @@ async function startServer() {
         try {
             const product = await prisma.product.findUnique({ where: { id: body.productId } });
             const parsed = parsePackagingString(body.packagingString || '', product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
+            // Reject fractional unit counts in outputs — insist on discrete units or loose kg
+            if (anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in output packaging are not allowed. Use loose kg for remainder.' });
             const created = await prisma.outputEntry.create({ data: {
                 productId: body.productId,
                 batchId: body.batchId || '',
@@ -526,6 +529,7 @@ async function startServer() {
             if (!existing) return res.status(404).json({ error: 'Not found' });
             const product = await prisma.product.findUnique({ where: { id: existing.productId } });
             const parsed = parsePackagingString(req.body.packagingString || existing.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
+            if (anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in output packaging are not allowed. Use loose kg for remainder.' });
             const updated = await prisma.outputEntry.update({ where: { id }, data: {
                 packagingString: req.body.packagingString ?? existing.packagingString,
                 pallets: parsed.pallets,
@@ -597,10 +601,16 @@ async function startServer() {
         try {
             const product = await prisma.product.findUnique({ where: { id: s.productId ?? undefined } });
             const parsed = s.packagingString ? parsePackagingString(s.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850) : { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0, isValid: false };
+            // If packagingString parsed -> enforce whole-unit policy for pallets/bigBags/tanks
+            if (parsed.isValid && anyFractional(parsed)) {
+                return res.status(400).json({ error: 'Fractional unit counts in shipment packaging are not allowed. Use loose kg for remainder.' });
+            }
+            // If parsed is valid prefer parsed.totalWeight as truth for quantityKg
+            const finalQty = (parsed.isValid && parsed.totalWeight > 0) ? parsed.totalWeight : s.quantityKg;
             const created = await prisma.dispatchShipment.create({ data: {
                 dispatchEntryId: dispatchId,
                 date: s.date ? new Date(s.date) : new Date(),
-                quantityKg: s.quantityKg,
+                quantityKg: finalQty,
                 batchId: s.batchId ?? null,
                 note: s.note ?? null,
                 packagingString: s.packagingString ?? null,
@@ -631,6 +641,54 @@ async function startServer() {
             const dispatch = await prisma.dispatchEntry.findUnique({ where: { id } });
             const totalRevenue = (dispatch?.salesPricePerKg ?? 0) * total;
             await prisma.dispatchEntry.update({ where: { id }, data: { quantityKg: total, totalRevenue } });
+            const fetched = await prisma.dispatchEntry.findUnique({ where: { id }, include: { shipments: true } });
+            res.json(toClientDispatch(fetched));
+        } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
+    // Update a shipment (normalize packagingString and recompute dispatch totals)
+    app.put('/api/dispatch-entries/:id/shipments/:shipmentId', async (req, res) => {
+        const { id, shipmentId } = req.params as any;
+        const body = req.body;
+        try {
+            const existing = await prisma.dispatchShipment.findUnique({ where: { id: shipmentId } });
+            if (!existing) return res.status(404).json({ error: 'Shipment not found' });
+            const dispatchEntry = await prisma.dispatchEntry.findUnique({ where: { id } });
+            if (!dispatchEntry) return res.status(404).json({ error: 'Dispatch not found' });
+
+            const product = await prisma.product.findUnique({ where: { id: dispatchEntry.productId } });
+            let parsed = { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0, isValid: false } as any;
+            if (typeof body.packagingString === 'string' && body.packagingString.trim() !== '') {
+                const { normalizePackagingString } = await import('./utils/packagingNormalize');
+                // normalize first
+                const norm = normalizePackagingString(body.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
+                // reuse parsePackagingString to get parsed numbers
+                const { parsePackagingString } = await import('./utils/parser');
+                parsed = parsePackagingString(norm.normalized, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
+                if (parsed.isValid && anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in shipment packaging are not allowed. Use loose kg for remainder.' });
+            }
+
+            const finalQty = (parsed.isValid && parsed.totalWeight > 0) ? parsed.totalWeight : (body.quantityKg ?? existing.quantityKg);
+
+            const updatedShipment = await prisma.dispatchShipment.update({ where: { id: shipmentId }, data: {
+                date: body.date ? new Date(body.date) : existing.date,
+                quantityKg: finalQty,
+                batchId: body.batchId ?? existing.batchId,
+                note: body.note ?? existing.note,
+                packagingString: body.packagingString ?? existing.packagingString,
+                pallets: parsed.pallets || null,
+                bigBags: parsed.bigBags || null,
+                tanks: parsed.tanks || null,
+                totalWeight: parsed.totalWeight || null
+            }});
+
+            // Recalculate parent dispatch totals
+            const shipments = await prisma.dispatchShipment.findMany({ where: { dispatchEntryId: id } });
+            const total = shipments.reduce((acc, cur) => acc + cur.quantityKg, 0);
+            const dispatch = await prisma.dispatchEntry.findUnique({ where: { id } });
+            const totalRevenue = (dispatch?.salesPricePerKg ?? 0) * total;
+            await prisma.dispatchEntry.update({ where: { id }, data: { quantityKg: total, totalRevenue } });
+
             const fetched = await prisma.dispatchEntry.findUnique({ where: { id }, include: { shipments: true } });
             res.json(toClientDispatch(fetched));
         } catch (err: any) { res.status(400).json({ error: err.message }); }

@@ -55,6 +55,10 @@ export function parsePackagingString(
     bigBags: parseFloat(totalBigBags.toFixed(2)),
     tanks: parseFloat(totalTanks.toFixed(2)),
     totalWeight: parseFloat(totalWeight.toFixed(2)),
+    // parser does not itself enforce whole-unit policy — callers may validate
     isValid: totalWeight > 0
   };
 }
+
+// Re-export normalization helpers
+export { normalizePackagingString, parsePackagingSegments, isWhole } from './packagingNormalize';

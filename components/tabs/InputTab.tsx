@@ -7,6 +7,7 @@ import { PackagingWizard } from '../ui/PackagingWizard';
 import { SmartSelect } from '../ui/SmartSelect';
 import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, LayoutGrid, Calculator, Droplets, Factory, Ban } from 'lucide-react';
 import { parsePackagingString } from '../../utils/parser';
+import { anyFractional } from '../../utils/wholeUnits';
 
 // --- Smart Note Input Component ---
 const SUGGESTED_TAGS = ['#HighTemp', '#HighAcid', '#LowProtein', '#DamagedPackaging', '#LateArrival'];
@@ -441,7 +442,10 @@ export const InputTab: React.FC = () => {
   const confirmOutputSubmit = () => {
     if (!batchId || !pkgString) return;
     if (!parserPreview || !parserPreview.isValid) return;
-
+    if (anyFractional(parserPreview)) {
+      setConfirmModal({ isOpen: true, title: 'Invalid Packaging', message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder.", action: () => setConfirmModal(prev => ({ ...prev, isOpen: false })), isDanger: false });
+      return;
+    }
     setConfirmModal({
       isOpen: true,
       title: editingOutputId ? "Confirm Update" : "Confirm Production Log",

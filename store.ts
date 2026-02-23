@@ -88,6 +88,7 @@ interface AppState {
   // Shipments
   addDispatchShipment: (dispatchId: string, payload: any) => Promise<void>;
   removeDispatchShipment: (dispatchId: string, shipmentId: string) => Promise<void>;
+  updateDispatchShipment: (dispatchId: string, shipmentId: string, payload: any) => Promise<void>;
 
   generateAIInsights: () => Promise<string>;
 }
@@ -325,6 +326,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   removeDispatchShipment: async (dispatchId, shipmentId) => {
     const updated = await api<DispatchEntry>(`/api/dispatch-entries/${dispatchId}/shipments/${shipmentId}`, { method: 'DELETE' });
+    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? { ...updated } : d) }));
+  },
+
+  updateDispatchShipment: async (dispatchId, shipmentId, payload) => {
+    const updated = await api<DispatchEntry>(`/api/dispatch-entries/${dispatchId}/shipments/${shipmentId}`, { method: 'PUT', body: JSON.stringify(payload) });
     set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? { ...updated } : d) }));
   },
 

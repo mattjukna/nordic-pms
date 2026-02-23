@@ -5,6 +5,7 @@ import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { PackagingWizard } from '../ui/PackagingWizard';
 import { parsePackagingString } from '../../utils/parser';
+import { anyFractional } from '../../utils/wholeUnits';
 import { Package, Truck, ArrowUpRight, Box, Filter, Search, Calendar, ChevronDown, ChevronUp, FileText, Download, Scale, Layers, Tag, Calculator, CheckCircle2, Clock, Trash2, Check, Pencil, Plus, X } from 'lucide-react';
 // @ts-ignore
 import jsPDF from 'jspdf';
@@ -12,7 +13,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, buyers, products } = useStore();
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, buyers, products, setActiveTab, setEditingOutputId } = useStore();
   if (!products || products.length === 0) return <div className="p-6 text-center">Loading products…</div>;
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState(false);
@@ -22,6 +23,8 @@ export const InventoryTab: React.FC = () => {
   const [shipmentDate, setShipmentDate] = useState(new Date().toISOString().split('T')[0]);
   const [shipmentNote, setShipmentNote] = useState('');
   const [wizardTarget, setWizardTarget] = useState<'dispatch' | 'shipment'>('dispatch');
+  const [investigateTarget, setInvestigateTarget] = useState<string | null>(null);
+  const [showInvestigateModal, setShowInvestigateModal] = useState(false);
 
   // Form State
   const [dispatchStatus, setDispatchStatus] = useState<'confirmed' | 'planned'>('confirmed');
@@ -109,51 +112,121 @@ export const InventoryTab: React.FC = () => {
     }
   }, [shipmentPkgString, editingDispatchId, dispatchEntries]);
 
-  // Calculate current stock and Aging
+  // Calculate current stock and Aging — ledgered by discrete units (pallets/bigBags/tanks)
   const stockLevels = useMemo(() => {
     return products.map(product => {
       const productOutputs = outputEntries.filter(e => e.productId === product.id);
-      
-      const producedKg = productOutputs.reduce((sum, e) => sum + e.parsed.totalWeight, 0);
-      const producedPallets = productOutputs.reduce((sum, e) => sum + e.parsed.pallets, 0);
-      const producedBigBags = productOutputs.reduce((sum, e) => sum + e.parsed.bigBags, 0);
-      const producedTanks = productOutputs.reduce((sum, e) => sum + e.parsed.tanks, 0);
-      
-      // CRITICAL: Only SHIPPED amounts deduct from physical stock
-      const dispatchedKg = dispatchEntries
-        .filter(e => e.productId === product.id)
-        .reduce((sum, e) => {
-           const shippedAmount = e.shipments?.reduce((s, ship) => s + ship.quantityKg, 0) || 0;
-           if (e.shipments && e.shipments.length > 0) return sum + shippedAmount;
-           
-           // Fallback for legacy confirmed entries (no shipments and no orderedQuantityKg)
-           if (e.status !== 'planned' && !e.orderedQuantityKg) return sum + e.quantityKg;
-           
-           return sum + shippedAmount;
-        }, 0);
+
+      const producedKg = productOutputs.reduce((sum, e) => sum + (e.parsed?.totalWeight || 0), 0);
+      const producedPallets = productOutputs.reduce((sum, e) => sum + (e.parsed?.pallets || 0), 0);
+      const producedBigBags = productOutputs.reduce((sum, e) => sum + (e.parsed?.bigBags || 0), 0);
+      const producedTanks = productOutputs.reduce((sum, e) => sum + (e.parsed?.tanks || 0), 0);
+
+      // Shipments (only confirmed/completed shipments should deduct stock)
+      let shippedKg = 0;
+      let shippedPallets = 0;
+      let shippedBigBags = 0;
+      let shippedTanks = 0;
+      let unmappedShippedKg = 0;
+      const fractionalOutputs: any[] = [];
+      const problematicShipments: any[] = [];
+      const unmappedDispatches: any[] = [];
+
+      const relevantDispatches = dispatchEntries.filter(d => d.productId === product.id && d.status !== 'planned');
+
+      for (const d of relevantDispatches) {
+        if (Array.isArray(d.shipments) && d.shipments.length > 0) {
+          for (const s of d.shipments) {
+            shippedKg += s.quantityKg || 0;
+            if (s.parsed) {
+              shippedPallets += s.parsed.pallets || 0;
+              shippedBigBags += s.parsed.bigBags || 0;
+              shippedTanks += s.parsed.tanks || 0;
+              // check mismatch totalWeight vs quantityKg
+              if (s.parsed.totalWeight && Math.abs((s.parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) {
+                problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
+              }
+            } else if (s.packagingString) {
+              const parsed = parsePackagingString(s.packagingString, product.defaultPalletWeight, product.defaultBagWeight);
+              if (parsed.isValid) {
+                shippedPallets += parsed.pallets || 0;
+                shippedBigBags += parsed.bigBags || 0;
+                shippedTanks += parsed.tanks || 0;
+                if (Math.abs((parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
+              } else {
+                unmappedShippedKg += s.quantityKg || 0;
+                problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
+              }
+            } else {
+              // no parsed info
+              unmappedShippedKg += s.quantityKg || 0;
+              problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
+            }
+          }
+        } else {
+          // No shipments: try to use dispatch-level parsed or packagingString
+          if (d.parsed) {
+            shippedPallets += d.parsed.pallets || 0;
+            shippedBigBags += d.parsed.bigBags || 0;
+            shippedTanks += d.parsed.tanks || 0;
+            shippedKg += d.parsed.totalWeight || 0;
+            if (d.parsed.totalWeight && Math.abs((d.parsed.totalWeight || 0) - (d.quantityKg || 0)) > 25) {
+              problematicShipments.push({ type: 'dispatch', entry: d });
+            }
+          } else if (d.packagingString) {
+            const parsed = parsePackagingString(d.packagingString, product.defaultPalletWeight, product.defaultBagWeight);
+            if (parsed.isValid) {
+              shippedPallets += parsed.pallets || 0;
+              shippedBigBags += parsed.bigBags || 0;
+              shippedTanks += parsed.tanks || 0;
+              shippedKg += parsed.totalWeight || 0;
+              if (Math.abs((parsed.totalWeight || 0) - (d.quantityKg || 0)) > 25) problematicShipments.push({ type: 'dispatch', entry: d });
+            } else {
+              unmappedShippedKg += d.quantityKg || 0;
+              unmappedDispatches.push(d);
+            }
+          } else {
+            // fully unmapped dispatch
+            unmappedShippedKg += d.quantityKg || 0;
+            unmappedDispatches.push(d);
+          }
+        }
+      }
+
+      // Identify fractional outputs from output entries
+      for (const out of productOutputs) {
+        const p = out.parsed || { pallets: 0, bigBags: 0, tanks: 0 };
+        if (!Number.isInteger(p.pallets || 0) || !Number.isInteger(p.bigBags || 0) || !Number.isInteger(p.tanks || 0)) {
+          fractionalOutputs.push(out);
+        }
+      }
+
+      const currentStockKg = Math.max(0, producedKg - shippedKg - unmappedShippedKg);
+      const realStockKg = producedKg - shippedKg - unmappedShippedKg;
+
+      // Ledgered units
+      const currentStockPallets = Math.max(0, Math.round(producedPallets) - Math.round(shippedPallets));
+      const currentStockBigBags = Math.max(0, Math.round(producedBigBags) - Math.round(shippedBigBags));
+      const currentStockTanks = Math.max(0, Math.round(producedTanks) - Math.round(shippedTanks));
+
+      // Loose estimate: expected weight from discrete units
+      const expectedKgFromUnits = (currentStockPallets * (product.defaultPalletWeight || 0)) + (currentStockBigBags * (product.defaultBagWeight || 0)) + (currentStockTanks * 25000);
+      const looseKgEstimate = currentStockKg - expectedKgFromUnits;
+
+      // Flags
+      const hasFractionalInput = fractionalOutputs.length > 0 || problematicShipments.some(p => (
+        (p.entry?.pallets && !Number.isInteger(p.entry.pallets)) || (p.entry?.bigBags && !Number.isInteger(p.entry.bigBags)) || (p.entry?.tanks && !Number.isInteger(p.entry.tanks))
+      ));
+
+      const looseWarning = Math.abs(looseKgEstimate) > 50 || unmappedDispatches.length > 0 || problematicShipments.length > 0;
 
       const oldestBatch = productOutputs.sort((a,b) => a.timestamp - b.timestamp)[0];
-      
       let ageStatus = 'green';
       if (oldestBatch) {
         const ageDays = (Date.now() - oldestBatch.timestamp) / (1000 * 60 * 60 * 24);
         if (ageDays > 60) ageStatus = 'red';
         else if (ageDays > 30) ageStatus = 'yellow';
       }
-
-      const currentStockKg = Math.max(0, producedKg - dispatchedKg); 
-      const realStockKg = producedKg - dispatchedKg; 
-
-      const stockRatio = producedKg > 0 ? currentStockKg / producedKg : 0;
-      
-      const currentStockPallets = producedPallets * stockRatio;
-      const currentStockBigBags = producedBigBags * stockRatio;
-      const currentStockTanks = producedTanks * stockRatio;
-
-      // Global Rule: Stock must be whole numbers
-      const isFractionalError = Math.abs(currentStockPallets - Math.round(currentStockPallets)) > 0.05 || 
-                                Math.abs(currentStockBigBags - Math.round(currentStockBigBags)) > 0.05 ||
-                                Math.abs(currentStockTanks - Math.round(currentStockTanks)) > 0.05;
 
       return {
         ...product,
@@ -162,11 +235,17 @@ export const InventoryTab: React.FC = () => {
         currentStockPallets,
         currentStockBigBags,
         currentStockTanks,
+        expectedKgFromUnits,
+        looseKgEstimate,
+        fractionalOutputs,
+        problematicShipments,
+        unmappedDispatches,
         ageStatus,
-        isFractionalError
+        hasFractionalInput,
+        looseWarning
       };
     });
-  }, [outputEntries, dispatchEntries]);
+  }, [outputEntries, dispatchEntries, products]);
 
   const initiateDispatch = () => {
     if (!quantity || !selectedBuyerId || !pricePerKg || !dispatchDate) return;
@@ -220,7 +299,11 @@ export const InventoryTab: React.FC = () => {
        }
        resetForm();
     };
-
+    // Prevent fractional unit submits
+    if (pendingData.parsed && anyFractional(pendingData.parsed)) {
+      setConfirmState({ isOpen: true, type: 'standard', message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder." });
+      return;
+    }
     if (dispatchStatus === 'confirmed' && isNegativeStock) {
        setConfirmState({
           isOpen: true,
@@ -326,6 +409,11 @@ export const InventoryTab: React.FC = () => {
     const parsed = product && shipmentPkgString 
       ? parsePackagingString(shipmentPkgString, product.defaultPalletWeight, product.defaultBagWeight)
       : undefined;
+
+    if (parsed && parsed.isValid && anyFractional(parsed)) {
+      setConfirmState({ isOpen: true, type: 'standard', message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder." });
+      return;
+    }
 
     const payload: any = {
       productId: entry.productId,
@@ -490,6 +578,88 @@ export const InventoryTab: React.FC = () => {
         defaultBag={activeProduct?.defaultBagWeight || 850}
       />
 
+      {/* Investigate Modal */}
+      {showInvestigateModal && investigateTarget && (() => {
+        const item = stockLevels.find(s => s.id === investigateTarget);
+        if (!item) return null;
+        return (
+          <div className="fixed inset-0 z-[120] bg-black/30 flex items-start justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto ring-1 ring-slate-900/10">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-bold">Investigate: {item.name}</div>
+                  <div className="text-xs text-slate-500">Issues found: {item.fractionalOutputs.length + item.problematicShipments.length + item.unmappedDispatches.length}</div>
+                </div>
+                <div>
+                  <button onClick={() => setShowInvestigateModal(false)} className="text-slate-400 hover:text-slate-700">Close</button>
+                </div>
+              </div>
+              <div className="p-4 space-y-3">
+                {item.fractionalOutputs.length > 0 && (
+                  <div>
+                    <div className="text-xs font-bold text-red-600">Output entries with fractional unit counts</div>
+                    <div className="mt-2 space-y-1">
+                      {item.fractionalOutputs.map((o:any) => (
+                        <div key={o.id} className="flex items-center justify-between bg-slate-50 p-2 rounded text-sm">
+                          <div>
+                            <div className="font-medium">Output • {new Date(o.timestamp).toLocaleDateString()}</div>
+                            <div className="text-xs text-slate-500">Packaging: {o.packagingString || '-'}</div>
+                            <div className="text-xs text-slate-500">pallets:{o.parsed?.pallets} bb:{o.parsed?.bigBags} tanks:{o.parsed?.tanks} total:{o.parsed?.totalWeight}kg</div>
+                          </div>
+                          <div className="text-right">
+                            <button onClick={() => { setActiveTab('input'); setEditingOutputId(o.id); }} className="text-xs text-blue-600 font-bold">Edit</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {item.problematicShipments.length > 0 && (
+                  <div>
+                    <div className="text-xs font-bold text-amber-600">Problematic shipments</div>
+                    <div className="mt-2 space-y-1">
+                      {item.problematicShipments.map((s:any, idx:number) => (
+                        <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded text-sm">
+                          <div>
+                            <div className="font-medium">{s.type === 'shipment' ? 'Shipment' : 'Dispatch'} • {s.entry?.date ? new Date(s.entry.date).toLocaleDateString() : ''}</div>
+                            <div className="text-xs text-slate-500">Packaging: {s.entry?.packagingString || '-'}</div>
+                            <div className="text-xs text-slate-500">pallets:{s.entry?.parsed?.pallets} bb:{s.entry?.parsed?.bigBags} tanks:{s.entry?.parsed?.tanks} total:{s.entry?.parsed?.totalWeight || s.entry?.quantityKg}kg</div>
+                          </div>
+                          <div className="text-right">
+                            <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(s.dispatchId || s.entry?.dispatchEntryId); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit Dispatch</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {item.unmappedDispatches.length > 0 && (
+                  <div>
+                    <div className="text-xs font-bold text-amber-600">Unmapped dispatches</div>
+                    <div className="mt-2 space-y-1">
+                      {item.unmappedDispatches.map((d:any) => (
+                        <div key={d.id} className="flex items-center justify-between bg-slate-50 p-2 rounded text-sm">
+                          <div>
+                            <div className="font-medium">Dispatch • {new Date(d.date).toLocaleDateString()}</div>
+                            <div className="text-xs text-slate-500">Packaging: {d.packagingString || '-'}</div>
+                            <div className="text-xs text-slate-500">QuantityKg: {d.quantityKg}</div>
+                          </div>
+                          <div className="text-right">
+                            <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(d.id); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Header with Toggle */}
       <div className="flex items-center justify-between shrink-0">
          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
@@ -525,21 +695,28 @@ export const InventoryTab: React.FC = () => {
             <div>
               {showPallets ? (
                 <div className="flex flex-col">
-                   <div className={`text-xl font-mono font-bold ${item.isFractionalError ? 'text-red-600' : 'text-slate-800'}`}>
-                     {item.currentStockPallets.toFixed(1)} <span className="text-sm font-normal text-slate-400">pad</span>
+                   <div className={`text-xl font-mono font-bold ${item.hasFractionalInput ? 'text-red-600' : 'text-slate-800'}`}>
+                     {Math.round(item.currentStockPallets).toLocaleString()} <span className="text-sm font-normal text-slate-400">pad</span>
                    </div>
-                   <div className={`text-sm font-mono font-bold ${item.isFractionalError ? 'text-red-600' : 'text-slate-600'}`}>
-                     {item.currentStockBigBags.toFixed(1)} <span className="text-xs font-normal text-slate-400">bb</span>
+                   <div className={`text-sm font-mono font-bold ${item.hasFractionalInput ? 'text-red-600' : 'text-slate-600'}`}>
+                     {Math.round(item.currentStockBigBags).toLocaleString()} <span className="text-xs font-normal text-slate-400">bb</span>
                    </div>
                    {item.currentStockTanks > 0 && (
-                     <div className={`text-sm font-mono font-bold ${item.isFractionalError ? 'text-red-600' : 'text-slate-600'}`}>
-                       {item.currentStockTanks.toFixed(1)} <span className="text-xs font-normal text-slate-400">tank</span>
+                     <div className={`text-sm font-mono font-bold ${item.hasFractionalInput ? 'text-red-600' : 'text-slate-600'}`}>
+                       {Math.round(item.currentStockTanks).toLocaleString()} <span className="text-xs font-normal text-slate-400">tank</span>
                      </div>
                    )}
-                   {item.isFractionalError && (
-                     <div className="text-[9px] text-red-600 font-bold mt-1 leading-tight">
-                       ERROR: Fractional Stock
-                     </div>
+                   {item.hasFractionalInput && (
+                     <div className="text-[9px] text-red-600 font-bold mt-1 leading-tight">ERROR: Fractional unit input</div>
+                   )}
+                   {!item.hasFractionalInput && item.looseWarning && (
+                     <div className="text-[10px] text-amber-600 font-bold mt-1 leading-tight">WARNING: Loose stock / unmapped shipments</div>
+                   )}
+                   {Math.abs(item.looseKgEstimate || 0) > 50 && (
+                     <div className="text-[11px] text-slate-600 mt-1">Loose: {Math.round(item.looseKgEstimate).toLocaleString()} kg</div>
+                   )}
+                   {(item.hasFractionalInput || item.looseWarning) && (
+                     <button onClick={() => { setInvestigateTarget(item.id); setShowInvestigateModal(true); }} className="mt-2 text-xs text-blue-600 font-bold underline">Investigate</button>
                    )}
                 </div>
               ) : (
@@ -961,12 +1138,8 @@ export const InventoryTab: React.FC = () => {
                                    const shipped = entry.quantityKg ?? 0;
                                    const total = entry.orderedQuantityKg ?? entry.quantityKg ?? 0;
                                    const remaining = Math.max(0, total - shipped);
-                                   const pct = total > 0 ? Math.round((shipped / total) * 100) : 0;
                                    return (
-                                     <>
-                                       <span>Shipped: {shipped.toLocaleString()} / {total.toLocaleString()} kg • Remaining: {remaining.toLocaleString()} kg</span>
-                                       <span>{pct}%</span>
-                                     </>
+                                     <span>Shipped: {shipped.toLocaleString()} / {total.toLocaleString()} kg • Remaining: {remaining.toLocaleString()} kg</span>
                                    );
                                  })()}
                                </div>
