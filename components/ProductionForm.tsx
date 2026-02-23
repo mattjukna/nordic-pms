@@ -10,14 +10,14 @@ interface ProductionFormProps {
 
 const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
   const { products } = useStore();
-  const [selectedProduct, setSelectedProduct] = useState<Product>(products[0]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(products[0]);
   
   // Form State
   const [palletCount, setPalletCount] = useState<string>('');
-  const [palletWeight, setPalletWeight] = useState<string>(PRODUCTS[0].defaultPalletWeight.toString());
+  const [palletWeight, setPalletWeight] = useState<string>('0');
   
   const [bagCount, setBagCount] = useState<string>('');
-  const [bagWeight, setBagWeight] = useState<string>(PRODUCTS[0].defaultBagWeight.toString());
+  const [bagWeight, setBagWeight] = useState<string>('0');
   
   const [looseKg, setLooseKg] = useState<string>('');
   
@@ -27,9 +27,16 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
 
   // Update defaults when product changes
   useEffect(() => {
-    setPalletWeight(selectedProduct?.defaultPalletWeight.toString() || '0');
-    setBagWeight(selectedProduct?.defaultBagWeight.toString() || '0');
+    setPalletWeight(selectedProduct?.defaultPalletWeight?.toString() || '0');
+    setBagWeight(selectedProduct?.defaultBagWeight?.toString() || '0');
   }, [selectedProduct]);
+
+  // Initialize selected product when products load
+  useEffect(() => {
+    if (!selectedProduct && products.length > 0) {
+      setSelectedProduct(products[0]);
+    }
+  }, [products, selectedProduct]);
 
   // Calculations
   const calcPallets = useMemo(() => {
@@ -118,6 +125,7 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
   );
 
   return (
+    !products || products.length === 0 ? <div className="p-6 text-center">Loading products…</div> :
     <div className="w-full h-full relative flex flex-col gap-6 animate-fade-in pb-24 md:pb-0">
       
       {/* Success Overlay */}

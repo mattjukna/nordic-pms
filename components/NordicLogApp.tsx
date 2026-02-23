@@ -10,12 +10,11 @@ import { InventoryTab } from './tabs/InventoryTab';
 import { SettingsTab } from './tabs/SettingsTab';
 
 const NordicLogApp: React.FC = () => {
-  const { activeTab, setActiveTab, hydrateFromApi } = useStore();
-  const [loading, setLoading] = React.useState(true);
+  const { activeTab, setActiveTab, hydrateFromApi, isHydrating, hydrateError } = useStore();
 
   React.useEffect(() => {
-    hydrateFromApi().finally(() => setLoading(false));
-  }, []);
+    hydrateFromApi();
+  }, [hydrateFromApi]);
 
   return (
     <div className="w-full max-w-7xl mx-auto flex flex-col min-h-screen bg-slate-50">
@@ -70,7 +69,14 @@ const NordicLogApp: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 relative px-2 md:px-4 pb-8">
-        {loading ? <div className="p-6 text-center">Loading data...</div> : (
+        {isHydrating ? (
+          <div className="p-6 text-center">Loading data...</div>
+        ) : hydrateError ? (
+          <div className="p-6 text-center">
+            <div className="mb-4 text-red-700 font-bold">Failed to load data: {hydrateError}</div>
+            <button onClick={() => hydrateFromApi()} className="px-4 py-2 bg-blue-600 text-white rounded">Retry</button>
+          </div>
+        ) : (
           <>
             {activeTab === 'input' && <InputTab />}
             {activeTab === 'preview' && <LivePreviewTab />}

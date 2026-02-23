@@ -23,6 +23,7 @@ export interface Supplier {
   createdOn: number;
   // Financial Fields
   basePricePerKg: number; // Base price per kg of raw milk (e.g. 0.32)
+  normalMilkPricePerKg?: number; // Optional normal milk price per kg
   fatBonusPerPct: number; // Bonus per 0.1% fat (e.g. 0.003)
   proteinBonusPerPct: number; // Bonus per 0.1% protein (e.g. 0.004)
   // Milk Characteristics

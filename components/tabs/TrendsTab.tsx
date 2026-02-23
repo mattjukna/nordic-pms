@@ -28,7 +28,7 @@ export const TrendsTab: React.FC = () => {
   const [customEnd, setCustomEnd] = useState('');
 
   // --- Filter Logic ---
-  const { filteredIntake, filteredOutput, filteredDispatch, dateLabel } = useMemo(() => {
+  const { filteredIntake, filteredOutput, filteredDispatch, dateLabel, rangeFrom, rangeTo } = useMemo(() => {
     const now = new Date();
     let startTs = 0;
     let endTs = now.setHours(23, 59, 59, 999);
@@ -77,9 +77,26 @@ export const TrendsTab: React.FC = () => {
       filteredOutput: outputEntries.filter(e => e.timestamp >= startTs && e.timestamp <= endTs),
       // Filter dispatch: within range AND confirmed
       filteredDispatch: dispatchEntries.filter(e => e.date >= startTs && e.date <= endTs && e.status === 'confirmed'),
-      dateLabel: label
+      dateLabel: label,
+      rangeFrom: startTs,
+      rangeTo: endTs
     };
   }, [timeRange, customStart, customEnd, intakeEntries, outputEntries, dispatchEntries]);
+
+  // Pull analytics actions/state
+  const analytics = useStore(s => s.analytics);
+  const fetchMilkSpendRange = useStore(s => s.fetchMilkSpendRange);
+
+  // Fetch milk spend for the selected range whenever it changes (only when viewing financial)
+  React.useEffect(() => {
+    if (!rangeFrom || !rangeTo) return;
+    const fromIso = new Date(rangeFrom).toISOString();
+    const toIso = new Date(rangeTo).toISOString();
+    fetchMilkSpendRange(fromIso, toIso).catch(err => console.error('fetchMilkSpendRange failed', err));
+  }, [rangeFrom, rangeTo, fetchMilkSpendRange]);
+
+  // Non-discarded intake for statistics (discarded entries are excluded from totals)
+  const nonDiscardedFilteredIntake = useMemo(() => filteredIntake.filter(e => !e.isDiscarded), [filteredIntake]);
 
   // Simulator State
   const [simulatedPrice, setSimulatedPrice] = useState('0.35');
@@ -92,12 +109,14 @@ export const TrendsTab: React.FC = () => {
   // --- 1. DATA PREPARATION (Based on Filtered Data) ---
 
   // A. Financial Data
+
   const financialKPIs = useMemo(() => {
-    const totalMilkCost = filteredIntake.reduce((sum, e) => sum + (e.calculatedCost || 0), 0);
+    // Prefer server-aggregated milk spend when available
+    const totalMilkCost = analytics?.milkSpend?.totalCost ?? nonDiscardedFilteredIntake.reduce((sum, e) => sum + (e.calculatedCost || 0), 0);
     const discardedIntake = filteredIntake.filter(e => e.isDiscarded);
     const totalDiscardedCost = discardedIntake.reduce((sum, e) => sum + (e.calculatedCost || 0), 0);
     const totalRevenue = filteredDispatch.reduce((sum, e) => sum + (e.totalRevenue || 0), 0);
-    const totalIntakeKg = filteredIntake.reduce((sum, e) => sum + e.quantityKg, 0);
+    const totalIntakeKg = nonDiscardedFilteredIntake.reduce((sum, e) => sum + e.quantityKg, 0);
     
     // Processing cost estimate
     const totalProcessingCost = (totalIntakeKg / 1000) * globalConfig.processingCostPerTon;
@@ -118,6 +137,32 @@ export const TrendsTab: React.FC = () => {
     };
   }, [filteredIntake, filteredDispatch, globalConfig]);
 
+  // Trigger fetch when range changes
+  React.useEffect(() => {
+    // derive from/to from filter logic in this component
+    const now = new Date();
+    let startTs = 0;
+    let endTs = now.setHours(23, 59, 59, 999);
+    if (customStart) {
+       startTs = new Date(customStart).getTime();
+       if (customEnd) endTs = new Date(customEnd).setHours(23, 59, 59, 999);
+    } else {
+       const today = new Date();
+       today.setHours(0,0,0,0);
+       switch (timeRange) {
+         case 'day': startTs = today.getTime(); break;
+         case 'week': startTs = new Date(today.setDate(today.getDate() - 7)).getTime(); break;
+         case 'month': startTs = new Date(today.setDate(today.getDate() - 30)).getTime(); break;
+         case 'quarter': startTs = new Date(today.setDate(today.getDate() - 90)).getTime(); break;
+         case 'year': startTs = new Date(today.setDate(today.getDate() - 365)).getTime(); break;
+         case 'all': startTs = 0; break;
+       }
+    }
+    const fromIso = new Date(startTs).toISOString();
+    const toIso = new Date(endTs).toISOString();
+    fetchMilkSpendRange(fromIso, toIso);
+  }, [timeRange, customStart, customEnd, fetchMilkSpendRange]);
+
   // Daily Financial Trend
   const dailyFinancialData = useMemo(() => {
     const dailyMap: Record<string, { date: string, revenue: number, cost: number, discarded: number }> = {};
@@ -125,9 +170,10 @@ export const TrendsTab: React.FC = () => {
     filteredIntake.forEach(e => {
         const d = new Date(e.timestamp).toLocaleDateString();
         if (!dailyMap[d]) dailyMap[d] = { date: d, revenue: 0, cost: 0, discarded: 0 };
-        dailyMap[d].cost += (e.calculatedCost || 0);
         if (e.isDiscarded) {
           dailyMap[d].discarded += (e.calculatedCost || 0);
+        } else {
+          dailyMap[d].cost += (e.calculatedCost || 0);
         }
     });
 
@@ -142,14 +188,25 @@ export const TrendsTab: React.FC = () => {
         .map(d => ({...d, profit: d.revenue - d.cost}));
   }, [filteredIntake, filteredDispatch]);
 
+  // Use client-side daily milk spend series (from non-discarded entries) for plotting
+  const dailyMilkSpendSeries = useMemo(() => {
+    const dailyMap: Record<string, number> = {};
+    nonDiscardedFilteredIntake.forEach(e => {
+      const d = new Date(e.timestamp).toLocaleDateString();
+      dailyMap[d] = (dailyMap[d] || 0) + (e.calculatedCost || 0);
+    });
+    return Object.entries(dailyMap).map(([date, cost]) => ({ date, milkCost: cost })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [nonDiscardedFilteredIntake]);
+
   // B. Production Data
   const productionKPIs = useMemo(() => {
-    const totalIntake = filteredIntake.reduce((sum, e) => sum + e.quantityKg, 0);
+    const totalIntakeAll = filteredIntake.reduce((sum, e) => sum + e.quantityKg, 0);
+    const totalIntake = nonDiscardedFilteredIntake.reduce((sum, e) => sum + e.quantityKg, 0);
     const discardedKg = filteredIntake.filter(e => e.isDiscarded).reduce((sum, e) => sum + e.quantityKg, 0);
     const totalOutput = filteredOutput.reduce((sum, e) => sum + e.parsed.totalWeight, 0);
-    const currentYield = totalIntake > 0 ? (totalOutput / (totalIntake - discardedKg)) * 100 : 0;
+    const currentYield = totalIntake > 0 ? (totalOutput / totalIntake) * 100 : 0;
     const globalYield = totalIntake > 0 ? (totalOutput / totalIntake) * 100 : 0;
-    const theoreticalOutput = (totalIntake - discardedKg) * TARGET_YIELD;
+    const theoreticalOutput = totalIntake * TARGET_YIELD;
     const varianceKg = totalOutput - theoreticalOutput;
 
     // Top Product
@@ -176,8 +233,8 @@ export const TrendsTab: React.FC = () => {
     filteredIntake.forEach(e => {
       const d = new Date(e.timestamp).toLocaleDateString();
       if (!dailyMap[d]) dailyMap[d] = { date: d, output: 0, intake: 0, discarded: 0 };
-      dailyMap[d].intake += e.quantityKg;
       if (e.isDiscarded) dailyMap[d].discarded += e.quantityKg;
+      else dailyMap[d].intake += e.quantityKg;
     });
     filteredOutput.forEach(e => {
       const d = new Date(e.timestamp).toLocaleDateString();
@@ -193,12 +250,30 @@ export const TrendsTab: React.FC = () => {
     })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [filteredIntake, filteredOutput]);
 
+    // Product Mix (for Pie)
+    const productMixData = useMemo(() => {
+      const totals: Record<string, number> = {};
+      filteredOutput.forEach(e => {
+        totals[e.productId] = (totals[e.productId] || 0) + (e.parsed?.totalWeight || 0);
+      });
+      return Object.entries(totals).map(([name, value]) => ({ name, value }));
+    }, [filteredOutput]);
+
+    // Milk Type Mix (for Pie)
+    const milkTypeMix = useMemo(() => {
+      const totals: Record<string, number> = {};
+      nonDiscardedFilteredIntake.forEach(e => {
+        totals[e.milkType] = (totals[e.milkType] || 0) + (e.quantityKg || 0);
+      });
+      return Object.entries(totals).map(([name, value]) => ({ name, value }));
+    }, [filteredIntake]);
+
   // C. Quality Data
   const qualityKPIs = useMemo(() => {
-    const totalIntake = filteredIntake.reduce((sum, e) => sum + e.quantityKg, 0);
-    const weightedFat = filteredIntake.reduce((sum, e) => sum + (e.fatPct * e.quantityKg), 0);
-    const weightedProt = filteredIntake.reduce((sum, e) => sum + (e.proteinPct * e.quantityKg), 0);
-    const weightedPh = filteredIntake.reduce((sum, e) => sum + (e.ph * e.quantityKg), 0);
+    const totalIntake = nonDiscardedFilteredIntake.reduce((sum, e) => sum + e.quantityKg, 0);
+    const weightedFat = nonDiscardedFilteredIntake.reduce((sum, e) => sum + (e.fatPct * e.quantityKg), 0);
+    const weightedProt = nonDiscardedFilteredIntake.reduce((sum, e) => sum + (e.proteinPct * e.quantityKg), 0);
+    const weightedPh = nonDiscardedFilteredIntake.reduce((sum, e) => sum + (e.ph * e.quantityKg), 0);
     const highTempCount = filteredIntake.filter(e => e.tempCelsius > 8).length;
     const badPhCount = filteredIntake.filter(e => e.ph > 6.74 || e.ph < 6.55).length;
 
@@ -215,12 +290,15 @@ export const TrendsTab: React.FC = () => {
     const map: Record<string, { count: number, fat: number, protein: number, cost: number, kg: number, discardedKg: number }> = {};
     filteredIntake.forEach(e => {
       if (!map[e.supplierName]) map[e.supplierName] = { count: 0, fat: 0, protein: 0, cost: 0, kg: 0, discardedKg: 0 };
-      map[e.supplierName].count++;
-      map[e.supplierName].fat += e.fatPct;
-      map[e.supplierName].protein += e.proteinPct;
-      map[e.supplierName].cost += e.calculatedCost;
-      map[e.supplierName].kg += e.quantityKg;
-      if (e.isDiscarded) map[e.supplierName].discardedKg += e.quantityKg;
+      if (e.isDiscarded) {
+        map[e.supplierName].discardedKg += e.quantityKg;
+      } else {
+        map[e.supplierName].count++;
+        map[e.supplierName].fat += e.fatPct;
+        map[e.supplierName].protein += e.proteinPct;
+        map[e.supplierName].cost += e.calculatedCost;
+        map[e.supplierName].kg += e.quantityKg;
+      }
     });
 
     return Object.entries(map)
@@ -330,7 +408,7 @@ export const TrendsTab: React.FC = () => {
       {activeView === 'financial' && (
         <div className="flex flex-col gap-4">
            {/* Financial KPIs */}
-           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
+           <div className="grid grid-cols-1 md:grid-cols-6 gap-4 shrink-0">
               <GlassCard className="p-4 flex flex-col justify-between border-emerald-200 bg-emerald-50/30">
                 <div className="flex justify-between items-start">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Revenue (Confirmed)</span>
@@ -347,6 +425,24 @@ export const TrendsTab: React.FC = () => {
                 </div>
                 <div className="mt-2 text-2xl font-mono font-bold text-red-700">€{financialKPIs.discardedLoss.toLocaleString()}</div>
                 <div className="text-[10px] text-slate-400 mt-1">Sunk cost from bad milk</div>
+              </GlassCard>
+
+              <GlassCard className="p-4 flex flex-col justify-between border-slate-200 bg-white">
+                <div className="flex justify-between items-start">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Milk Spend</span>
+                  <DollarSign size={16} className="text-slate-400"/>
+                </div>
+                <div className="mt-2 text-2xl font-mono font-bold text-slate-800">€{(analytics.milkSpend?.totalCost ?? 0).toLocaleString()}</div>
+                <div className="text-[10px] text-slate-400 mt-1">Selected range</div>
+              </GlassCard>
+
+              <GlassCard className="p-4 flex flex-col justify-between border-slate-200 bg-white">
+                <div className="flex justify-between items-start">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Avg Milk Price</span>
+                  <Coins size={16} className="text-slate-400"/>
+                </div>
+                <div className="mt-2 text-2xl font-mono font-bold text-slate-800">€{(analytics.milkSpend?.avgPricePerKg ?? 0).toFixed(3)}<span className="text-sm text-slate-400">/kg</span></div>
+                <div className="text-[10px] text-slate-400 mt-1">Excludes discarded</div>
               </GlassCard>
 
               <GlassCard className={`p-4 flex flex-col justify-between ${financialKPIs.marginPct < 15 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
@@ -400,6 +496,7 @@ export const TrendsTab: React.FC = () => {
                           <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#10b981" fillOpacity={1} fill="url(#colorRev)" />
                           <Area type="monotone" dataKey="cost" name="Total Cost" stroke="#ef4444" fillOpacity={1} fill="url(#colorCost)" />
                           <Area type="monotone" dataKey="discarded" name="Discarded Loss" stroke="#000000" fillOpacity={1} fill="url(#colorDiscarded)" />
+                              {/* Milk Spend is represented by 'cost' series (non-discarded intake calculatedCost) */}
                           <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                       </AreaChart>
                     </ResponsiveContainer>

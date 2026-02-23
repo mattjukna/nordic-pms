@@ -12,7 +12,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, buyers, products } = useStore();
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, buyers, products } = useStore();
+  if (!products || products.length === 0) return <div className="p-6 text-center">Loading products…</div>;
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState(false);
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);
@@ -315,58 +316,39 @@ export const InventoryTab: React.FC = () => {
     setShowDispatchForm(true);
   };
 
-  const handleAddShipment = () => {
+  const handleAddShipment = async () => {
     if (!editingDispatchId || !shipmentQty) return;
     const qty = parseFloat(shipmentQty);
     const entry = dispatchEntries.find(e => e.id === editingDispatchId);
     if (!entry) return;
 
-    const product = PRODUCTS.find(p => p.id === entry.productId);
+    const product = products.find(p => p.id === entry.productId);
     const parsed = product && shipmentPkgString 
       ? parsePackagingString(shipmentPkgString, product.defaultPalletWeight, product.defaultBagWeight)
       : undefined;
 
-    const newShipment = {
-      id: Math.random().toString(36).substr(2, 9),
+    const payload: any = {
+      productId: entry.productId,
       date: new Date(shipmentDate).getTime(),
       quantityKg: qty,
+      batchId: undefined,
       note: shipmentNote,
-      packagingString: shipmentPkgString,
-      parsed: parsed ? {
-        pallets: parsed.pallets,
-        bigBags: parsed.bigBags,
-        tanks: parsed.tanks,
-        totalWeight: parsed.totalWeight
-      } : undefined
+      packagingString: shipmentPkgString
     };
 
-    const updatedShipments = [...(entry.shipments || []), newShipment];
-    const totalShipped = updatedShipments.reduce((sum, s) => sum + s.quantityKg, 0);
-    
-    updateDispatchEntry(editingDispatchId, { 
-      shipments: updatedShipments,
-      quantityKg: totalShipped, // Update total shipped
-      totalRevenue: totalShipped * entry.salesPricePerKg
-    });
+    await addDispatchShipment(editingDispatchId, payload);
 
     setShipmentQty('');
     setShipmentPkgString('');
     setShipmentNote('');
   };
 
-  const handleRemoveShipment = (shipmentId: string) => {
+  const handleRemoveShipment = async (shipmentId: string) => {
     if (!editingDispatchId) return;
     const entry = dispatchEntries.find(e => e.id === editingDispatchId);
     if (!entry || !entry.shipments) return;
 
-    const updatedShipments = entry.shipments.filter(s => s.id !== shipmentId);
-    const totalShipped = updatedShipments.reduce((sum, s) => sum + s.quantityKg, 0);
-
-    updateDispatchEntry(editingDispatchId, { 
-      shipments: updatedShipments,
-      quantityKg: totalShipped,
-      totalRevenue: totalShipped * entry.salesPricePerKg
-    });
+    await removeDispatchShipment(editingDispatchId, shipmentId);
   };
 
   const toggleComplete = (id: string, currentStatus: string) => {
@@ -650,7 +632,7 @@ export const InventoryTab: React.FC = () => {
                     }}
                     className="w-full bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   >
-                    {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 
@@ -753,7 +735,7 @@ export const InventoryTab: React.FC = () => {
                               value={shipmentPkgString}
                               onChange={e => {
                                 setShipmentPkgString(e.target.value);
-                                const p = PRODUCTS.find(prod => prod.id === dispatchEntries.find(ent => ent.id === editingDispatchId)?.productId);
+                                const p = products.find(prod => prod.id === dispatchEntries.find(ent => ent.id === editingDispatchId)?.productId);
                                 if (p) {
                                   const parsed = parsePackagingString(e.target.value, p.defaultPalletWeight, p.defaultBagWeight);
                                   if (parsed.isValid) setShipmentQty(parsed.totalWeight.toString());
@@ -975,13 +957,23 @@ export const InventoryTab: React.FC = () => {
                            {entry.shipments && entry.shipments.length > 0 && (
                              <div className="mt-1 w-full max-w-[120px]">
                                <div className="flex justify-between text-[9px] font-bold text-slate-500 mb-0.5">
-                                 <span>Shipped: {entry.quantityKg.toLocaleString()}kg</span>
-                                 <span>{Math.round((entry.quantityKg / (entry.orderedQuantityKg || entry.quantityKg)) * 100)}%</span>
+                                 {(() => {
+                                   const shipped = entry.quantityKg ?? 0;
+                                   const total = entry.orderedQuantityKg ?? entry.quantityKg ?? 0;
+                                   const remaining = Math.max(0, total - shipped);
+                                   const pct = total > 0 ? Math.round((shipped / total) * 100) : 0;
+                                   return (
+                                     <>
+                                       <span>Shipped: {shipped.toLocaleString()} / {total.toLocaleString()} kg • Remaining: {remaining.toLocaleString()} kg</span>
+                                       <span>{pct}%</span>
+                                     </>
+                                   );
+                                 })()}
                                </div>
                                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                                  <div 
                                    className={`h-full transition-all ${entry.status === 'completed' ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                                   style={{ width: `${Math.min(100, (entry.quantityKg / (entry.orderedQuantityKg || entry.quantityKg)) * 100)}%` }}
+                                   style={{ width: `${Math.min(100, ((entry.quantityKg ?? 0) / (entry.orderedQuantityKg ?? entry.quantityKg ?? 1)) * 100)}%` }}
                                  />
                                </div>
                              </div>

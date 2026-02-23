@@ -44,19 +44,19 @@ export const LivePreviewTab: React.FC = () => {
       entries = entries.filter(e => e.supplierId === selectedSupplierId);
     }
 
-    const totalIntake = entries.reduce((sum, e) => sum + e.quantityKg, 0);
+    const totalIntake = entries.filter(e => !e.isDiscarded).reduce((sum, e) => sum + e.quantityKg, 0);
     const totalDiscarded = entries.filter(e => e.isDiscarded).reduce((sum, e) => sum + e.quantityKg, 0);
     
     // Group by Supplier for the list
     const bySupplier = suppliers.map(supplier => {
       const supplierEntries = entries.filter(e => e.supplierId === supplier.id);
-      const supplierTotal = supplierEntries.reduce((sum, e) => sum + e.quantityKg, 0);
+      const supplierTotal = supplierEntries.filter(e => !e.isDiscarded).reduce((sum, e) => sum + e.quantityKg, 0);
       const supplierDiscarded = supplierEntries.filter(e => e.isDiscarded).reduce((sum, e) => sum + e.quantityKg, 0);
       
       // Quota Calculation (Always based on current calendar month for context)
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      const currentMonthEntries = intakeEntries.filter(e => e.supplierId === supplier.id && e.timestamp >= startOfMonth);
+      const currentMonthEntries = intakeEntries.filter(e => e.supplierId === supplier.id && e.timestamp >= startOfMonth && !e.isDiscarded);
       const currentMonthTotal = currentMonthEntries.reduce((sum, e) => sum + e.quantityKg, 0);
       
       const monthlyQuota = supplier.contractQuota / 12; // Assuming annual quota

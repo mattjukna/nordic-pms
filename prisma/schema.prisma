@@ -4,38 +4,44 @@ generator client {
 
 datasource db {
   provider = "sqlserver"
-}
-
-enum DispatchStatus {
-  planned
-  confirmed
-  completed
-}
-
-enum OutputDestination {
-  Warehouse
-  PienoZvaigzde
-  Export
+  url      = env("DATABASE_URL")
 }
 
 model Supplier {
-  id                 String       @id @default(cuid())
-  name               String
-  routeGroup         String
-  contractQuota      Float?
-  companyCode        String?
-  phoneNumber        String?
-  country            String?
-  addressLine1       String?
-  addressLine2       String?
-  createdOn          DateTime?
-  basePricePerKg     Float?
-  fatBonusPerPct     Float?
-  proteinBonusPerPct Float?
-  isEco              Boolean      @default(false)
-  defaultMilkType    String?
+  id                   String    @id @default(cuid())
+  name                 String
+  routeGroup           String
+  contractQuota        Float?
+  companyCode          String?
+  phoneNumber          String?
+  country              String?
+  addressLine1         String?
+  addressLine2         String?
+  createdOn            DateTime?
+  basePricePerKg       Float?
+  normalMilkPricePerKg Float?
+  fatBonusPerPct       Float?
+  proteinBonusPerPct   Float?
+  isEco                Boolean   @default(false)
+  defaultMilkType      String?
 
-  intakes            IntakeEntry[]
+  pricingPeriods SupplierPricingPeriod[]
+  intakes        IntakeEntry[]
+}
+
+model SupplierPricingPeriod {
+  id                   String   @id @default(cuid())
+  supplierId           String
+  supplier             Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  periodStart          DateTime
+  basePricePerKg       Float?
+  normalMilkPricePerKg Float?
+  fatBonusPerPct       Float?
+  proteinBonusPerPct   Float?
+  createdAt            DateTime @default(now())
+
+  @@unique([supplierId, periodStart])
+  @@index([periodStart])
 }
 
 model MilkType {
@@ -43,7 +49,7 @@ model MilkType {
 }
 
 model Product {
-  id                  String        @id
+  id                  String  @id
   name                String
   details             String?
   defaultPalletWeight Float
@@ -51,13 +57,13 @@ model Product {
   proteinTargetPct    Float
   yieldFactor         Float
 
-  outputs             OutputEntry[]
-  contracts           BuyerContract[]
-  dispatches          DispatchEntry[]
+  outputs    OutputEntry[]
+  contracts  BuyerContract[]
+  dispatches DispatchEntry[]
 }
 
 model Buyer {
-  id           String         @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
   companyCode  String?
   phoneNumber  String?
@@ -66,8 +72,8 @@ model Buyer {
   addressLine2 String?
   createdOn    DateTime?
 
-  contracts    BuyerContract[]
-  dispatches   DispatchEntry[]
+  contracts  BuyerContract[]
+  dispatches DispatchEntry[]
 }
 
 model BuyerContract {
@@ -78,98 +84,98 @@ model BuyerContract {
   startDate      DateTime
   endDate        DateTime
 
-  buyerId        String
-  buyer          Buyer    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  buyerId String
+  buyer   Buyer  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
 
-  productId      String
-  product        Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: NoAction)
 
   @@unique([buyerId, contractNumber])
   @@index([productId])
 }
 
 model IntakeEntry {
-  id                String      @id @default(cuid())
-  supplierId        String
-  supplier          Supplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: NoAction)
 
-  supplierName      String
-  routeGroup        String
-  milkType          String
-  quantityKg        Float
-  ph                Float
-  fatPct            Float
-  proteinPct        Float
-  tempCelsius       Float
-  isEcological      Boolean     @default(false)
-  note              String?
-  timestamp         DateTime
-  calculatedCost    Float
+  supplierName         String
+  routeGroup           String
+  milkType             String
+  quantityKg           Float
+  ph                   Float
+  fatPct               Float
+  proteinPct           Float
+  tempCelsius          Float
+  isEcological         Boolean  @default(false)
+  note                 String?
+  timestamp            DateTime
+  calculatedCost       Float
   isTempAlertDismissed Boolean  @default(false)
-  isDiscarded       Boolean     @default(false)
+  isDiscarded          Boolean  @default(false)
 
-  tags              IntakeTag[]
+  tags IntakeTag[]
 
   @@index([supplierId])
   @@index([timestamp])
 }
 
 model IntakeTag {
-  id           String     @id @default(cuid())
+  id            String      @id @default(cuid())
   intakeEntryId String
-  intakeEntry  IntakeEntry @relation(fields: [intakeEntryId], references: [id], onDelete: Cascade)
-  tag          String
+  intakeEntry   IntakeEntry @relation(fields: [intakeEntryId], references: [id], onDelete: Cascade)
+  tag           String
 
   @@unique([intakeEntryId, tag])
 }
 
 model OutputEntry {
-  id              String           @id @default(cuid())
-  productId       String
-  product         Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: NoAction)
 
   batchId         String
   packagingString String
-  destination     OutputDestination
+  destination     String
   timestamp       DateTime
 
-  pallets         Float
-  bigBags         Float
-  tanks           Float
-  totalWeight     Float
+  pallets     Float
+  bigBags     Float
+  tanks       Float
+  totalWeight Float
 
   @@index([productId])
   @@index([timestamp])
 }
 
 model DispatchEntry {
-  id              String         @id @default(cuid())
-  date            DateTime
+  id   String   @id @default(cuid())
+  date DateTime
 
-  buyerId         String?
-  buyer           Buyer?         @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  buyerId String?
+  buyer   Buyer?  @relation(fields: [buyerId], references: [id], onDelete: SetNull)
 
-  buyerName       String
-  contractNumber  String?
+  buyerName      String
+  contractNumber String?
 
-  productId       String
-  product         Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: NoAction)
 
-  quantityKg      Float
+  quantityKg        Float
   orderedQuantityKg Float?
-  batchRefId      String?
-  packagingString String?
+  batchRefId        String?
+  packagingString   String?
 
-  pallets         Float?
-  bigBags         Float?
-  tanks           Float?
-  totalWeight     Float?
+  pallets     Float?
+  bigBags     Float?
+  tanks       Float?
+  totalWeight Float?
 
   salesPricePerKg Float
   totalRevenue    Float
-  status          DispatchStatus @default(planned)
+  status          String @default("planned")
 
-  shipments       DispatchShipment[]
+  shipments DispatchShipment[]
 
   @@index([date])
   @@index([status])
@@ -187,8 +193,8 @@ model DispatchShipment {
   note            String?
   packagingString String?
 
-  pallets         Float?
-  bigBags         Float?
-  tanks           Float?
-  totalWeight     Float?
+  pallets     Float?
+  bigBags     Float?
+  tanks       Float?
+  totalWeight Float?
 }

@@ -455,7 +455,7 @@ export const InputTab: React.FC = () => {
     if (editingOutputId) {
       updateOutputEntry(editingOutputId, pkgString);
     } else {
-      addOutputEntry(selectedProductId, batchId, pkgString);
+      addOutputEntry({ productId: selectedProductId, batchId, packagingString: pkgString, destination: 'Warehouse' });
     }
     setPkgString('');
   };

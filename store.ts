@@ -1,436 +1,366 @@
 
 import { create } from 'zustand';
-import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product } from './types';
+import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract } from './types';
 import { DEFAULT_CONFIG } from './constants';
 
 interface AppState {
   activeTab: 'input' | 'preview' | 'trends' | 'ai' | 'inventory' | 'settings';
   setActiveTab: (tab: 'input' | 'preview' | 'trends' | 'ai' | 'inventory' | 'settings') => void;
-  
-  // Configuration
+
+  // Config
   globalConfig: GlobalConfig;
   updateGlobalConfig: (config: Partial<GlobalConfig>) => void;
+
+  // Hydration state
+  isHydrating: boolean;
+  hydrateError: string | null;
+  hydrateFromApi: () => Promise<void>;
 
   // Database State
   suppliers: Supplier[];
   buyers: Buyer[];
   products: Product[];
   milkTypes: string[];
-  
+
   // Logs State
   intakeEntries: IntakeEntry[];
   outputEntries: OutputEntry[];
   dispatchEntries: DispatchEntry[];
   alerts: Alert[];
-  
-  // Edit Mode State
+  // Analytics cache
+  analytics: {
+    milkSpend?: {
+      from: number;
+      to: number;
+      totalCost: number;
+      totalKg: number;
+      avgPricePerKg: number;
+      bySupplier: Array<{ supplierId: string; supplierName: string; totalCost: number; totalKg: number; avgPricePerKg: number; }>;
+    } | null;
+  };
+  fetchMilkSpendRange: (from: string, to: string) => Promise<void>;
+  // Last requested range for milk spend (ISO strings)
+  lastMilkSpendFrom?: string | null;
+  lastMilkSpendTo?: string | null;
+  analyticsError?: string | null;
+
+  // Edit Mode
   editingIntakeId: string | null;
   setEditingIntakeId: (id: string | null) => void;
-
   editingOutputId: string | null;
   setEditingOutputId: (id: string | null) => void;
 
-  // Actions
-  addSupplier: (supplier: Omit<Supplier, 'id'>) => void;
-  updateSupplier: (id: string, updates: Partial<Supplier>) => void;
-  removeSupplier: (id: string) => void;
+  // Actions (async)
+  addSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<void>;
+  updateSupplier: (id: string, updates: Partial<Supplier>) => Promise<void>;
+  removeSupplier: (id: string) => Promise<void>;
 
-  addBuyer: (buyer: Omit<Buyer, 'id'>) => void;
-  updateBuyer: (id: string, updates: Partial<Buyer>) => void;
-  removeBuyer: (id: string) => void;
+  addBuyer: (buyer: Omit<Buyer, 'id'>) => Promise<void>;
+  updateBuyer: (id: string, updates: Partial<Buyer>) => Promise<void>;
+  removeBuyer: (id: string) => Promise<void>;
 
-  addProduct: (product: Product) => void;
-  updateProduct: (id: string, updates: Partial<Product>) => void;
-  removeProduct: (id: string) => void;
+  addContract: (buyerId: string, contract: Omit<BuyerContract, 'id'>) => Promise<void>;
+  updateContract: (id: string, updates: Partial<BuyerContract>) => Promise<void>;
+  removeContract: (id: string) => Promise<void>;
 
-  addMilkType: (type: string) => void;
-  removeMilkType: (type: string) => void;
+  addProduct: (product: Product) => Promise<void>;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  removeProduct: (id: string) => Promise<void>;
 
-  // Updated: Removed 'timestamp' from Omit to allow passing it
-  addIntakeEntry: (entry: Omit<IntakeEntry, 'id' | 'calculatedCost'>) => void;
-  updateIntakeEntry: (id: string, updates: Partial<IntakeEntry>) => void;
+  addMilkType: (type: string) => Promise<void>;
+  removeMilkType: (type: string) => Promise<void>;
+
+  addIntakeEntry: (entry: Omit<IntakeEntry, 'id' | 'calculatedCost'> & { tags?: string[] }) => Promise<void>;
+  updateIntakeEntry: (id: string, updates: Partial<IntakeEntry> & { tags?: string[] }) => Promise<void>;
   toggleIntakeDiscard: (id: string) => void;
   dismissTempAlert: (id: string) => void;
-  removeIntakeEntry: (id: string) => void;
-  
-  addOutputEntry: (productId: string, batchId: string, packagingString: string) => void;
-  updateOutputEntry: (id: string, packagingString: string) => void;
-  removeOutputEntry: (id: string) => void;
+  removeIntakeEntry: (id: string) => Promise<void>;
 
-  addDispatchEntry: (entry: Omit<DispatchEntry, 'id'>) => void;
-  updateDispatchEntry: (id: string, updates: Partial<DispatchEntry>) => void;
-  removeDispatchEntry: (id: string) => void;
-  
+  addOutputEntry: (payload: { productId: string; batchId?: string; packagingString?: string; destination?: string }) => Promise<void>;
+  updateOutputEntry: (id: string, packagingString: string) => Promise<void>;
+  removeOutputEntry: (id: string) => Promise<void>;
+
+  addDispatchEntry: (entry: Omit<DispatchEntry, 'id'>) => Promise<void>;
+  updateDispatchEntry: (id: string, updates: Partial<DispatchEntry>) => Promise<void>;
+  removeDispatchEntry: (id: string) => Promise<void>;
+
+  // Shipments
+  addDispatchShipment: (dispatchId: string, payload: any) => Promise<void>;
+  removeDispatchShipment: (dispatchId: string, shipmentId: string) => Promise<void>;
+
   generateAIInsights: () => Promise<string>;
-  hydrateFromApi: () => Promise<void>;
 }
 
 const calculateMilkCost = (quantity: number, fat: number, protein: number, supplier: Supplier | undefined, defaultConfig: GlobalConfig) => {
   if (!supplier) return quantity * defaultConfig.defaultMilkBasePrice;
 
-  const fatDiff = fat - 4.0; // Standard Fat 4.0%
-  const protDiff = protein - 3.2; // Standard Protein 3.2%
+  const fatDiff = fat - 4.0;
+  const protDiff = protein - 3.2;
 
-  let price = supplier.basePricePerKg;
-  price += (fatDiff * 10) * supplier.fatBonusPerPct; // *10 because bonus is per 0.1%
-  price += (protDiff * 10) * supplier.proteinBonusPerPct;
-  
-  // Ensure price doesn't go negative in extreme cases
+  let price = supplier.basePricePerKg ?? defaultConfig.defaultMilkBasePrice;
+  price += (fatDiff * 10) * (supplier.fatBonusPerPct ?? 0);
+  price += (protDiff * 10) * (supplier.proteinBonusPerPct ?? 0);
   price = Math.max(0, price);
-
   return quantity * price;
 };
+
+async function api<T>(url: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json', ...(opts?.headers || {}) }, ...opts });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json();
+}
 
 export const useStore = create<AppState>((set, get) => ({
   activeTab: 'input',
   setActiveTab: (tab) => set({ activeTab: tab }),
-  
+
+  globalConfig: DEFAULT_CONFIG,
   updateGlobalConfig: (config) => set((state) => ({ globalConfig: { ...state.globalConfig, ...config } })),
+
+  isHydrating: false,
+  hydrateError: null,
+  hydrateFromApi: async () => {
+    set({ isHydrating: true, hydrateError: null });
+    try {
+      const data = await api<any>('/api/bootstrap');
+      set(() => ({
+        suppliers: (data.suppliers || []).map((s: any) => ({ ...s })),
+        buyers: (data.buyers || []).map((b: any) => ({ ...b, contracts: b.contracts?.map((c: any) => ({ ...c })) || [] })),
+        products: data.products || [],
+        milkTypes: data.milkTypes || [],
+        intakeEntries: (data.intakeEntries || []).map((i: any) => ({ ...i })),
+        outputEntries: (data.outputEntries || []).map((o: any) => ({ ...o })),
+        dispatchEntries: (data.dispatchEntries || []).map((d: any) => ({ ...d })),
+        isHydrating: false
+      }));
+    } catch (err: any) {
+      set({ hydrateError: err.message || String(err), isHydrating: false });
+    }
+  },
 
   suppliers: [],
   buyers: [],
   products: [],
-  milkTypes: [
-    'Skim milk concentrate',
-    'Skim milk',
-    'Milk protein concentrate',
-    'Permeate concentrate',
-    'Raw milk',
-    'Cream'
-  ],
-  
+  milkTypes: [],
+
   intakeEntries: [],
   outputEntries: [],
   dispatchEntries: [],
-  alerts: [
-    { id: 'a1', type: 'info', message: 'Shift started: Morning Shift (Supervisor: J. Jonaitis)', timestamp: Date.now() }
-  ],
+  alerts: [],
+
+  analytics: { milkSpend: null },
+
+  lastMilkSpendFrom: null,
+  lastMilkSpendTo: null,
+  analyticsError: null,
+
+  fetchMilkSpendRange: async (from, to) => {
+    try {
+      const data = await api<any>(`/api/milk-spend-range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      set((s) => ({ analytics: { milkSpend: { from: data.from, to: data.to, totalCost: data.totalCost, totalKg: data.totalKg, avgPricePerKg: data.avgPricePerKg, bySupplier: data.bySupplier.map((b: any) => ({ supplierId: b.supplierId, supplierName: b.supplierName, totalCost: b.totalCost, totalKg: b.totalKg, avgPricePerKg: b.avgPricePerKg })) } }, lastMilkSpendFrom: from, lastMilkSpendTo: to, analyticsError: null }));
+    } catch (err: any) {
+      console.error('Failed to fetch milk spend range', err);
+      set((s) => ({ analytics: { milkSpend: null }, analyticsError: err?.message ?? String(err) }));
+    }
+  },
 
   editingIntakeId: null,
   setEditingIntakeId: (id) => set({ editingIntakeId: id }),
-
   editingOutputId: null,
   setEditingOutputId: (id) => set({ editingOutputId: id }),
 
-  // --- Database Actions ---
-  addSupplier: (supplier) => {
-    // Persist to server then update local state
-    fetch('/api/suppliers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(supplier) })
-      .then(r => r.json())
-      .then((created) => set((state) => ({ suppliers: [...state.suppliers, { ...created, createdOn: created.createdOn ? new Date(created.createdOn).getTime() : created.createdOn }] })))
-      .catch(err => console.error('Failed to add supplier', err));
+  addSupplier: async (supplier) => {
+    const created = await api<Supplier>('/api/suppliers', { method: 'POST', body: JSON.stringify(supplier) });
+    set((state) => ({ suppliers: [created, ...state.suppliers] }));
   },
-    suppliers: [...state.suppliers, { ...supplier, id: Math.random().toString(36).substr(2, 9) }]
-  })),
 
-  updateSupplier: (id, updates) => {
-    fetch(`/api/suppliers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
-      .then(r => r.json())
-      .then((updated) => set((state) => ({ suppliers: state.suppliers.map(s => s.id === id ? { ...s, ...updated } : s) })))
-      .catch(err => console.error('Failed to update supplier', err));
+  updateSupplier: async (id, updates) => {
+    const updated = await api<Supplier>(`/api/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+    set((state) => ({ suppliers: state.suppliers.map(s => s.id === id ? { ...s, ...updated } : s) }));
   },
-    suppliers: state.suppliers.map(s => s.id === id ? { ...s, ...updates } : s)
-  })),
 
-  removeSupplier: (id) => {
-    fetch(`/api/suppliers/${id}`, { method: 'DELETE' })
-      .then(() => set((state) => ({ suppliers: state.suppliers.filter(s => s.id !== id) })))
-      .catch(err => console.error('Failed to delete supplier', err));
+  removeSupplier: async (id) => {
+    await api('/api/suppliers/' + id, { method: 'DELETE' });
+    set((state) => ({ suppliers: state.suppliers.filter(s => s.id !== id) }));
   },
-    suppliers: state.suppliers.filter(s => s.id !== id)
-  })),
 
-  addBuyer: (buyer) => {
-    fetch('/api/buyers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buyer) })
-      .then(r => r.json())
-      .then((created) => set((state) => ({ buyers: [...state.buyers, { ...created, createdOn: created.createdOn ? new Date(created.createdOn).getTime() : created.createdOn }] })))
-      .catch(err => console.error('Failed to add buyer', err));
+  addBuyer: async (buyer) => {
+    const created = await api<Buyer>('/api/buyers', { method: 'POST', body: JSON.stringify(buyer) });
+    set((state) => ({ buyers: [created, ...state.buyers] }));
   },
-    buyers: [...state.buyers, { ...buyer, id: Math.random().toString(36).substr(2, 9) }]
-  })),
 
-  updateBuyer: (id, updates) => {
-    fetch(`/api/buyers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
-      .then(r => r.json())
-      .then((updated) => set((state) => ({ buyers: state.buyers.map(b => b.id === id ? { ...b, ...updated } : b) })))
-      .catch(err => console.error('Failed to update buyer', err));
+  updateBuyer: async (id, updates) => {
+    const updated = await api<Buyer>(`/api/buyers/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+    set((state) => ({ buyers: state.buyers.map(b => b.id === id ? { ...b, ...updated } : b) }));
   },
-    buyers: state.buyers.map(b => b.id === id ? { ...b, ...updates } : b)
-  })),
 
-  removeBuyer: (id) => {
-    fetch(`/api/buyers/${id}`, { method: 'DELETE' })
-      .then(() => set((state) => ({ buyers: state.buyers.filter(b => b.id !== id) })))
-      .catch(err => console.error('Failed to delete buyer', err));
+  removeBuyer: async (id) => {
+    await api('/api/buyers/' + id, { method: 'DELETE' });
+    set((state) => ({ buyers: state.buyers.filter(b => b.id !== id) }));
   },
-    buyers: state.buyers.filter(b => b.id !== id)
-  })),
 
-  addProduct: (product) => {
-    fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product) })
-      .then(r => r.json())
-      .then((created) => set((state) => ({ products: [...state.products, created] })))
-      .catch(err => console.error('Failed to add product', err));
+  addContract: async (buyerId, contract) => {
+    const created = await api<BuyerContract>(`/api/buyers/${buyerId}/contracts`, { method: 'POST', body: JSON.stringify(contract) });
+    set((state) => ({ buyers: state.buyers.map(b => b.id === buyerId ? { ...b, contracts: [...(b.contracts || []), created] } : b) }));
   },
-    products: [...state.products, product]
-  })),
 
-  updateProduct: (id, updates) => {
-    fetch(`/api/products/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
-      .then(r => r.json())
-      .then((updated) => set((state) => ({ products: state.products.map(p => p.id === id ? { ...p, ...updated } : p) })))
-      .catch(err => console.error('Failed to update product', err));
+  updateContract: async (id, updates) => {
+    const updated = await api<BuyerContract>(`/api/contracts/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+    set((state) => ({ buyers: state.buyers.map(b => ({ ...b, contracts: b.contracts?.map(c => c.id === id ? { ...c, ...updated } : c) || [] })) }));
   },
-    products: state.products.map(p => p.id === id ? { ...p, ...updates } : p)
-  })),
 
-  removeProduct: (id) => {
-    fetch(`/api/products/${id}`, { method: 'DELETE' })
-      .then(() => set((state) => ({ products: state.products.filter(p => p.id !== id) })))
-      .catch(err => console.error('Failed to delete product', err));
+  removeContract: async (id) => {
+    await api(`/api/contracts/${id}`, { method: 'DELETE' });
+    set((state) => ({ buyers: state.buyers.map(b => ({ ...b, contracts: b.contracts?.filter(c => c.id !== id) || [] })) }));
   },
-    products: state.products.filter(p => p.id !== id)
-  })),
 
-  addMilkType: (type) => set((state) => ({
-    milkTypes: [...state.milkTypes, type]
-  })),
-
-  removeMilkType: (type) => set((state) => ({
-    milkTypes: state.milkTypes.filter(t => t !== type)
-  })),
-
-  // --- Log Actions ---
-  addIntakeEntry: (entry) => {
-    fetch('/api/intake-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
-      .then(r => r.json())
-      .then((created) => set((state) => ({
-        intakeEntries: [
-          { ...created, timestamp: created.timestamp ? new Date(created.timestamp).getTime() : created.timestamp },
-          ...state.intakeEntries
-        ],
-      })))
-      .catch(err => console.error('Failed to add intake entry', err));
+  addProduct: async (product) => {
+    const created = await api<Product>('/api/products', { method: 'POST', body: JSON.stringify(product) });
+    set((state) => ({ products: [created, ...state.products] }));
   },
-    const newAlerts = [...state.alerts];
-    if (entry.tempCelsius > 8) {
-      newAlerts.push({
-        id: Date.now().toString(),
-        type: 'danger',
-        message: `High temp alert (${entry.tempCelsius}°C) from ${entry.supplierName}`,
-        timestamp: Date.now()
-      });
-    }
 
-    if (entry.ph > 6.74 || entry.ph < 6.55) {
-      newAlerts.push({
-        id: (Date.now() + 1).toString(),
-        type: 'danger',
-        message: `Bad acidity alert (pH ${entry.ph}) from ${entry.supplierName}. Not suitable for use.`,
-        timestamp: Date.now()
-      });
-    } else if (entry.ph < 6.60) {
-      newAlerts.push({
-        id: (Date.now() + 1).toString(),
-        type: 'warning',
-        message: `Borderline acidity (pH ${entry.ph}) from ${entry.supplierName}.`,
-        timestamp: Date.now()
-      });
-    }
-    
-    const supplier = state.suppliers.find(s => s.id === entry.supplierId);
-    const cost = calculateMilkCost(entry.quantityKg, entry.fatPct, entry.proteinPct, supplier, state.globalConfig);
-
-    return {
-      intakeEntries: [
-        { 
-          ...entry, 
-          id: Math.random().toString(36).substr(2, 9), 
-          // Use provided timestamp or fallback to now
-          timestamp: entry.timestamp || Date.now(), 
-          calculatedCost: cost 
-        },
-        ...state.intakeEntries
-      ],
-      alerts: newAlerts
-    };
-  }),
-
-  updateIntakeEntry: (id, updates) => {
-    fetch(`/api/intake-entries/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
-      .then(r => r.json())
-      .then((updated) => set((state) => ({
-        intakeEntries: state.intakeEntries.map(e => e.id === id ? { ...e, ...updated, timestamp: updated.timestamp ? new Date(updated.timestamp).getTime() : updated.timestamp } : e),
-        editingIntakeId: null
-      })))
-      .catch(err => console.error('Failed to update intake entry', err));
+  updateProduct: async (id, updates) => {
+    const updated = await api<Product>(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+    set((state) => ({ products: state.products.map(p => p.id === id ? { ...p, ...updated } : p) }));
   },
-    intakeEntries: state.intakeEntries.map(e => {
-      if (e.id !== id) return e;
-      const updatedEntry = { ...e, ...updates };
-      // Recalculate cost if quantity/fat/protein changed
-      const supplier = state.suppliers.find(s => s.id === updatedEntry.supplierId);
-      updatedEntry.calculatedCost = calculateMilkCost(updatedEntry.quantityKg, updatedEntry.fatPct, updatedEntry.proteinPct, supplier, state.globalConfig);
-      return updatedEntry;
-    }),
-    editingIntakeId: null
-  })),
 
-  dismissTempAlert: (id) => set((state) => ({
-    intakeEntries: state.intakeEntries.map(e => e.id === id ? { ...e, isTempAlertDismissed: true } : e)
-  })),
-
-  toggleIntakeDiscard: (id) => set((state) => ({
-    intakeEntries: state.intakeEntries.map(e => e.id === id ? { ...e, isDiscarded: !e.isDiscarded } : e)
-  })),
-
-  removeIntakeEntry: (id) => {
-    fetch(`/api/intake-entries/${id}`, { method: 'DELETE' })
-      .then(() => set((state) => ({ intakeEntries: state.intakeEntries.filter(e => e.id !== id) })))
-      .catch(err => console.error('Failed to delete intake entry', err));
+  removeProduct: async (id) => {
+    await api(`/api/products/${id}`, { method: 'DELETE' });
+    set((state) => ({ products: state.products.filter(p => p.id !== id) }));
   },
-    intakeEntries: state.intakeEntries.filter(e => e.id !== id)
-  })),
 
-  addOutputEntry: (productId, batchId, packagingString) => {
+  addMilkType: async (type) => {
+    await api('/api/milk-types', { method: 'POST', body: JSON.stringify({ name: type }) });
+    set((state) => ({ milkTypes: [...state.milkTypes, type] }));
+  },
+
+  removeMilkType: async (type) => {
+    await api(`/api/milk-types/${encodeURIComponent(type)}`, { method: 'DELETE' });
+    set((state) => ({ milkTypes: state.milkTypes.filter(t => t !== type) }));
+  },
+
+  addIntakeEntry: async (entry) => {
     const state = get();
-    const product = state.products.find(p => p.id === productId);
-    fetch('/api/output-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId, batchId, packagingString, timestamp: Date.now(), destination: 'Warehouse' }) })
-      .then(r => r.json())
-      .then((created) => set((s) => ({ outputEntries: [{ ...created, timestamp: created.timestamp ? new Date(created.timestamp).getTime() : created.timestamp }, ...s.outputEntries] })))
-      .catch(err => console.error('Failed to add output entry', err));
+    const supplier = state.suppliers.find(s => s.id === entry.supplierId);
+    const calculatedCost = calculateMilkCost(entry.quantityKg, entry.fatPct, entry.proteinPct, supplier, state.globalConfig);
+    const payload = { ...entry, calculatedCost, tags: entry.tags || [] };
+    const created = await api<IntakeEntry>('/api/intake-entries', { method: 'POST', body: JSON.stringify(payload) });
+    set((s) => ({ intakeEntries: [{ ...created }, ...s.intakeEntries] }));
   },
 
-  updateOutputEntry: (id, packagingString) => {
-    fetch(`/api/output-entries/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packagingString }) })
-      .then(r => r.json())
-      .then((updated) => set((state) => ({ outputEntries: state.outputEntries.map(e => e.id === id ? { ...e, ...updated, timestamp: updated.timestamp ? new Date(updated.timestamp).getTime() : updated.timestamp } : e), editingOutputId: null })))
-      .catch(err => console.error('Failed to update output entry', err));
+  updateIntakeEntry: async (id, updates) => {
+    const state = get();
+    const existing = state.intakeEntries.find(i => i.id === id);
+    const supplier = state.suppliers.find(s => s.id === (updates.supplierId || existing?.supplierId));
+    const calculatedCost = calculateMilkCost((updates.quantityKg ?? existing?.quantityKg) || 0, (updates.fatPct ?? existing?.fatPct) || 0, (updates.proteinPct ?? existing?.proteinPct) || 0, supplier, state.globalConfig);
+    const payload = { ...updates, calculatedCost, tags: (updates as any).tags ?? undefined };
+    const updated = await api<IntakeEntry>(`/api/intake-entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    set((s) => ({ intakeEntries: s.intakeEntries.map(i => i.id === id ? { ...i, ...updated } : i), editingIntakeId: null }));
   },
 
-  removeOutputEntry: (id) => {
-    fetch(`/api/output-entries/${id}`, { method: 'DELETE' })
-      .then(() => set((state) => ({ outputEntries: state.outputEntries.filter(e => e.id !== id) })))
-      .catch(err => console.error('Failed to delete output entry', err));
-  },
-    outputEntries: state.outputEntries.filter(e => e.id !== id)
-  })),
-
-  addDispatchEntry: (entry) => {
-    fetch('/api/dispatch-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
-      .then(r => r.json())
-      .then((created) => set((state) => ({ dispatchEntries: [{ ...created, date: created.date ? new Date(created.date).getTime() : created.date }, ...state.dispatchEntries] })))
-      .catch(err => console.error('Failed to add dispatch entry', err));
-  },
-    dispatchEntries: [
-      {
-        ...entry,
-        id: Math.random().toString(36).substr(2, 9),
-        // Use provided date or default to now
-        date: entry.date || Date.now()
-      },
-      ...state.dispatchEntries
-    ]
-  })),
-
-  updateDispatchEntry: (id, updates) => {
-    fetch(`/api/dispatch-entries/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
-      .then(r => r.json())
-      .then((updated) => set((state) => ({ dispatchEntries: state.dispatchEntries.map(e => e.id === id ? { ...e, ...updated } : e) })))
-      .catch(err => console.error('Failed to update dispatch entry', err));
-  },
-    dispatchEntries: state.dispatchEntries.map(e => e.id === id ? { ...e, ...updates } : e)
-  })),
-
-  removeDispatchEntry: (id) => {
-    fetch(`/api/dispatch-entries/${id}`, { method: 'DELETE' })
-      .then(() => set((state) => ({ dispatchEntries: state.dispatchEntries.filter(e => e.id !== id) })))
-      .catch(err => console.error('Failed to delete dispatch entry', err));
-  },
-
-  hydrateFromApi: async () => {
+  toggleIntakeDiscard: async (id) => {
+    const state = get();
+    const current = state.intakeEntries.find(i => i.id === id);
+    if (!current) return;
+    const newDiscard = !current.isDiscarded;
     try {
-      const res = await fetch('/api/bootstrap');
-      const data = await res.json();
-      if (data) {
-        set(() => ({
-          suppliers: data.suppliers.map((s: any) => ({ ...s, createdOn: s.createdOn ?? null })),
-          buyers: data.buyers.map((b: any) => ({ ...b, createdOn: b.createdOn ?? null })),
-          products: data.products,
-          milkTypes: data.milkTypes,
-          intakeEntries: data.intakeEntries.map((i: any) => ({ ...i })),
-          outputEntries: data.outputEntries.map((o: any) => ({ ...o })),
-          dispatchEntries: data.dispatchEntries.map((d: any) => ({ ...d }))
-        }));
+      // Use existing updateIntakeEntry which performs the PUT and replaces the entry in state
+      await get().updateIntakeEntry(id, { isDiscarded: newDiscard });
+      // If we have a last fetched milk-spend range, refresh it so KPIs update
+      const from = get().lastMilkSpendFrom;
+      const to = get().lastMilkSpendTo;
+      if (from && to) {
+        await get().fetchMilkSpendRange(from, to);
       }
-    } catch (err) {
-      console.error('Failed to hydrate from API', err);
+    } catch (err: any) {
+      console.error('toggleIntakeDiscard failed', err);
+      set(() => ({ analyticsError: err?.message ?? String(err) }));
     }
   },
-    dispatchEntries: state.dispatchEntries.filter(e => e.id !== id)
-  })),
+
+  dismissTempAlert: (id) => set((state) => ({ intakeEntries: state.intakeEntries.map(e => e.id === id ? { ...e, isTempAlertDismissed: true } : e) })),
+
+  removeIntakeEntry: async (id) => {
+    await api(`/api/intake-entries/${id}`, { method: 'DELETE' });
+    set((state) => ({ intakeEntries: state.intakeEntries.filter(e => e.id !== id) }));
+  },
+
+  addOutputEntry: async (payload) => {
+    const created = await api<OutputEntry>('/api/output-entries', { method: 'POST', body: JSON.stringify({ ...payload, timestamp: Date.now() }) });
+    set((s) => ({ outputEntries: [{ ...created }, ...s.outputEntries] }));
+  },
+
+  updateOutputEntry: async (id, packagingString) => {
+    const updated = await api<OutputEntry>(`/api/output-entries/${id}`, { method: 'PUT', body: JSON.stringify({ packagingString }) });
+    set((s) => ({ outputEntries: s.outputEntries.map(e => e.id === id ? { ...e, ...updated } : e), editingOutputId: null }));
+  },
+
+  removeOutputEntry: async (id) => {
+    await api(`/api/output-entries/${id}`, { method: 'DELETE' });
+    set((s) => ({ outputEntries: s.outputEntries.filter(e => e.id !== id) }));
+  },
+
+  addDispatchEntry: async (entry) => {
+    const created = await api<DispatchEntry>('/api/dispatch-entries', { method: 'POST', body: JSON.stringify(entry) });
+    set((s) => ({ dispatchEntries: [{ ...created }, ...s.dispatchEntries] }));
+  },
+
+  updateDispatchEntry: async (id, updates) => {
+    const updated = await api<DispatchEntry>(`/api/dispatch-entries/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === id ? { ...d, ...updated } : d) }));
+  },
+
+  removeDispatchEntry: async (id) => {
+    await api(`/api/dispatch-entries/${id}`, { method: 'DELETE' });
+    set((s) => ({ dispatchEntries: s.dispatchEntries.filter(d => d.id !== id) }));
+  },
+
+  addDispatchShipment: async (dispatchId, payload) => {
+    const updated = await api<DispatchEntry>(`/api/dispatch-entries/${dispatchId}/shipments`, { method: 'POST', body: JSON.stringify(payload) });
+    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? { ...updated } : d) }));
+  },
+
+  removeDispatchShipment: async (dispatchId, shipmentId) => {
+    const updated = await api<DispatchEntry>(`/api/dispatch-entries/${dispatchId}/shipments/${shipmentId}`, { method: 'DELETE' });
+    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? { ...updated } : d) }));
+  },
 
   generateAIInsights: async () => {
     const state = get();
-    
-    // 1. Gather Context
     const totalIntake = state.intakeEntries.reduce((acc, curr) => acc + curr.quantityKg, 0);
     const mpc85Produced = state.outputEntries
-        .filter(e => e.productId === 'MPC85')
-        .reduce((acc, curr) => acc + curr.parsed.totalWeight, 0);
-    
-    // Only count CONFIRMED dispatches for current stock calculation
+      .filter(e => e.productId === 'MPC85')
+      .reduce((acc, curr) => acc + (curr.parsed?.totalWeight || 0), 0);
     const mpc85Dispatched = state.dispatchEntries
-        .filter(e => e.productId === 'MPC85' && e.status === 'confirmed')
-        .reduce((acc, curr) => acc + curr.quantityKg, 0);
-        
-    // Look at PLANNED dispatches for future risk
+      .filter(e => e.productId === 'MPC85' && e.status === 'confirmed')
+      .reduce((acc, curr) => acc + curr.quantityKg, 0);
     const mpc85Planned = state.dispatchEntries
-        .filter(e => e.productId === 'MPC85' && e.status === 'planned')
-        .reduce((acc, curr) => acc + curr.quantityKg, 0);
+      .filter(e => e.productId === 'MPC85' && e.status === 'planned')
+      .reduce((acc, curr) => acc + curr.quantityKg, 0);
 
     const stockMPC85 = mpc85Produced - mpc85Dispatched;
-    const isLowStock = stockMPC85 < 20000; 
+    const isLowStock = stockMPC85 < 20000;
     const futureStockRisk = (stockMPC85 - mpc85Planned) < 0;
 
-    // Financial Context (Only confirmed)
     const totalRevenue = state.dispatchEntries
       .filter(e => e.status === 'confirmed')
       .reduce((acc, curr) => acc + curr.totalRevenue, 0);
-      
     const totalMilkCost = state.intakeEntries.reduce((acc, curr) => acc + curr.calculatedCost, 0);
 
-    // 2. Mock AI Reasoning
     return new Promise((resolve) => {
       setTimeout(() => {
         let text = `### AI Operational & Financial Analysis\n\n`;
-        
-        // Mass Balance Insight
         text += `**Mass Balance**: Intake is **${totalIntake.toLocaleString()}kg**. `;
-        if (totalIntake > 0) {
-            text += `Efficiency looks stable.\n\n`;
-        }
-
-        // Financial Insight
+        if (totalIntake > 0) text += `Efficiency looks stable.\n\n`;
         text += `**Financial Snapshot**: \n`;
         text += `- Confirmed Revenue: **€${totalRevenue.toLocaleString()}**\n`;
         text += `- Raw Material Cost: **€${totalMilkCost.toLocaleString()}**\n`;
-        if (totalRevenue > totalMilkCost) {
-          text += `> Gross margin is positive. Continue prioritizing high-protein intake.\n\n`;
-        }
-
-        // Inventory Insight
+        if (totalRevenue > totalMilkCost) text += `> Gross margin is positive. Continue prioritizing high-protein intake.\n\n`;
         text += `**Inventory Status**: \n`;
         text += `- MPC 85 Physical Stock: **${stockMPC85.toLocaleString()} kg**.\n`;
-        
-        if (futureStockRisk) {
-           text += `> ⚠️ **Planning Alert**: You have planned sales of **${mpc85Planned.toLocaleString()} kg** which exceeds current stock. Schedule MPC85 production immediately.\n\n`;
-        } else if (isLowStock) {
-            text += `> ⚠️ **Warning**: Stock is insufficient for large spot orders. Prioritize MPC85 production for the next 12h.\n\n`;
-        } else {
-            text += `- Stock levels are healthy for confirmed and planned dispatches.\n\n`;
-        }
-
+        if (futureStockRisk) text += `> ⚠️ **Planning Alert**: You have planned sales of **${mpc85Planned.toLocaleString()} kg** which exceeds current stock. Schedule MPC85 production immediately.\n\n`;
+        else if (isLowStock) text += `> ⚠️ **Warning**: Stock is insufficient for large spot orders. Prioritize MPC85 production for the next 12h.\n\n`;
+        else text += `- Stock levels are healthy for confirmed and planned dispatches.\n\n`;
         resolve(text);
       }, 1500);
     });

@@ -28,37 +28,37 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
   { 
     id: 'S01', name: 'UAB "Šalva"', routeGroup: 'Kupiškio grupė', contractQuota: 300000,
     companyCode: '155294538', phoneNumber: '+370 699 93847', country: 'Lithuania', addressLine1: 'Ateities g. 2, Kirdonių k., Biržų r.', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.34, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
+    basePricePerKg: 0.34, normalMilkPricePerKg: 0.34, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
     isEco: false, defaultMilkType: 'Skim milk'
   },
   { 
     id: 'S02', name: 'UAB "Pieno partneriai"', routeGroup: 'Kooperatyvai', contractQuota: 650000,
     companyCode: '304968385', phoneNumber: '+370 685 00000', country: 'Lithuania', addressLine1: 'Birutės g. 49A, Plungė', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.35, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.005,
+    basePricePerKg: 0.35, normalMilkPricePerKg: 0.35, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.005,
     isEco: false, defaultMilkType: 'Skim milk concentrate'
   },
   { 
     id: 'S03', name: 'UAB "AUGA trade"', routeGroup: 'EKO Auga', contractQuota: 450000,
     companyCode: '302753875', phoneNumber: '+370 5 233 5340', country: 'Lithuania', addressLine1: 'Konstitucijos pr. 21C, Vilnius', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.38, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
+    basePricePerKg: 0.38, normalMilkPricePerKg: 0.38, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
     isEco: true, defaultMilkType: 'Skim milk'
   },
   { 
     id: 'S04', name: 'AB "Pieno žvaigždės"', routeGroup: 'Dideli ūkiai', contractQuota: 1000000,
     companyCode: '124665536', phoneNumber: '+370 5 246 1414', country: 'Lithuania', addressLine1: 'Perkūnkiemio g. 3, Vilnius', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.34, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
+    basePricePerKg: 0.34, normalMilkPricePerKg: 0.34, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
     isEco: false, defaultMilkType: 'Skim milk concentrate'
   },
   { 
     id: 'S05', name: 'ŽŪK "Rešketėnai"', routeGroup: 'Kooperatyvai', contractQuota: 375000,
     companyCode: '280768590', phoneNumber: '+370 699 50900', country: 'Lithuania', addressLine1: 'Alytaus g. 7, Žarėnai, Telšių r.', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.33, fatBonusPerPct: 0.002, proteinBonusPerPct: 0.003,
+    basePricePerKg: 0.33, normalMilkPricePerKg: 0.33, fatBonusPerPct: 0.002, proteinBonusPerPct: 0.003,
     isEco: false, defaultMilkType: 'Skim milk'
   },
   { 
     id: 'S06', name: 'UAB "Biržų pienas"', routeGroup: 'Biržų pienas', contractQuota: 200000,
     companyCode: '304600547', phoneNumber: '+370 687 77735', country: 'Lithuania', addressLine1: 'J. Basanavičiaus g. 16-1, Biržai', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.34, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
+    basePricePerKg: 0.34, normalMilkPricePerKg: 0.34, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
     isEco: false, defaultMilkType: 'Skim milk'
   },
 
@@ -66,13 +66,13 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
   { 
     id: 'S07', name: 'ŽŪB "Draugystė agro"', routeGroup: 'Rokiškio kryptis', contractQuota: 150000,
     companyCode: '169164978', phoneNumber: '+370 451 42131', country: 'Lithuania', addressLine1: 'Šunkiškių g. 15B, Puodžių k., Pasvalio r.', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.33, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
+    basePricePerKg: 0.33, normalMilkPricePerKg: 0.33, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
     isEco: false, defaultMilkType: 'Skim milk'
   },
   { 
     id: 'S08', name: 'Biržų r. Kirdonių ŽŪB', routeGroup: 'Rokiškio kryptis', contractQuota: 120000,
     companyCode: '154780537', phoneNumber: '+370 450 50216', country: 'Lithuania', addressLine1: 'Aplinkkelio g. 2, Kirdonių k., Biržų r.', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.33, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
+    basePricePerKg: 0.33, normalMilkPricePerKg: 0.33, fatBonusPerPct: 0.003, proteinBonusPerPct: 0.004,
     isEco: false, defaultMilkType: 'Skim milk'
   },
   { 
@@ -86,31 +86,31 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
   { 
     id: 'S10', name: 'Labakojienė I.Į.', routeGroup: 'Individualūs', contractQuota: 5000,
     companyCode: '900085412', phoneNumber: '+370 611 11111', country: 'Lithuania', addressLine1: 'Liepų g. 5, Rokiškis', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.32, fatBonusPerPct: 0.001, proteinBonusPerPct: 0.002,
+    basePricePerKg: 0.32, normalMilkPricePerKg: 0.32, fatBonusPerPct: 0.001, proteinBonusPerPct: 0.002,
     isEco: false, defaultMilkType: 'Skim milk'
   },
   { 
     id: 'S11', name: 'Zigmantienė Ūkis', routeGroup: 'Individualūs', contractQuota: 3500,
     companyCode: '900085413', phoneNumber: '+370 611 22222', country: 'Lithuania', addressLine1: 'Sodų g. 12, Biržai', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.32, fatBonusPerPct: 0.001, proteinBonusPerPct: 0.002,
+    basePricePerKg: 0.32, normalMilkPricePerKg: 0.32, fatBonusPerPct: 0.001, proteinBonusPerPct: 0.002,
     isEco: false, defaultMilkType: 'Skim milk'
   },
   { 
     id: 'S12', name: 'Ragauskas Ūkis', routeGroup: 'Kupiškio grupė', contractQuota: 8000,
     companyCode: '900085414', phoneNumber: '+370 611 33333', country: 'Lithuania', addressLine1: 'Miško g. 8, Kupiškis', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.33, fatBonusPerPct: 0.002, proteinBonusPerPct: 0.003,
+    basePricePerKg: 0.33, normalMilkPricePerKg: 0.33, fatBonusPerPct: 0.002, proteinBonusPerPct: 0.003,
     isEco: false, defaultMilkType: 'Skim milk'
   },
   { 
     id: 'S13', name: 'Aukštikalnis P.', routeGroup: 'Individualūs', contractQuota: 2000,
     companyCode: '900085415', phoneNumber: '+370 611 44444', country: 'Lithuania', addressLine1: 'Kalno g. 1, Biržai', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.32, fatBonusPerPct: 0.001, proteinBonusPerPct: 0.002,
+    basePricePerKg: 0.32, normalMilkPricePerKg: 0.32, fatBonusPerPct: 0.001, proteinBonusPerPct: 0.002,
     isEco: false, defaultMilkType: 'Skim milk'
   },
   { 
     id: 'S14', name: 'Adomonis J.', routeGroup: 'Individualūs', contractQuota: 4200,
     companyCode: '900085416', phoneNumber: '+370 611 55555', country: 'Lithuania', addressLine1: 'Upės g. 9, Pasvalys', addressLine2: '', createdOn: 1672531200000,
-    basePricePerKg: 0.32, fatBonusPerPct: 0.001, proteinBonusPerPct: 0.002,
+    basePricePerKg: 0.32, normalMilkPricePerKg: 0.32, fatBonusPerPct: 0.001, proteinBonusPerPct: 0.002,
     isEco: false, defaultMilkType: 'Skim milk'
   }
 ];
