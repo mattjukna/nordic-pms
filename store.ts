@@ -39,6 +39,7 @@ interface AppState {
     } | null;
   };
   fetchMilkSpendRange: (from: string, to: string) => Promise<void>;
+  analyticsLoading?: boolean;
   // Last requested range for milk spend (ISO strings)
   lastMilkSpendFrom?: string | null;
   lastMilkSpendTo?: string | null;
@@ -153,14 +154,16 @@ export const useStore = create<AppState>((set, get) => ({
   lastMilkSpendFrom: null,
   lastMilkSpendTo: null,
   analyticsError: null,
+  analyticsLoading: false,
 
   fetchMilkSpendRange: async (from, to) => {
+    set(() => ({ analyticsLoading: true, analyticsError: null }));
     try {
       const data = await api<any>(`/api/milk-spend-range?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-      set((s) => ({ analytics: { milkSpend: { from: data.from, to: data.to, totalCost: data.totalCost, totalKg: data.totalKg, avgPricePerKg: data.avgPricePerKg, bySupplier: data.bySupplier.map((b: any) => ({ supplierId: b.supplierId, supplierName: b.supplierName, totalCost: b.totalCost, totalKg: b.totalKg, avgPricePerKg: b.avgPricePerKg })) } }, lastMilkSpendFrom: from, lastMilkSpendTo: to, analyticsError: null }));
+      set((s) => ({ analytics: { milkSpend: { from: data.from, to: data.to, totalCost: data.totalCost, totalKg: data.totalKg, avgPricePerKg: data.avgPricePerKg, bySupplier: data.bySupplier.map((b: any) => ({ supplierId: b.supplierId, supplierName: b.supplierName, totalCost: b.totalCost, totalKg: b.totalKg, avgPricePerKg: b.avgPricePerKg })) } }, lastMilkSpendFrom: from, lastMilkSpendTo: to, analyticsError: null, analyticsLoading: false }));
     } catch (err: any) {
       console.error('Failed to fetch milk spend range', err);
-      set((s) => ({ analytics: { milkSpend: null }, analyticsError: err?.message ?? String(err) }));
+      set((s) => ({ analytics: { milkSpend: null }, analyticsError: err?.message ?? String(err), analyticsLoading: false }));
     }
   },
 

@@ -667,21 +667,25 @@ export const SettingsTab: React.FC = () => {
                                </div>
                                
                                <div className="bg-white rounded-md p-2 border border-slate-200 mt-2">
-                                 <h6 className="text-[10px] font-bold uppercase text-slate-400 mb-1">Financial Terms</h6>
-                                 <div className="grid grid-cols-3 gap-2 text-xs">
-                                   <div>
-                                      <span className="block text-[10px] text-slate-400">Base</span>
-                                      €{s.basePricePerKg?.toFixed(2)}
-                                   </div>
-                                   <div>
-                                      <span className="block text-[10px] text-slate-400">Fat+</span>
-                                      €{s.fatBonusPerPct}
-                                   </div>
-                                   <div>
-                                      <span className="block text-[10px] text-slate-400">Prot+</span>
-                                      €{s.proteinBonusPerPct}
-                                   </div>
-                                 </div>
+                                <h6 className="text-[10px] font-bold uppercase text-slate-400 mb-1">Financial Terms</h6>
+                                <div className="grid grid-cols-4 gap-2 text-xs">
+                                  <div>
+                                    <span className="block text-[10px] text-slate-400">Base</span>
+                                    €{s.basePricePerKg?.toFixed(2)}
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-slate-400">Normal</span>
+                                    €{(s as any).normalMilkPricePerKg ? (s as any).normalMilkPricePerKg.toFixed(2) : (s.basePricePerKg?.toFixed(2) ?? '0.00')}
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-slate-400">Fat+</span>
+                                    €{s.fatBonusPerPct}
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-slate-400">Prot+</span>
+                                    €{s.proteinBonusPerPct}
+                                  </div>
+                                </div>
                                </div>
                             </div>
 
