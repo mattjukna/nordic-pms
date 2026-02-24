@@ -4,7 +4,7 @@ import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { PackagingWizard } from '../ui/PackagingWizard';
-import { parsePackagingString } from '../../utils/parser';
+import { parsePackagingString, normalizePackagingString, parsePackagingSegments } from '../../utils/parser';
 import { anyFractional } from '../../utils/wholeUnits';
 import { inferPackagingStringFromKg } from '../../utils/packagingNormalize';
 import { Package, Truck, ArrowUpRight, Box, Filter, Search, Calendar, ChevronDown, ChevronUp, FileText, Download, Scale, Layers, Tag, Calculator, CheckCircle2, Clock, Trash2, Check, Pencil, Plus, X } from 'lucide-react';
@@ -118,87 +118,103 @@ export const InventoryTab: React.FC = () => {
     return products.map(product => {
       const productOutputs = outputEntries.filter(e => e.productId === product.id);
 
-      const producedKg = productOutputs.reduce((sum, e) => sum + (e.parsed?.totalWeight || 0), 0);
-      const producedPallets = productOutputs.reduce((sum, e) => sum + (e.parsed?.pallets || 0), 0);
-      const producedBigBags = productOutputs.reduce((sum, e) => sum + (e.parsed?.bigBags || 0), 0);
-      const producedTanks = productOutputs.reduce((sum, e) => sum + (e.parsed?.tanks || 0), 0);
+      // Produced aggregates (from explicit segments or parsed totals)
+      let producedKg = 0;
+      let producedPallets = 0;
+      let producedBigBags = 0;
+      let producedTanks = 0;
+      let producedPadKg = 0;
+      let producedBbKg = 0;
+      let producedTankKg = 0;
 
-      // Shipments (only confirmed/completed shipments should deduct stock)
-      let shippedKg = 0;                // single source of truth for kg shipped
+      for (const out of productOutputs) {
+        const segs = out.packagingString ? parsePackagingSegments(out.packagingString, product.defaultPalletWeight, product.defaultBagWeight) : [] as any[];
+        if (segs.length > 0) {
+          for (const seg of segs) {
+            if (seg.unit === 'pad') { producedPallets += seg.count; const w = seg.unitWeight || product.defaultPalletWeight || 0; producedPadKg += seg.count * w; producedKg += seg.count * w; }
+            else if (seg.unit === 'bb') { producedBigBags += seg.count; const w = seg.unitWeight || product.defaultBagWeight || 0; producedBbKg += seg.count * w; producedKg += seg.count * w; }
+            else if (seg.unit === 'tank') { producedTanks += seg.count; const w = seg.unitWeight || 25000; producedTankKg += seg.count * w; producedKg += seg.count * w; }
+            else if (seg.unit === 'kg') { producedKg += seg.count; }
+          }
+        } else if (out.parsed) {
+          const p = out.parsed;
+          // whole units
+          const wholeP = Math.floor(p.pallets || 0);
+          const fracP = (p.pallets || 0) - wholeP;
+          if (wholeP > 0) { producedPallets += wholeP; producedPadKg += wholeP * (product.defaultPalletWeight || 0); producedKg += wholeP * (product.defaultPalletWeight || 0); }
+          if (fracP > 1e-6) { producedPallets += 1; const pk = Math.round(fracP * (product.defaultPalletWeight || 0)); producedPadKg += pk; producedKg += pk; }
+
+          const wholeB = Math.floor(p.bigBags || 0);
+          const fracB = (p.bigBags || 0) - wholeB;
+          if (wholeB > 0) { producedBigBags += wholeB; producedBbKg += wholeB * (product.defaultBagWeight || 0); producedKg += wholeB * (product.defaultBagWeight || 0); }
+          if (fracB > 1e-6) { producedBigBags += 1; const bk = Math.round(fracB * (product.defaultBagWeight || 0)); producedBbKg += bk; producedKg += bk; }
+
+          const wholeT = Math.floor(p.tanks || 0);
+          const fracT = (p.tanks || 0) - wholeT;
+          if (wholeT > 0) { producedTanks += wholeT; producedTankKg += wholeT * 25000; producedKg += wholeT * 25000; }
+          if (fracT > 1e-6) { producedTanks += 1; const tk = Math.round(fracT * 25000); producedTankKg += tk; producedKg += tk; }
+        }
+      }
+
+      // Shipments / dispatches
+      let shippedKg = 0;
       let shippedPallets = 0;
       let shippedBigBags = 0;
       let shippedTanks = 0;
-      let unmappedKgForUnits = 0;       // track kg that lack unit mapping (warnings only)
+      let shippedPadKg = 0;
+      let shippedBbKg = 0;
+      let shippedTankKg = 0;
+      let unmappedKgForUnits = 0;
       const fractionalOutputs: any[] = [];
       const problematicShipments: any[] = [];
       const unmappedDispatches: any[] = [];
 
       const relevantDispatches = dispatchEntries.filter(d => d.productId === product.id && d.status !== 'planned');
-
       for (const d of relevantDispatches) {
         if (Array.isArray(d.shipments) && d.shipments.length > 0) {
           for (const s of d.shipments) {
             shippedKg += s.quantityKg || 0;
-            if (s.parsed) {
-              shippedPallets += s.parsed.pallets || 0;
-              shippedBigBags += s.parsed.bigBags || 0;
-              shippedTanks += s.parsed.tanks || 0;
-              // check mismatch totalWeight vs quantityKg
-              if (s.parsed.totalWeight && Math.abs((s.parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) {
-                problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
+            const segs = s.packagingString ? parsePackagingSegments(s.packagingString, product.defaultPalletWeight, product.defaultBagWeight) : [] as any[];
+            if (segs.length > 0) {
+              for (const seg of segs) {
+                if (seg.unit === 'pad') { shippedPallets += seg.count; const w = seg.unitWeight || product.defaultPalletWeight || 0; shippedPadKg += seg.count * w; }
+                else if (seg.unit === 'bb') { shippedBigBags += seg.count; const w = seg.unitWeight || product.defaultBagWeight || 0; shippedBbKg += seg.count * w; }
+                else if (seg.unit === 'tank') { shippedTanks += seg.count; const w = seg.unitWeight || 25000; shippedTankKg += seg.count * w; }
+                else if (seg.unit === 'kg') { /* loose kg */ }
               }
-            } else if (s.packagingString) {
-              const parsed = parsePackagingString(s.packagingString, product.defaultPalletWeight, product.defaultBagWeight);
-              if (parsed.isValid) {
-                shippedPallets += parsed.pallets || 0;
-                shippedBigBags += parsed.bigBags || 0;
-                shippedTanks += parsed.tanks || 0;
-                if (Math.abs((parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
-              } else {
-                // invalid packagingString: counted in shippedKg but unmapped for units
-                unmappedKgForUnits += s.quantityKg || 0;
-                problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
-              }
+              if (s.parsed && s.parsed.totalWeight && Math.abs((s.parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
+            } else if (s.parsed) {
+              const p = s.parsed;
+              const wholeP = Math.floor(p.pallets || 0);
+              const fracP = (p.pallets || 0) - wholeP;
+              if (wholeP > 0) { shippedPallets += wholeP; shippedPadKg += wholeP * (product.defaultPalletWeight || 0); }
+              if (fracP > 1e-6) { unmappedKgForUnits += fracP * (product.defaultPalletWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+
+              const wholeB = Math.floor(p.bigBags || 0);
+              const fracB = (p.bigBags || 0) - wholeB;
+              if (wholeB > 0) { shippedBigBags += wholeB; shippedBbKg += wholeB * (product.defaultBagWeight || 0); }
+              if (fracB > 1e-6) { unmappedKgForUnits += fracB * (product.defaultBagWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+
+              const wholeT = Math.floor(p.tanks || 0);
+              const fracT = (p.tanks || 0) - wholeT;
+              if (wholeT > 0) { shippedTanks += wholeT; shippedTankKg += wholeT * 25000; }
+              if (fracT > 1e-6) { unmappedKgForUnits += fracT * 25000; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
             } else {
-              // no parsed info: counted in shippedKg but unmapped for units
               unmappedKgForUnits += s.quantityKg || 0;
               problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
             }
           }
         } else {
-          // No shipments: try to use dispatch-level parsed or packagingString
-          if (d.parsed) {
-            shippedPallets += d.parsed.pallets || 0;
-            shippedBigBags += d.parsed.bigBags || 0;
-            shippedTanks += d.parsed.tanks || 0;
-            shippedKg += d.parsed.totalWeight || 0;
-            if (d.parsed.totalWeight && Math.abs((d.parsed.totalWeight || 0) - (d.quantityKg || 0)) > 25) {
-              problematicShipments.push({ type: 'dispatch', entry: d });
-            }
-          } else if (d.packagingString) {
-            const parsed = parsePackagingString(d.packagingString, product.defaultPalletWeight, product.defaultBagWeight);
-            if (parsed.isValid) {
-              shippedPallets += parsed.pallets || 0;
-              shippedBigBags += parsed.bigBags || 0;
-              shippedTanks += parsed.tanks || 0;
-              shippedKg += parsed.totalWeight || 0;
-              if (Math.abs((parsed.totalWeight || 0) - (d.quantityKg || 0)) > 25) problematicShipments.push({ type: 'dispatch', entry: d });
-            } else {
-              unmappedKgForUnits += d.quantityKg || 0;
-              unmappedDispatches.push(d);
-            }
-          } else {
-            // fully unmapped dispatch: count in shippedKg but mark unmapped for units
-            shippedKg += d.quantityKg || 0;
-            unmappedKgForUnits += d.quantityKg || 0;
-            unmappedDispatches.push(d);
-          }
+          // Do NOT deduct stock for confirmed / planned dispatches that have no shipments yet.
+          // Mark as unmapped so user can investigate and the UI can surface it.
+          unmappedDispatches.push(d);
+          if (d.packagingString || d.parsed) problematicShipments.push({ type: 'dispatch', entry: d });
         }
       }
 
       // Identify fractional outputs from output entries
       for (const out of productOutputs) {
-        const p = out.parsed || { pallets: 0, bigBags: 0, tanks: 0 };
+        const p = out.parsed || { pallets: 0, bigBags: 0, tanks: 0 } as any;
         if (!Number.isInteger(p.pallets || 0) || !Number.isInteger(p.bigBags || 0) || !Number.isInteger(p.tanks || 0)) {
           fractionalOutputs.push(out);
         }
@@ -207,16 +223,18 @@ export const InventoryTab: React.FC = () => {
       const realStockKg = producedKg - shippedKg;
       const currentStockKg = Math.max(0, realStockKg);
 
-      // Ledgered units
+      // Ledgered units (integer counts)
       const currentStockPallets = Math.max(0, Math.round(producedPallets) - Math.round(shippedPallets));
       const currentStockBigBags = Math.max(0, Math.round(producedBigBags) - Math.round(shippedBigBags));
       const currentStockTanks = Math.max(0, Math.round(producedTanks) - Math.round(shippedTanks));
 
-      // Loose estimate: expected weight from discrete units
-      const expectedKgFromUnits = (currentStockPallets * (product.defaultPalletWeight || 0)) + (currentStockBigBags * (product.defaultBagWeight || 0)) + (currentStockTanks * 25000);
+      // Compute average unit weights from produced data when available
+      const avgPadKg = producedPallets > 0 ? (producedPadKg / Math.max(1, producedPallets)) : (product.defaultPalletWeight || 0);
+      const avgBbKg = producedBigBags > 0 ? (producedBbKg / Math.max(1, producedBigBags)) : (product.defaultBagWeight || 0);
+
+      const expectedKgFromUnits = (currentStockPallets * avgPadKg) + (currentStockBigBags * avgBbKg) + (currentStockTanks * 25000);
       const looseKgEstimate = currentStockKg - expectedKgFromUnits;
 
-      // Flags
       const hasFractionalInput = fractionalOutputs.length > 0 || problematicShipments.some(p => (
         (p.entry?.pallets && !Number.isInteger(p.entry.pallets)) || (p.entry?.bigBags && !Number.isInteger(p.entry.bigBags)) || (p.entry?.tanks && !Number.isInteger(p.entry.tanks))
       ));
@@ -224,7 +242,7 @@ export const InventoryTab: React.FC = () => {
       const looseWarning = unmappedKgForUnits > 0 || Math.abs(looseKgEstimate) > 50 || unmappedDispatches.length > 0 || problematicShipments.length > 0;
 
       const oldestBatch = productOutputs.sort((a,b) => a.timestamp - b.timestamp)[0];
-      let ageStatus = 'green';
+      let ageStatus: 'green' | 'yellow' | 'red' = 'green';
       if (oldestBatch) {
         const ageDays = (Date.now() - oldestBatch.timestamp) / (1000 * 60 * 60 * 24);
         if (ageDays > 60) ageStatus = 'red';
@@ -273,6 +291,30 @@ export const InventoryTab: React.FC = () => {
       await updateDispatchEntry(dispatchId, { packagingString: inferred });
     } catch (err) {
       console.error('Auto-map dispatch failed', err);
+    }
+  };
+
+  const recomputeShipment = async (dispatchId: string, shipment: any) => {
+    const dispatch = dispatchEntries.find(d => d.id === dispatchId);
+    if (!dispatch) return;
+    const product = products.find(p => p.id === dispatch.productId);
+    try {
+      const raw = shipment.packagingString || (shipment.quantityKg ? inferPackagingStringFromKg(shipment.quantityKg, product) : '');
+      const normalized = normalizePackagingString(raw, product?.defaultPalletWeight || 900, product?.defaultBagWeight || 850).normalized;
+      await updateDispatchShipment(dispatchId, shipment.id, { packagingString: normalized });
+    } catch (err) {
+      console.error('Recompute shipment failed', err);
+    }
+  };
+
+  const recomputeDispatch = async (dispatch: any) => {
+    const product = products.find(p => p.id === dispatch.productId);
+    try {
+      const raw = dispatch.packagingString || inferPackagingStringFromKg(dispatch.quantityKg || 0, product);
+      const normalized = normalizePackagingString(raw, product?.defaultPalletWeight || 900, product?.defaultBagWeight || 850).normalized;
+      await updateDispatchEntry(dispatch.id, { packagingString: normalized });
+    } catch (err) {
+      console.error('Recompute dispatch failed', err);
     }
   };
 
@@ -656,7 +698,23 @@ export const InventoryTab: React.FC = () => {
                             <div className="text-xs text-slate-500">pallets:{s.entry?.parsed?.pallets} bb:{s.entry?.parsed?.bigBags} tanks:{s.entry?.parsed?.tanks} total:{s.entry?.parsed?.totalWeight || s.entry?.quantityKg}kg</div>
                           </div>
                           <div className="text-right">
-                            <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(s.dispatchId || s.entry?.dispatchEntryId); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit Dispatch</button>
+                            {s.type === 'shipment' ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="flex gap-2">
+                                  <button onClick={() => { recomputeShipment(s.dispatchId, s.entry); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">Recompute</button>
+                                  <button onClick={() => { autoMapShipment(s.dispatchId, s.entry.id, s.entry.quantityKg); }} className="text-xs text-blue-600 font-bold">Auto-map</button>
+                                </div>
+                                <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(s.dispatchId || s.entry?.dispatchEntryId); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit Dispatch</button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="flex gap-2">
+                                  <button onClick={() => { recomputeDispatch(s.entry); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">Recompute</button>
+                                  <button onClick={() => { autoMapDispatch(s.entry.id, s.entry.quantityKg); }} className="text-xs text-blue-600 font-bold">Auto-map</button>
+                                </div>
+                                <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(s.dispatchId || s.entry?.dispatchEntryId); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit Dispatch</button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -676,7 +734,13 @@ export const InventoryTab: React.FC = () => {
                             <div className="text-xs text-slate-500">QuantityKg: {d.quantityKg}</div>
                           </div>
                           <div className="text-right">
-                            <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(d.id); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit</button>
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="flex gap-2">
+                                <button onClick={() => { recomputeDispatch(d); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">Recompute</button>
+                                <button onClick={() => { autoMapDispatch(d.id, d.quantityKg); }} className="text-xs text-blue-600 font-bold">Auto-map</button>
+                              </div>
+                              <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(d.id); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit</button>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -739,12 +803,21 @@ export const InventoryTab: React.FC = () => {
                      <div className="text-[9px] text-red-600 font-bold mt-1 leading-tight">ERROR: Fractional unit input</div>
                    )}
                    {!item.hasFractionalInput && item.looseWarning && (
-                     <div className="text-[10px] text-amber-600 font-bold mt-1 leading-tight">WARNING: Loose stock / unmapped shipments</div>
+                     <div className="text-[10px] text-amber-600 font-bold mt-1 leading-tight">WARNING: Variance / unmapped shipments</div>
+                   )}
+                   {item.unmappedKgForUnits > 0 && (
+                     <div className="text-[11px] text-slate-600 mt-1">Unmapped shipped: {Math.round(item.unmappedKgForUnits).toLocaleString()} kg</div>
                    )}
                    {Math.abs(item.looseKgEstimate || 0) > 50 && (
-                     <div className="text-[11px] text-slate-600 mt-1">Loose: {Math.round(item.looseKgEstimate).toLocaleString()} kg</div>
+                     <div className="text-[11px] text-slate-600 mt-1">Variance: {Math.round(item.looseKgEstimate).toLocaleString()} kg</div>
                    )}
-                   {(item.hasFractionalInput || item.looseWarning) && (
+                   {item.currentStockPallets > 0 && item.currentStockPallets > 0 && (
+                     <div className="text-[10px] text-slate-500 mt-1">
+                       {item.currentStockPallets > 0 && item.expectedKgFromUnits && item.currentStockPallets > 0 ? `Avg pad: ${Math.round((item.expectedKgFromUnits || 0) / Math.max(1, item.currentStockPallets))} kg` : ''}
+                       {item.currentStockBigBags > 0 && <span className="ml-2">Avg bb: {Math.round(((item.currentStockBigBags * (item.defaultBagWeight || 0)) || 0) / Math.max(1, item.currentStockBigBags))} kg</span>}
+                     </div>
+                   )}
+                   {(item.hasFractionalInput || item.looseWarning || item.unmappedKgForUnits > 0) && (
                      <button onClick={() => { setInvestigateTarget(item.id); setShowInvestigateModal(true); }} className="mt-2 text-xs text-blue-600 font-bold underline">Investigate</button>
                    )}
                 </div>

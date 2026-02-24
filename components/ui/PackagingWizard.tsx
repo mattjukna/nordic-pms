@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutGrid, X, Plus, Trash2 } from 'lucide-react';
 import { normalizePackagingString } from '../../utils/parser';
 
@@ -13,8 +13,20 @@ interface PackagingWizardProps {
 
 export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClose, onApply, defaultPallet, defaultBag }) => {
    const [lines, setLines] = useState<{ count: string; type: 'pad' | 'bb' | 'tank' | 'kg'; weight: string }[]>([
-      { count: '', type: 'pad', weight: defaultPallet.toString() }
+      { count: '', type: 'pad', weight: defaultPallet?.toString() || '0' }
    ]);
+
+   // Sync unit weights when product defaults change or when wizard opens
+   useEffect(() => {
+     setLines(prev => prev.map(l => {
+       const next = { ...l };
+       if (next.type === 'pad') next.weight = (defaultPallet || 0).toString();
+       if (next.type === 'bb') next.weight = (defaultBag || 0).toString();
+       if (next.type === 'tank') next.weight = '25000';
+       if (next.type === 'kg') next.weight = '1';
+       return next;
+     }));
+   }, [defaultPallet, defaultBag, isOpen]);
 
    const addLine = () => setLines([...lines, { count: '', type: 'pad', weight: defaultPallet.toString() }]);
   const removeLine = (idx: number) => setLines(lines.filter((_, i) => i !== idx));
@@ -70,8 +82,8 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
                      <label className="text-[10px] font-bold text-slate-400 uppercase">Count</label>
                                <input type="number" step={line.type === 'kg' ? '1' : '1'} min={0} className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.count} onChange={e => updateLine(idx, 'count', e.target.value)} />
                                {hasDecimal && line.type !== 'kg' && (
-                       <div className="text-[10px] text-amber-600 mt-1">Use loose kg for remainder</div>
-                     )}
+                                  <div className="text-[10px] text-amber-600 mt-1">Use partial unit weights (e.g. 1 pad*700) or add a 'kg' line</div>
+                               )}
                   </div>
                   <div className="w-28">
                      <label className="text-[10px] font-bold text-slate-400 uppercase">Type</label>

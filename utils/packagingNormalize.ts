@@ -35,35 +35,55 @@ export function normalizePackagingString(rawInput: string, defaultPalletWeight: 
   const segs = parsePackagingSegments(rawInput, defaultPalletWeight, defaultBBWeight);
   if (segs.length === 0) return { normalized: rawInput.trim(), changed: false, looseKgAdded: 0, notes: ['empty'] };
 
+  // We will emit full units first, then partial-unit segments (as count=1 with unitWeight=partialKg), then explicit kg lines
+  const fullGroups = new Map<string, { unit: Unit; unitWeight?: number; count: number }>();
+  const partialGroups = new Map<string, { unit: Unit; unitWeight?: number; count: number }>();
   let looseKg = 0;
-  const groups = new Map<string, { unit: Unit; unitWeight?: number; count: number }>();
   const notes: string[] = [];
 
   for (const s of segs) {
     if (s.unit === 'kg') { looseKg += s.count; continue; }
-    const w = s.unitWeight ?? 0;
+    const unitW = s.unitWeight ?? 0;
     const whole = Math.floor(s.count + 1e-9);
     const frac = s.count - whole;
+
     if (whole > 0) {
-      const key = `${s.unit}:${w}`;
-      const prev = groups.get(key);
-      groups.set(key, { unit: s.unit, unitWeight: w, count: (prev?.count ?? 0) + whole });
+      const key = `${s.unit}:${unitW}`;
+      const prev = fullGroups.get(key);
+      fullGroups.set(key, { unit: s.unit, unitWeight: unitW, count: (prev?.count ?? 0) + whole });
     }
+
     if (frac > 1e-6) {
-      const add = frac * w;
-      looseKg += add;
-      notes.push(`converted ${frac.toFixed(3)} ${s.unit} -> ${add.toFixed(1)} kg`);
+      // create a partial unit as a single unit with reduced unitWeight
+      const partialKg = Math.round(frac * unitW);
+      if (partialKg >= 1) {
+        const key = `${s.unit}:${partialKg}`;
+        const prev = partialGroups.get(key);
+        partialGroups.set(key, { unit: s.unit, unitWeight: partialKg, count: (prev?.count ?? 0) + 1 });
+        notes.push(`converted ${frac.toFixed(3)} ${s.unit} -> 1 ${s.unit}*${partialKg}`);
+      } else {
+        // too small partial -> treat as loose
+        looseKg += frac * unitW;
+        notes.push(`tiny partial ${frac.toFixed(3)} ${s.unit} merged to loose ${(frac*unitW).toFixed(1)} kg`);
+      }
+    }
+  }
+
+  const parts: string[] = [];
+  const order: Unit[] = ['pad', 'bb', 'tank'];
+  for (const u of order) {
+    for (const g of [...fullGroups.values()].filter(x => x.unit === u)) {
+      parts.push(`${Math.round(g.count)} ${g.unit} *${g.unitWeight}`);
+    }
+  }
+  // partials after full units
+  for (const u of order) {
+    for (const g of [...partialGroups.values()].filter(x => x.unit === u)) {
+      parts.push(`${Math.round(g.count)} ${g.unit} *${g.unitWeight}`);
     }
   }
 
   const looseRounded = (opts && opts.roundLoose === false) ? looseKg : Math.round(looseKg);
-  const parts: string[] = [];
-  const order: Unit[] = ['pad', 'bb', 'tank'];
-  for (const u of order) {
-    for (const g of [...groups.values()].filter(x => x.unit === u)) {
-      parts.push(`${Math.round(g.count)} ${g.unit} *${g.unitWeight}`);
-    }
-  }
   if (looseRounded >= 1) parts.push(`${looseRounded} kg`);
 
   const normalized = parts.join('; ');
