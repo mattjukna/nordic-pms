@@ -110,7 +110,8 @@ const toClientSupplier = (s: any) => ({
 
 async function startServer() {
     const app = express();
-    const PORT = 3000;
+    const port = Number(process.env.PORT || 3000);
+    const host = '0.0.0.0';
     let prismaAvailable = true;
     app.use(cors());
     app.use(express.json());
@@ -846,8 +847,8 @@ async function startServer() {
         });
     }
 
-    app.listen(PORT, '0.0.0.0', () => {
-        console.log(`Server running on http://0.0.0.0:${PORT}`);
+    app.listen(port, host, () => {
+        console.log(`Server running on http://${host}:${port}`);
     });
 }
 
