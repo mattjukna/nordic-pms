@@ -1,16 +1,18 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import { MsalProvider } from '@azure/msal-react';
-import { msalInstance } from './auth/msalInstance';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import { MsalProvider } from "@azure/msal-react";
+import { msalInstance } from "./auth/msalInstance";
 
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
+// Critical for redirect flows: processes auth response on return
+msalInstance
+  .handleRedirectPromise()
+  .catch((e) => console.error("MSAL redirect error:", e));
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("Could not find root element");
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <MsalProvider instance={msalInstance}>
       <App />

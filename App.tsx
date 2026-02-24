@@ -1,43 +1,45 @@
-import React, { useEffect, useState } from 'react';
-import NordicLogApp from './components/NordicLogApp';
-import { msalInstance } from './auth/msalInstance';
-import { allowedDomainExport } from './auth/msalConfig';
-import LoginPage from './components/auth/LoginPage';
-import { useStore } from './store';
+import React, { useEffect, useMemo, useRef } from "react";
+import NordicLogApp from "./components/NordicLogApp";
+import LoginPage from "./components/auth/LoginPage";
+import { allowedDomainExport } from "./auth/msalConfig";
+import { useMsal, useIsAuthenticated } from "@azure/msal-react";
+import { useStore } from "./store";
+
+const getUsername = (acct: any) =>
+  (acct?.username ||
+    acct?.idTokenClaims?.preferred_username ||
+    acct?.idTokenClaims?.upn ||
+    "") as string;
 
 const App: React.FC = () => {
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [unauthorizedEmail, setUnauthorizedEmail] = useState<string | undefined>(undefined);
-  const accounts = msalInstance.getAllAccounts();
   const store = useStore();
+  const { accounts } = useMsal();
+  const isAuthenticated = useIsAuthenticated();
+  const hydratedRef = useRef(false);
 
+  const username = useMemo(() => getUsername(accounts?.[0]), [accounts]);
+  const isDomainOk = useMemo(() => {
+    if (!allowedDomainExport) return false;
+    return (username || "").toLowerCase().endsWith(`@${allowedDomainExport}`);
+  }, [username]);
+
+  // Hydrate only once after auth passes
   useEffect(() => {
-    if (accounts && accounts.length > 0) {
-      const acct = accounts[0] as any;
-      const username = acct.username || acct.idTokenClaims?.preferred_username || acct.userName || '';
-      if (allowedDomainExport && username && username.toLowerCase().endsWith(`@${allowedDomainExport}`)) {
-        setIsAuthed(true);
-        setUnauthorizedEmail(undefined);
-        // hydrate data once after auth
-        store.hydrateFromApi();
-      } else {
-        setIsAuthed(false);
-        setUnauthorizedEmail(username || undefined);
-      }
-    } else {
-      setIsAuthed(false);
+    if (isAuthenticated && isDomainOk && !hydratedRef.current) {
+      hydratedRef.current = true;
+      store.hydrateFromApi();
     }
-  }, [accounts]);
+  }, [isAuthenticated, isDomainOk, store]);
 
-  if (!isAuthed) {
-    return <LoginPage unauthorizedEmail={unauthorizedEmail} />;
+  if (!isAuthenticated) {
+    return <LoginPage />;
   }
 
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 md:p-8">
-      <NordicLogApp isAuthed={true} />
-    </div>
-  );
+  if (!isDomainOk) {
+    return <LoginPage unauthorizedEmail={username} />;
+  }
+
+  return <NordicLogApp isAuthed={true} />;
 };
 
 export default App;
