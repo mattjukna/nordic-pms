@@ -15,7 +15,9 @@
   "include": [
     "server.ts",
     "services/**/*.ts",
+    "auth/**/*.ts",
     "utils/**/*.ts",
-    "prisma/**/*.ts"
+    "prisma/**/*.ts",
+    "store.ts"
   ]
 }

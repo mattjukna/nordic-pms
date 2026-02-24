@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && prisma generate && tsc -p tsconfig.server.json",
+    "build:client": "vite build",
+    "build:server": "prisma generate && tsc -p tsconfig.server.json",
+    "build": "npm run build:client && npm run build:server",
     "start": "node dist-server/server.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
@@ -13,7 +15,6 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
     "lint": "tsc --noEmit",
-    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
