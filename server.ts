@@ -5,7 +5,6 @@ import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import prisma from './services/prisma';
-import { createServer as createViteServer } from 'vite';
 import { parsePackagingString } from './utils/parser';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
@@ -815,12 +814,13 @@ async function startServer() {
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
 
-    // Vite integration for development
+    // Vite integration for development (dynamic import -> no runtime dependency in production)
     if (process.env.NODE_ENV !== 'production') {
         // expose the configured VITE_* env var for troubleshooting
         console.log('[ENV] VITE_AAD_API_SCOPE =', process.env.VITE_AAD_API_SCOPE);
         const root = process.cwd();
-        const vite = await createViteServer({
+        const { createServer } = await import('vite');
+        const vite = await createServer({
             root,
             envDir: root,
             configFile: path.resolve(root, 'vite.config.ts'),
