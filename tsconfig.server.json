@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "outDir": "dist-server",
+    "rootDir": ".",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "allowJs": false,
+    "noEmitOnError": true
+  },
+  "include": [
+    "server.ts",
+    "services/**/*.ts",
+    "utils/**/*.ts",
+    "prisma/**/*.ts"
+  ]
+}
