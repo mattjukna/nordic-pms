@@ -17,7 +17,7 @@ export const msalConfig = {
 };
 
 export const loginRequest = {
-  scopes: [apiScope, 'openid', 'profile', 'email']
+  scopes: [apiScope, 'openid', 'profile', 'email'].filter(Boolean)
 };
 
 export const allowedDomainExport = allowedDomain;
