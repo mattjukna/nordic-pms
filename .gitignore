@@ -26,6 +26,7 @@ dist-ssr
 # Environment files (do not commit secrets)
 .env
 .env.*
+!.env.example
 
 # Prisma local env (if present)
 prisma/.env

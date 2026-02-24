@@ -1,4 +1,6 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env' });
+dotenv.config({ path: '.env.local' }); // load VITE_* for dev too
 import express from 'express';
 import cors from 'cors';
 import prisma from './services/prisma';
@@ -139,13 +141,19 @@ async function startServer() {
             req.user = { email, name: (payload as any).name || '', oid: (payload as any).oid, tid: (payload as any).tid };
             return next();
         } catch (err: any) {
-            return res.status(401).json({ error: 'Invalid token', detail: err?.message });
+            return res.status(401).json({ error: 'Invalid token', detail: err?.message, hint: 'Check token aud/scp/iss. Paste token into jwt.ms' });
         }
     });
 
     // API Routes
     app.get('/api/health', (req, res) => {
         res.json({ status: 'ok', timestamp: Date.now() });
+    });
+
+    // Debugging endpoint: return authenticated user info
+    app.get('/api/whoami', (req: any, res: any) => {
+        if (AUTH_DISABLED) return res.json({ email: 'AUTH_DISABLED' });
+        return res.json({ email: req.user?.email ?? null, name: req.user?.name ?? null, oid: req.user?.oid ?? null, tid: req.user?.tid ?? null });
     });
 
     // Bootstrap: load all domain data needed by frontend
@@ -765,7 +773,12 @@ async function startServer() {
 
     // Vite integration for development
     if (process.env.NODE_ENV !== 'production') {
+        // expose the configured VITE_* env var for troubleshooting
+        console.log('[ENV] VITE_AAD_API_SCOPE =', process.env.VITE_AAD_API_SCOPE);
+        const root = process.cwd();
         const vite = await createViteServer({
+            root,
+            envDir: root,
             server: { middlewareMode: true },
             appType: 'spa',
         });

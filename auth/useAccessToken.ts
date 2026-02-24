@@ -7,15 +7,19 @@ export async function getAccessToken(): Promise<string> {
   const accounts = msalInstance.getAllAccounts();
   if (!accounts || accounts.length === 0) throw new Error('No signed in account');
   const account = accounts[0];
+
+  const scope = meta.env?.VITE_AAD_API_SCOPE as string | undefined;
+  if (!scope) throw new Error('Missing VITE_AAD_API_SCOPE. Ensure .env.local is in project root and restart npm run dev.');
+
   try {
-    const resp = await msalInstance.acquireTokenSilent({ account, scopes: [meta.env?.VITE_AAD_API_SCOPE as string || 'openid'] });
+    const resp = await msalInstance.acquireTokenSilent({ account, scopes: [scope] });
     if (resp && resp.accessToken) return resp.accessToken;
     throw new Error('No access token');
   } catch (err: any) {
     if (err instanceof InteractionRequiredAuthError) {
-      // fallback to redirect
-      msalInstance.acquireTokenRedirect({ account, scopes: [meta.env?.VITE_AAD_API_SCOPE as string || 'openid'] });
-      throw new Error('Redirecting for interaction');
+      // Initiate interactive redirect to acquire scopes, then bail so caller stops and user is redirected
+      msalInstance.acquireTokenRedirect({ account, scopes: [scope] });
+      throw new Error('Redirecting for token acquisition');
     }
     throw err;
   }

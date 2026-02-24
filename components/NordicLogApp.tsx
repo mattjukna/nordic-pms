@@ -11,7 +11,7 @@ import { InventoryTab } from './tabs/InventoryTab';
 import { SettingsTab } from './tabs/SettingsTab';
 
 const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) => {
-  const { activeTab, setActiveTab, isHydrating, hydrateError, userSettings } = useStore();
+  const { activeTab, setActiveTab, isHydrating, hydrateError, userSettings, hydrateFromApi } = useStore();
 
   return (
     <div className={`${userSettings?.compactMode ? 'compact' : ''} w-full max-w-7xl mx-auto flex flex-col min-h-screen bg-slate-50`}>
@@ -76,7 +76,7 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
           ) : hydrateError ? (
             <div className="p-6 text-center">
               <div className="mb-4 text-red-700 font-bold">Failed to load data: {hydrateError}</div>
-              <button onClick={() => useStore().hydrateFromApi()} className="px-4 py-2 bg-blue-600 text-white rounded">Retry</button>
+              <button onClick={hydrateFromApi} className="px-4 py-2 bg-blue-600 text-white rounded">Retry</button>
             </div>
         ) : (
           <>

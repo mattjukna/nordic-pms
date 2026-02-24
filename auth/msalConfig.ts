@@ -28,8 +28,8 @@ export const msalConfig: Configuration = {
   auth: {
     clientId: AAD_CLIENT_ID,
     authority,
-    redirectUri: window.location.origin, // e.g. http://localhost:3000
-    postLogoutRedirectUri: window.location.origin,
+    redirectUri: typeof window !== 'undefined' ? window.location.origin : '', // e.g. http://localhost:3000
+    postLogoutRedirectUri: typeof window !== 'undefined' ? window.location.origin : '',
     navigateToLoginRequestUrl: true,
   },
   cache: {
