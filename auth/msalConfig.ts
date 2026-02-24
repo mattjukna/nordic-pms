@@ -1,15 +1,18 @@
 // src/auth/msalConfig.ts
 import type { Configuration } from "@azure/msal-browser";
 
-/**
- * Read env vars from Vite (import.meta.env).
- * Keep values empty-string default so the app can show a clear error
- * instead of crashing at import-time.
- */
-const clientId = (import.meta.env.VITE_AAD_CLIENT_ID as string) || "";
-const tenantId = (import.meta.env.VITE_AAD_TENANT_ID as string) || "";
-const allowedDomain = (import.meta.env.VITE_AAD_ALLOWED_DOMAIN as string) || "";
-const apiScope = (import.meta.env.VITE_AAD_API_SCOPE as string) || "";
+// Helper to require env vars in server builds
+const must = (name: string) => {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env var: ${name}`);
+  return v as string;
+};
+
+// Read server-safe env vars (no VITE_ prefix)
+const clientId = process.env.MSAL_CLIENT_ID || must('MSAL_CLIENT_ID');
+const tenantId = process.env.MSAL_TENANT_ID || must('MSAL_TENANT_ID');
+const allowedDomain = process.env.MSAL_ALLOWED_DOMAIN || must('MSAL_ALLOWED_DOMAIN');
+const apiScope = process.env.MSAL_API_SCOPE || must('MSAL_API_SCOPE');
 
 export const AAD_CLIENT_ID: string = clientId;
 export const AAD_TENANT_ID: string = tenantId;
@@ -82,12 +85,12 @@ export const allowedDomainExport = AAD_ALLOWED_DOMAIN;
  */
 export function getAuthConfigErrors(): string[] {
   const errs: string[] = [];
-  if (!AAD_CLIENT_ID) errs.push("Missing VITE_AAD_CLIENT_ID");
-  if (!AAD_TENANT_ID) errs.push("Missing VITE_AAD_TENANT_ID");
-  if (!AAD_ALLOWED_DOMAIN) errs.push("Missing VITE_AAD_ALLOWED_DOMAIN");
+  if (!AAD_CLIENT_ID) errs.push("Missing MSAL_CLIENT_ID");
+  if (!AAD_TENANT_ID) errs.push("Missing MSAL_TENANT_ID");
+  if (!AAD_ALLOWED_DOMAIN) errs.push("Missing MSAL_ALLOWED_DOMAIN");
   // API scope can be optional ONLY if backend auth is disabled.
   // If your server verifies tokens, you almost certainly need it:
-  if (!AAD_API_SCOPE) errs.push("Missing VITE_AAD_API_SCOPE (required for calling your backend API)");
+  if (!AAD_API_SCOPE) errs.push("Missing MSAL_API_SCOPE (required for calling your backend API)");
   return errs;
 }
 

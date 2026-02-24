@@ -1,13 +1,14 @@
 import { msalInstance } from './msalInstance';
 import { InteractionRequiredAuthError } from '@azure/msal-browser';
+import { AAD_API_SCOPE } from './msalConfig';
 
 export async function getAccessToken(): Promise<string> {
   const accounts = msalInstance.getAllAccounts();
   if (!accounts || accounts.length === 0) throw new Error('No signed in account');
   const account = accounts[0];
 
-  const scope = import.meta.env.VITE_AAD_API_SCOPE as string | undefined;
-  if (!scope) throw new Error('Missing VITE_AAD_API_SCOPE. Ensure .env.local is in project root and restart npm run dev.');
+  const scope = AAD_API_SCOPE as string | undefined;
+  if (!scope) throw new Error('Missing MSAL_API_SCOPE. Ensure server env vars are set and restart.');
 
   try {
     const resp = await msalInstance.acquireTokenSilent({ account, scopes: [scope] });
