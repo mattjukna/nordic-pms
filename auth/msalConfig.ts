@@ -6,19 +6,22 @@ import type { Configuration } from "@azure/msal-browser";
  * Keep values empty-string default so the app can show a clear error
  * instead of crashing at import-time.
  */
-const env = (import.meta as any).env ?? {};
+const clientId = (import.meta.env.VITE_AAD_CLIENT_ID as string) || "";
+const tenantId = (import.meta.env.VITE_AAD_TENANT_ID as string) || "";
+const allowedDomain = (import.meta.env.VITE_AAD_ALLOWED_DOMAIN as string) || "";
+const apiScope = (import.meta.env.VITE_AAD_API_SCOPE as string) || "";
 
-export const AAD_CLIENT_ID: string = (env.VITE_AAD_CLIENT_ID as string) || "";
-export const AAD_TENANT_ID: string = (env.VITE_AAD_TENANT_ID as string) || "";
-export const AAD_ALLOWED_DOMAIN: string = (env.VITE_AAD_ALLOWED_DOMAIN as string) || "";
-export const AAD_API_SCOPE: string = (env.VITE_AAD_API_SCOPE as string) || "";
+export const AAD_CLIENT_ID: string = clientId;
+export const AAD_TENANT_ID: string = tenantId;
+export const AAD_ALLOWED_DOMAIN: string = allowedDomain;
+export const AAD_API_SCOPE: string = apiScope;
 
 /**
  * Authority:
  * - For single-tenant (your org only): https://login.microsoftonline.com/<TENANT_ID>
  */
-const authority = AAD_TENANT_ID
-  ? `https://login.microsoftonline.com/${AAD_TENANT_ID}`
+const authority = tenantId
+  ? `https://login.microsoftonline.com/${tenantId}`
   : "https://login.microsoftonline.com/common"; // fallback only for local dev if tenant id missing
 
 /**

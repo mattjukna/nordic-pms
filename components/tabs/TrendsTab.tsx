@@ -27,6 +27,7 @@ import {
   AlertCircle,
   Droplets,
 } from "lucide-react";
+import ReportExportModal from "../ui/ReportExportModal";
 import type { IntakeEntry, OutputEntry, DispatchEntry } from "../../types";
 import { isShippedStatus, getShippedKg, getShippedRevenue, getShipmentsByDate } from "../../utils/dispatchMath";
 import { formatDate } from '../../utils/date';
@@ -74,6 +75,7 @@ export const TrendsTab: React.FC = () => {
   // Product filter for Output
   const ALL = "__all__";
   const [productFilter, setProductFilter] = useState<string>(ALL);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Intake filters
   const [milkTypeFilter, setMilkTypeFilter] = useState<string>("__all__");
@@ -384,6 +386,13 @@ export const TrendsTab: React.FC = () => {
               <span className="text-xs text-slate-400">→</span>
               <input type="date" value={customEnd} onChange={(e)=>setCustomEnd(e.target.value)} className="text-xs bg-transparent outline-none text-slate-600 font-medium" />
             </div>
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="ml-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-md text-sm font-semibold hover:bg-indigo-100 transition-colors"
+              title="Export monthly report"
+            >
+              Export report
+            </button>
           </div>
         </div>
 
@@ -916,6 +925,7 @@ export const TrendsTab: React.FC = () => {
           </GlassCard>
         </div>
       )}
+      <ReportExportModal open={showReportModal} onClose={() => setShowReportModal(false)} />
     </div>
   );
 };

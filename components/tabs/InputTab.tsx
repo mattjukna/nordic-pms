@@ -4,6 +4,7 @@ import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { PackagingWizard } from '../ui/PackagingWizard';
+import ReportExportModal from '../ui/ReportExportModal';
 import { SmartSelect } from '../ui/SmartSelect';
 import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, LayoutGrid, Calculator, Droplets, Factory, Ban } from 'lucide-react';
 import { parsePackagingString } from '../../utils/parser';
@@ -214,6 +215,7 @@ export const InputTab: React.FC = () => {
   const [batchId, setBatchId] = useState(`MPC-${new Date().toISOString().slice(0,10)}`);
   const [pkgString, setPkgString] = useState('');
   const [showWizard, setShowWizard] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Supplier Options for SmartSelect
   const supplierOptions = useMemo(() => suppliers.map(s => ({
@@ -501,8 +503,10 @@ export const InputTab: React.FC = () => {
         defaultBag={activeProduct?.defaultBagWeight || 1000}
       />
 
+      <ReportExportModal open={showReportModal} onClose={() => setShowReportModal(false)} />
+
       {/* Mode Toggle */}
-      <div className="flex justify-center md:justify-start bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-fit">
+      <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full">
          <div className="flex bg-slate-100 p-1 rounded-lg w-full md:w-auto">
             <button
               onClick={() => setActiveMode('intake')}
@@ -520,6 +524,15 @@ export const InputTab: React.FC = () => {
             >
               <Factory size={16} /> Production
             </button>
+         </div>
+         <div className="ml-3 hidden md:block">
+           <button
+             onClick={() => setShowReportModal(true)}
+             className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-md text-sm font-semibold hover:bg-indigo-100 transition-colors"
+             title="Export monthly report"
+           >
+             Export
+           </button>
          </div>
       </div>
 

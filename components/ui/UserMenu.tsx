@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { msalInstance } from '../../auth/msalInstance';
+import { restoreLogoutDebug } from '../../src/auth/logoutDebug';
 import { useStore } from '../../store';
 import UserSettingsModal from './UserSettingsModal';
 
@@ -30,7 +31,24 @@ const UserMenu: React.FC = () => {
           </div>
           <div className="p-2">
             <button onClick={() => { setShowSettings(true); setOpen(false); }} className="w-full text-left px-2 py-2 text-sm hover:bg-slate-50">Settings</button>
-            <button onClick={() => msalInstance.logoutRedirect()} className="w-full text-left px-2 py-2 text-sm text-red-600 hover:bg-slate-50">Sign out</button>
+            <button
+              onClick={() => {
+                // If debug patch was installed, restore originals first so Sign out always works
+                try { restoreLogoutDebug(); } catch (e) { /* continue */ }
+                const anyMsal: any = msalInstance as any;
+                const realLogout = anyMsal.__origLogoutRedirect?.bind(anyMsal) || msalInstance.logoutRedirect.bind(msalInstance);
+                const account = msalInstance.getAllAccounts()?.[0];
+                try {
+                  realLogout({ account, postLogoutRedirectUri: window.location.origin });
+                } catch (e) {
+                  // best-effort fallback
+                  try { msalInstance.logoutRedirect(); } catch (_e) { console.error('Logout failed', _e); }
+                }
+              }}
+              className="w-full text-left px-2 py-2 text-sm text-red-600 hover:bg-slate-50"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       )}

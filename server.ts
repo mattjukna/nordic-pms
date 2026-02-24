@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: '.env' });
 dotenv.config({ path: '.env.local' }); // load VITE_* for dev too
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import prisma from './services/prisma';
@@ -8,6 +9,7 @@ import { createServer as createViteServer } from 'vite';
 import { parsePackagingString } from './utils/parser';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
+import { buildMonthlyWorkbook } from './services/reportExcel';
 
 // --- Mapping helpers: convert Prisma rows into frontend DTO shapes defined in types.ts
 const mapDate = (d: Date | string | null | undefined): number => {
@@ -129,16 +131,33 @@ async function startServer() {
         const token = auth.split(' ')[1];
         if (!JWKS) return res.status(500).json({ error: 'JWKS not configured on server' });
         try {
+            // Tenant id used for issuer validation
+            const tid = process.env.AAD_TENANT_ID || process.env.AAD_TENANT || '';
+            const allowedIssuers = tid ? [
+                `https://login.microsoftonline.com/${tid}/v2.0`,
+                `https://login.microsoftonline.com/${tid}/v2.0/`,
+                `https://sts.windows.net/${tid}/`,
+            ] : [];
+
             const audienceOptions = [AAD_CLIENT, `api://${AAD_CLIENT}`].filter(Boolean);
+
             const { payload } = await jwtVerify(token, JWKS, {
-                issuer: `https://login.microsoftonline.com/${AAD_TENANT}/v2.0`,
+                issuer: allowedIssuers.length ? allowedIssuers : undefined,
                 audience: audienceOptions
             } as any);
-            const email = (payload as any).preferred_username || (payload as any).upn || (payload as any).email || '';
+
+            // Post-verification sanity checks
+            const payloadAny: any = payload as any;
+            if (payloadAny.tid && tid && payloadAny.tid !== tid) {
+                return res.status(401).json({ error: 'Invalid token', detail: 'tid mismatch' });
+            }
+
+            const email = payloadAny.preferred_username || payloadAny.upn || payloadAny.email || '';
             if (AAD_ALLOWED && email && !email.toLowerCase().endsWith(`@${AAD_ALLOWED}`)) {
                 return res.status(403).json({ error: 'Email domain not allowed' });
             }
-            req.user = { email, name: (payload as any).name || '', oid: (payload as any).oid, tid: (payload as any).tid };
+
+            req.user = { email, name: payloadAny.name || '', oid: payloadAny.oid, tid: payloadAny.tid };
             return next();
         } catch (err: any) {
             return res.status(401).json({ error: 'Invalid token', detail: err?.message, hint: 'Check token aud/scp/iss. Paste token into jwt.ms' });
@@ -148,6 +167,30 @@ async function startServer() {
     // API Routes
     app.get('/api/health', (req, res) => {
         res.json({ status: 'ok', timestamp: Date.now() });
+    });
+
+    // Monthly Excel report export
+    app.get('/api/reports/monthly', async (req, res) => {
+        try {
+            const month = String(req.query.month || '');
+            const report = String(req.query.report || 'full') as any;
+            if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'Invalid month. Expected YYYY-MM' });
+            const [y, m] = month.split('-').map(Number);
+            const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
+            const nextMonth = new Date(Date.UTC(y, m, 1, 0, 0, 0));
+            const now = new Date();
+            const todayUtcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+            const endExclusive = (y === now.getUTCFullYear() && (m - 1) === now.getUTCMonth()) ? new Date(todayUtcMidnight.getTime() + 24*60*60*1000) : nextMonth;
+
+            const buf = await buildMonthlyWorkbook({ report, startDate: start, endDateExclusive: endExclusive });
+            const filename = `NordicPMS_${report}_${month}.xlsx`;
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            return res.send(buf);
+        } catch (err: any) {
+            console.error('report export failed', err);
+            return res.status(500).json({ error: 'Failed to generate report', detail: err?.message });
+        }
     });
 
     // Debugging endpoint: return authenticated user info
@@ -779,13 +822,28 @@ async function startServer() {
         const vite = await createViteServer({
             root,
             envDir: root,
+            configFile: path.resolve(root, 'vite.config.ts'),
+            mode: 'development',
+            define: {
+                'import.meta.env.VITE_AAD_CLIENT_ID': JSON.stringify(process.env.VITE_AAD_CLIENT_ID || ''),
+                'import.meta.env.VITE_AAD_TENANT_ID': JSON.stringify(process.env.VITE_AAD_TENANT_ID || ''),
+                'import.meta.env.VITE_AAD_ALLOWED_DOMAIN': JSON.stringify(process.env.VITE_AAD_ALLOWED_DOMAIN || ''),
+                'import.meta.env.VITE_AAD_API_SCOPE': JSON.stringify(process.env.VITE_AAD_API_SCOPE || ''),
+            },
             server: { middlewareMode: true },
             appType: 'spa',
         });
         app.use(vite.middlewares);
     } else {
-        // Serve static files in production
-        app.use(express.static('dist'));
+        // Serve static files in production and fallback to index.html for SPA routes
+        const distPath = path.resolve('dist');
+        app.use(express.static(distPath));
+
+        // Fallback for client-side routing: serve index.html for any non-/api route
+        app.get('*', (req, res) => {
+            if (req.path.startsWith('/api')) return res.status(404).end();
+            return res.sendFile(path.resolve(distPath, 'index.html'));
+        });
     }
 
     app.listen(PORT, '0.0.0.0', () => {

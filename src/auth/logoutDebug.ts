@@ -31,3 +31,16 @@ export function installLogoutDebug() {
 }
 
 export default installLogoutDebug;
+
+export function restoreLogoutDebug() {
+  try {
+    const anyMsal: any = msalInstance as any;
+    if (anyMsal.__origLogoutRedirect) anyMsal.logoutRedirect = anyMsal.__origLogoutRedirect;
+    if (anyMsal.__origLogoutPopup) anyMsal.logoutPopup = anyMsal.__origLogoutPopup;
+    delete anyMsal.__logoutDebugInstalled;
+    delete anyMsal.__origLogoutRedirect;
+    delete anyMsal.__origLogoutPopup;
+  } catch (e) {
+    console.error('[AUTH] restoreLogoutDebug failed:', e);
+  }
+}
