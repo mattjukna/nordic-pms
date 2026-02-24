@@ -70,3 +70,45 @@ export function normalizePackagingString(rawInput: string, defaultPalletWeight: 
   const changed = norm(normalized) !== norm(rawInput || '');
   return { normalized, changed, looseKgAdded: looseRounded, notes };
 }
+
+export function inferPackagingStringFromKg(kg: number, product: { defaultPalletWeight?: number; defaultBagWeight?: number; name?: string } | undefined) {
+  const palletW = product?.defaultPalletWeight && product.defaultPalletWeight > 0 ? product.defaultPalletWeight : 1000;
+  const bagW = product?.defaultBagWeight && product.defaultBagWeight > 0 ? product.defaultBagWeight : 850;
+
+  // Simple heuristic: prefer pallets if palletW >= bagW
+  const preferPallet = palletW >= bagW;
+  let remaining = Math.max(0, kg || 0);
+  let parts: string[] = [];
+
+  if (preferPallet) {
+    const pads = Math.floor(remaining / palletW);
+    if (pads > 0) {
+      parts.push(`${pads} pad*${palletW}`);
+      remaining -= pads * palletW;
+    }
+    const bags = Math.floor(remaining / bagW);
+    if (bags > 0) {
+      parts.push(`${bags} bb*${bagW}`);
+      remaining -= bags * bagW;
+    }
+  } else {
+    const bags = Math.floor(remaining / bagW);
+    if (bags > 0) {
+      parts.push(`${bags} bb*${bagW}`);
+      remaining -= bags * bagW;
+    }
+    const pads = Math.floor(remaining / palletW);
+    if (pads > 0) {
+      parts.push(`${pads} pad*${palletW}`);
+      remaining -= pads * palletW;
+    }
+  }
+
+  const loose = Math.round(remaining);
+  if (loose >= 1) parts.push(`${loose} kg`);
+
+  const raw = parts.join('; ');
+  // normalize to ensure consistent formatting
+  const normalized = normalizePackagingString(raw, palletW, bagW).normalized;
+  return normalized || raw;
+}

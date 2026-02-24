@@ -6,6 +6,7 @@ import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { PackagingWizard } from '../ui/PackagingWizard';
 import { parsePackagingString } from '../../utils/parser';
 import { anyFractional } from '../../utils/wholeUnits';
+import { inferPackagingStringFromKg } from '../../utils/packagingNormalize';
 import { Package, Truck, ArrowUpRight, Box, Filter, Search, Calendar, ChevronDown, ChevronUp, FileText, Download, Scale, Layers, Tag, Calculator, CheckCircle2, Clock, Trash2, Check, Pencil, Plus, X } from 'lucide-react';
 // @ts-ignore
 import jsPDF from 'jspdf';
@@ -13,7 +14,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, buyers, products, setActiveTab, setEditingOutputId } = useStore();
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId } = useStore();
   if (!products || products.length === 0) return <div className="p-6 text-center">Loading products…</div>;
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState(false);
@@ -123,11 +124,11 @@ export const InventoryTab: React.FC = () => {
       const producedTanks = productOutputs.reduce((sum, e) => sum + (e.parsed?.tanks || 0), 0);
 
       // Shipments (only confirmed/completed shipments should deduct stock)
-      let shippedKg = 0;
+      let shippedKg = 0;                // single source of truth for kg shipped
       let shippedPallets = 0;
       let shippedBigBags = 0;
       let shippedTanks = 0;
-      let unmappedShippedKg = 0;
+      let unmappedKgForUnits = 0;       // track kg that lack unit mapping (warnings only)
       const fractionalOutputs: any[] = [];
       const problematicShipments: any[] = [];
       const unmappedDispatches: any[] = [];
@@ -154,12 +155,13 @@ export const InventoryTab: React.FC = () => {
                 shippedTanks += parsed.tanks || 0;
                 if (Math.abs((parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
               } else {
-                unmappedShippedKg += s.quantityKg || 0;
+                // invalid packagingString: counted in shippedKg but unmapped for units
+                unmappedKgForUnits += s.quantityKg || 0;
                 problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
               }
             } else {
-              // no parsed info
-              unmappedShippedKg += s.quantityKg || 0;
+              // no parsed info: counted in shippedKg but unmapped for units
+              unmappedKgForUnits += s.quantityKg || 0;
               problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
             }
           }
@@ -182,12 +184,13 @@ export const InventoryTab: React.FC = () => {
               shippedKg += parsed.totalWeight || 0;
               if (Math.abs((parsed.totalWeight || 0) - (d.quantityKg || 0)) > 25) problematicShipments.push({ type: 'dispatch', entry: d });
             } else {
-              unmappedShippedKg += d.quantityKg || 0;
+              unmappedKgForUnits += d.quantityKg || 0;
               unmappedDispatches.push(d);
             }
           } else {
-            // fully unmapped dispatch
-            unmappedShippedKg += d.quantityKg || 0;
+            // fully unmapped dispatch: count in shippedKg but mark unmapped for units
+            shippedKg += d.quantityKg || 0;
+            unmappedKgForUnits += d.quantityKg || 0;
             unmappedDispatches.push(d);
           }
         }
@@ -201,8 +204,8 @@ export const InventoryTab: React.FC = () => {
         }
       }
 
-      const currentStockKg = Math.max(0, producedKg - shippedKg - unmappedShippedKg);
-      const realStockKg = producedKg - shippedKg - unmappedShippedKg;
+      const realStockKg = producedKg - shippedKg;
+      const currentStockKg = Math.max(0, realStockKg);
 
       // Ledgered units
       const currentStockPallets = Math.max(0, Math.round(producedPallets) - Math.round(shippedPallets));
@@ -218,7 +221,7 @@ export const InventoryTab: React.FC = () => {
         (p.entry?.pallets && !Number.isInteger(p.entry.pallets)) || (p.entry?.bigBags && !Number.isInteger(p.entry.bigBags)) || (p.entry?.tanks && !Number.isInteger(p.entry.tanks))
       ));
 
-      const looseWarning = Math.abs(looseKgEstimate) > 50 || unmappedDispatches.length > 0 || problematicShipments.length > 0;
+      const looseWarning = unmappedKgForUnits > 0 || Math.abs(looseKgEstimate) > 50 || unmappedDispatches.length > 0 || problematicShipments.length > 0;
 
       const oldestBatch = productOutputs.sort((a,b) => a.timestamp - b.timestamp)[0];
       let ageStatus = 'green';
@@ -237,6 +240,7 @@ export const InventoryTab: React.FC = () => {
         currentStockTanks,
         expectedKgFromUnits,
         looseKgEstimate,
+        unmappedKgForUnits,
         fractionalOutputs,
         problematicShipments,
         unmappedDispatches,
@@ -246,6 +250,31 @@ export const InventoryTab: React.FC = () => {
       };
     });
   }, [outputEntries, dispatchEntries, products]);
+
+  // Auto-map helpers
+  const autoMapShipment = async (dispatchId: string, shipmentId: string, kg: number) => {
+    const dispatch = dispatchEntries.find(d => d.id === dispatchId);
+    if (!dispatch) return;
+    const product = products.find(p => p.id === dispatch.productId);
+    const inferred = inferPackagingStringFromKg(kg, product);
+    try {
+      await updateDispatchShipment(dispatchId, shipmentId, { packagingString: inferred });
+    } catch (err) {
+      console.error('Auto-map shipment failed', err);
+    }
+  };
+
+  const autoMapDispatch = async (dispatchId: string, kg: number) => {
+    const dispatch = dispatchEntries.find(d => d.id === dispatchId);
+    if (!dispatch) return;
+    const product = products.find(p => p.id === dispatch.productId);
+    const inferred = inferPackagingStringFromKg(kg, product);
+    try {
+      await updateDispatchEntry(dispatchId, { packagingString: inferred });
+    } catch (err) {
+      console.error('Auto-map dispatch failed', err);
+    }
+  };
 
   const initiateDispatch = () => {
     if (!quantity || !selectedBuyerId || !pricePerKg || !dispatchDate) return;
