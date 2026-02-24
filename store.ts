@@ -1,5 +1,6 @@
 
 import { create } from 'zustand';
+import { apiFetch } from './services/apiFetch';
 import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract } from './types';
 import { DEFAULT_CONFIG } from './constants';
 
@@ -50,6 +51,11 @@ interface AppState {
   setEditingIntakeId: (id: string | null) => void;
   editingOutputId: string | null;
   setEditingOutputId: (id: string | null) => void;
+
+  // User settings
+  userSettings: UserSettings | any;
+  setUserSettings: (patch: Partial<UserSettings>) => void;
+  resetUserSettings: () => void;
 
   // Actions (async)
   addSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<void>;
@@ -107,10 +113,17 @@ const calculateMilkCost = (quantity: number, fat: number, protein: number, suppl
 };
 
 async function api<T>(url: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(url, { headers: { 'Content-Type': 'application/json', ...(opts?.headers || {}) }, ...opts });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  return res.json();
+  return apiFetch(url, opts) as Promise<T>;
 }
+
+type UserSettings = {
+  plantLabel: string;
+  shiftLabel: string;
+  defaultStockView: 'kg' | 'pallets';
+  defaultAnalyticsRange: 'week' | 'month' | 'quarter' | 'year' | 'all';
+  dateFormat: 'ISO' | 'US';
+  compactMode: boolean;
+};
 
 export const useStore = create<AppState>((set, get) => ({
   activeTab: 'input',
@@ -118,6 +131,34 @@ export const useStore = create<AppState>((set, get) => ({
 
   globalConfig: DEFAULT_CONFIG,
   updateGlobalConfig: (config) => set((state) => ({ globalConfig: { ...state.globalConfig, ...config } })),
+
+  // User settings persisted in localStorage
+  userSettings: ((): any => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('userSettings') : null;
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {
+      plantLabel: 'Fractionation Plant 01',
+      shiftLabel: 'Shift A',
+      defaultStockView: 'kg',
+      defaultAnalyticsRange: 'month',
+      dateFormat: 'ISO',
+      compactMode: false
+    };
+  })(),
+  setUserSettings: (patch) => {
+    set((state:any) => {
+      const next = { ...state.userSettings, ...(patch as any) };
+      try { localStorage.setItem('userSettings', JSON.stringify(next)); } catch (e) {}
+      return { userSettings: next } as any;
+    });
+  },
+  resetUserSettings: () => {
+    const defaults = { plantLabel: 'Fractionation Plant 01', shiftLabel: 'Shift A', defaultStockView: 'kg', defaultAnalyticsRange: 'month', dateFormat: 'ISO', compactMode: false };
+    try { localStorage.setItem('userSettings', JSON.stringify(defaults)); } catch (e) {}
+    set(() => ({ userSettings: defaults } as any));
+  },
 
   isHydrating: false,
   hydrateError: null,

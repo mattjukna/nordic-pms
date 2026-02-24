@@ -4,6 +4,7 @@ import cors from 'cors';
 import prisma from './services/prisma';
 import { createServer as createViteServer } from 'vite';
 import { parsePackagingString } from './utils/parser';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
 
 // --- Mapping helpers: convert Prisma rows into frontend DTO shapes defined in types.ts
@@ -109,6 +110,38 @@ async function startServer() {
     let prismaAvailable = true;
     app.use(cors());
     app.use(express.json());
+
+    // Auth middleware for /api routes
+    const AUTH_DISABLED = (process.env.AUTH_DISABLED || '').toLowerCase() === 'true';
+    const AAD_TENANT = process.env.AAD_TENANT_ID || process.env.AAD_TENANT || process.env.AAD_TENANTID || '';
+    const AAD_CLIENT = process.env.AAD_CLIENT_ID || process.env.AAD_CLIENT || '';
+    const AAD_ALLOWED = process.env.AAD_ALLOWED_DOMAIN || process.env.AAD_ALLOWED || '';
+    const jwksUri = AAD_TENANT ? `https://login.microsoftonline.com/${AAD_TENANT}/discovery/v2.0/keys` : null;
+    const JWKS = jwksUri ? createRemoteJWKSet(new URL(jwksUri)) : null;
+
+    app.use('/api', async (req: any, res: any, next: any) => {
+        if (AUTH_DISABLED) return next();
+        if (req.path === '/health') return next();
+        const auth = req.headers?.authorization || '';
+        if (!auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Missing Authorization Bearer token' });
+        const token = auth.split(' ')[1];
+        if (!JWKS) return res.status(500).json({ error: 'JWKS not configured on server' });
+        try {
+            const audienceOptions = [AAD_CLIENT, `api://${AAD_CLIENT}`].filter(Boolean);
+            const { payload } = await jwtVerify(token, JWKS, {
+                issuer: `https://login.microsoftonline.com/${AAD_TENANT}/v2.0`,
+                audience: audienceOptions
+            } as any);
+            const email = (payload as any).preferred_username || (payload as any).upn || (payload as any).email || '';
+            if (AAD_ALLOWED && email && !email.toLowerCase().endsWith(`@${AAD_ALLOWED}`)) {
+                return res.status(403).json({ error: 'Email domain not allowed' });
+            }
+            req.user = { email, name: (payload as any).name || '', oid: (payload as any).oid, tid: (payload as any).tid };
+            return next();
+        } catch (err: any) {
+            return res.status(401).json({ error: 'Invalid token', detail: err?.message });
+        }
+    });
 
     // API Routes
     app.get('/api/health', (req, res) => {
@@ -580,6 +613,15 @@ async function startServer() {
         try {
             const data = { ...req.body };
             if (data.date) data.date = new Date(data.date);
+            // Prevent lowering orderedQuantityKg below already shipped total
+            if (typeof data.orderedQuantityKg === 'number') {
+                const parent = await prisma.dispatchEntry.findUnique({ where: { id: req.params.id }, include: { shipments: true } });
+                const shipped = parent ? (parent.shipments || []).reduce((acc: number, s: any) => acc + (s.quantityKg || 0), 0) : 0;
+                if (data.orderedQuantityKg < shipped - 1e-6) {
+                    return res.status(409).json({ error: 'orderedQuantityKg cannot be lower than already shipped quantity', orderedQuantityKg: data.orderedQuantityKg, shipped });
+                }
+            }
+
             await prisma.dispatchEntry.update({ where: { id: req.params.id }, data });
             const fetched = await prisma.dispatchEntry.findUnique({ where: { id: req.params.id }, include: { shipments: true } });
             res.json(toClientDispatch(fetched));
@@ -599,6 +641,9 @@ async function startServer() {
         const s = req.body;
         if (!s.quantityKg) return res.status(400).json({ error: 'Missing quantityKg' });
         try {
+            // load parent dispatch to enforce ordered quantity limits
+            const parent = await prisma.dispatchEntry.findUnique({ where: { id: dispatchId }, include: { shipments: true } });
+            if (!parent) return res.status(404).json({ error: 'Dispatch not found' });
             const product = await prisma.product.findUnique({ where: { id: s.productId ?? undefined } });
             const parsed = s.packagingString ? parsePackagingString(s.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850) : { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0, isValid: false };
             // If packagingString parsed -> enforce whole-unit policy for pallets/bigBags/tanks
@@ -607,6 +652,18 @@ async function startServer() {
             }
             // If parsed is valid prefer parsed.totalWeight as truth for quantityKg
             const finalQty = (parsed.isValid && parsed.totalWeight > 0) ? parsed.totalWeight : s.quantityKg;
+
+            // Enforce ordered quantity if present — prefer `orderedQuantityKg`, fall back to `quantityKg` (legacy)
+            const orderLimit = (parent.orderedQuantityKg ?? parent.quantityKg) ?? null;
+            if (orderLimit && orderLimit > 0) {
+                const existingTotal = (parent.shipments || []).reduce((acc: number, cur: any) => acc + (cur.quantityKg || 0), 0);
+                const attempted = finalQty;
+                const projected = existingTotal + attempted;
+                if (projected - orderLimit > 1e-6) {
+                    return res.status(409).json({ error: 'Shipment exceeds orderedQuantityKg', orderLimit, currentTotal: existingTotal, attempted, projected });
+                }
+            }
+
             const created = await prisma.dispatchShipment.create({ data: {
                 dispatchEntryId: dispatchId,
                 date: s.date ? new Date(s.date) : new Date(),
@@ -669,6 +726,18 @@ async function startServer() {
             }
 
             const finalQty = (parsed.isValid && parsed.totalWeight > 0) ? parsed.totalWeight : (body.quantityKg ?? existing.quantityKg);
+
+            // Enforce ordered quantity if present (exclude current existing qty). Prefer orderedQuantityKg, fallback to quantityKg
+            const parent = await prisma.dispatchEntry.findUnique({ where: { id }, include: { shipments: true } });
+            const limit = parent ? ((parent.orderedQuantityKg ?? parent.quantityKg) ?? null) : null;
+            if (parent && limit && limit > 0) {
+                const existingTotal = (parent.shipments || []).reduce((acc: number, cur: any) => acc + (cur.quantityKg || 0), 0) - (existing.quantityKg || 0);
+                const attempted = finalQty;
+                const projected = existingTotal + attempted;
+                if (projected - limit > 1e-6) {
+                    return res.status(409).json({ error: 'Updating shipment exceeds orderedQuantityKg', orderLimit: limit, currentTotal: existingTotal, attempted, projected });
+                }
+            }
 
             const updatedShipment = await prisma.dispatchShipment.update({ where: { id: shipmentId }, data: {
                 date: body.date ? new Date(body.date) : existing.date,

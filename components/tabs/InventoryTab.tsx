@@ -5,6 +5,7 @@ import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { PackagingWizard } from '../ui/PackagingWizard';
 import { parsePackagingString, normalizePackagingString, parsePackagingSegments } from '../../utils/parser';
+import { formatDate } from '../../utils/date';
 import { anyFractional } from '../../utils/wholeUnits';
 import { inferPackagingStringFromKg } from '../../utils/packagingNormalize';
 import { Package, Truck, ArrowUpRight, Box, Filter, Search, Calendar, ChevronDown, ChevronUp, FileText, Download, Scale, Layers, Tag, Calculator, CheckCircle2, Clock, Trash2, Check, Pencil, Plus, X } from 'lucide-react';
@@ -14,10 +15,10 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId } = useStore();
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings } = useStore();
   if (!products || products.length === 0) return <div className="p-6 text-center">Loading products…</div>;
   const [showDispatchForm, setShowDispatchForm] = useState(false);
-  const [showPallets, setShowPallets] = useState(false);
+  const [showPallets, setShowPallets] = useState<boolean>(() => (userSettings?.defaultStockView === 'pallets'));
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);
   const [shipmentQty, setShipmentQty] = useState('');
   const [shipmentPkgString, setShipmentPkgString] = useState('');
@@ -112,6 +113,12 @@ export const InventoryTab: React.FC = () => {
       }
     }
   }, [shipmentPkgString, editingDispatchId, dispatchEntries]);
+
+  // Derived values for currently editing dispatch (order/shipped/remaining)
+  const editingEntry = editingDispatchId ? dispatchEntries.find(e => e.id === editingDispatchId) : null;
+  const editingShippedSoFar = editingEntry ? (editingEntry.shipments || []).reduce((acc, s) => acc + (s.quantityKg || 0), 0) : 0;
+  const editingOrderLimit = editingEntry ? (editingEntry.orderedQuantityKg ?? editingEntry.quantityKg ?? 0) : 0;
+  const editingRemaining = editingOrderLimit - editingShippedSoFar;
 
   // Calculate current stock and Aging — ledgered by discrete units (pallets/bigBags/tanks)
   const stockLevels = useMemo(() => {
@@ -486,6 +493,11 @@ export const InventoryTab: React.FC = () => {
       return;
     }
 
+    // Order limit enforcement (client-side): prefer orderedQuantityKg when present
+    const shippedSoFar = (entry.shipments || []).reduce((acc, s) => acc + (s.quantityKg || 0), 0);
+    const orderLimit = (entry.orderedQuantityKg ?? entry.quantityKg ?? 0);
+    const remaining = orderLimit - shippedSoFar;
+
     const payload: any = {
       productId: entry.productId,
       date: new Date(shipmentDate).getTime(),
@@ -494,6 +506,23 @@ export const InventoryTab: React.FC = () => {
       note: shipmentNote,
       packagingString: shipmentPkgString
     };
+
+    if (orderLimit > 0 && qty > remaining) {
+      setConfirmState({
+        isOpen: true,
+        type: 'override',
+        message: `This shipment would exceed the ordered quantity. Ordered: ${orderLimit} kg, Shipped: ${shippedSoFar} kg, Attempting: ${qty} kg. Increase order to allow this shipment?`,
+        pendingAction: async () => {
+          // Increase the order to cover the new shipment, then add shipment
+          await updateDispatchEntry(editingDispatchId, { orderedQuantityKg: shippedSoFar + qty });
+          await addDispatchShipment(editingDispatchId, payload);
+          setShipmentQty('');
+          setShipmentPkgString('');
+          setShipmentNote('');
+        }
+      });
+      return;
+    }
 
     await addDispatchShipment(editingDispatchId, payload);
 
@@ -556,7 +585,7 @@ export const InventoryTab: React.FC = () => {
     }
 
     // Invoice Details
-    doc.text(`Date: ${new Date(entry.date).toLocaleDateString()}`, 140, 30);
+    doc.text(`Date: ${formatDate(entry.date, (useStore().userSettings?.dateFormat || 'ISO'))}`, 140, 30);
     doc.text(`Ref #: ${entry.id.toUpperCase()}`, 140, 35);
     if (entry.contractNumber) {
         doc.text(`Contract: ${entry.contractNumber}`, 140, 40);
@@ -673,7 +702,7 @@ export const InventoryTab: React.FC = () => {
                       {item.fractionalOutputs.map((o:any) => (
                         <div key={o.id} className="flex items-center justify-between bg-slate-50 p-2 rounded text-sm">
                           <div>
-                            <div className="font-medium">Output • {new Date(o.timestamp).toLocaleDateString()}</div>
+                            <div className="font-medium">Output • {formatDate(o.timestamp, userSettings?.dateFormat || 'ISO')}</div>
                             <div className="text-xs text-slate-500">Packaging: {o.packagingString || '-'}</div>
                             <div className="text-xs text-slate-500">pallets:{o.parsed?.pallets} bb:{o.parsed?.bigBags} tanks:{o.parsed?.tanks} total:{o.parsed?.totalWeight}kg</div>
                           </div>
@@ -693,7 +722,7 @@ export const InventoryTab: React.FC = () => {
                       {item.problematicShipments.map((s:any, idx:number) => (
                         <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded text-sm">
                           <div>
-                            <div className="font-medium">{s.type === 'shipment' ? 'Shipment' : 'Dispatch'} • {s.entry?.date ? new Date(s.entry.date).toLocaleDateString() : ''}</div>
+                            <div className="font-medium">{s.type === 'shipment' ? 'Shipment' : 'Dispatch'} • {s.entry?.date ? formatDate(s.entry.date, userSettings?.dateFormat || 'ISO') : ''}</div>
                             <div className="text-xs text-slate-500">Packaging: {s.entry?.packagingString || '-'}</div>
                             <div className="text-xs text-slate-500">pallets:{s.entry?.parsed?.pallets} bb:{s.entry?.parsed?.bigBags} tanks:{s.entry?.parsed?.tanks} total:{s.entry?.parsed?.totalWeight || s.entry?.quantityKg}kg</div>
                           </div>
@@ -729,7 +758,7 @@ export const InventoryTab: React.FC = () => {
                       {item.unmappedDispatches.map((d:any) => (
                         <div key={d.id} className="flex items-center justify-between bg-slate-50 p-2 rounded text-sm">
                           <div>
-                            <div className="font-medium">Dispatch • {new Date(d.date).toLocaleDateString()}</div>
+                            <div className="font-medium">Dispatch • {formatDate(d.date, userSettings?.dateFormat || 'ISO')}</div>
                             <div className="text-xs text-slate-500">Packaging: {d.packagingString || '-'}</div>
                             <div className="text-xs text-slate-500">QuantityKg: {d.quantityKg}</div>
                           </div>
@@ -993,6 +1022,11 @@ export const InventoryTab: React.FC = () => {
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
                     <Box size={14} /> Shipments Tracking
                   </h4>
+                  <div className="mb-3 text-xs text-slate-600 flex items-center gap-4">
+                    <div><span className="font-bold">Ordered:</span> {editingOrderLimit.toLocaleString()} kg</div>
+                    <div><span className="font-bold">Shipped:</span> {editingShippedSoFar.toLocaleString()} kg</div>
+                    <div className={`${editingRemaining < 0 ? 'text-red-600 font-bold' : ''}`}><span className="font-bold">Remaining:</span> {(editingRemaining).toLocaleString()} kg {editingRemaining < 0 && <span className="ml-2 text-red-600 font-bold">OVER-SHIPPED</span>}</div>
+                  </div>
                   
                   <div className="bg-slate-50 rounded-lg p-4 mb-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
@@ -1055,7 +1089,8 @@ export const InventoryTab: React.FC = () => {
                       />
                       <button 
                         onClick={handleAddShipment}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1"
+                        disabled={editingOrderLimit > 0 && editingRemaining <= 0}
+                        className={`${editingOrderLimit > 0 && editingRemaining <= 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-4 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1`}
                       >
                         <Plus size={14} /> Add
                       </button>
@@ -1066,7 +1101,7 @@ export const InventoryTab: React.FC = () => {
                     {dispatchEntries.find(e => e.id === editingDispatchId)?.shipments?.map(ship => (
                       <div key={ship.id} className="flex items-center justify-between bg-white border border-slate-100 p-2 rounded text-xs">
                         <div className="flex items-center gap-3">
-                          <span className="font-mono text-slate-400">{new Date(ship.date).toLocaleDateString()}</span>
+                          <span className="font-mono text-slate-400">{formatDate(ship.date, userSettings?.dateFormat || 'ISO')}</span>
                           <span className="font-bold text-slate-700">{ship.quantityKg.toLocaleString()} kg</span>
                           {ship.note && <span className="text-slate-400 italic">"{ship.note}"</span>}
                         </div>
@@ -1239,16 +1274,16 @@ export const InventoryTab: React.FC = () => {
                                  {(() => {
                                    const shipped = entry.quantityKg ?? 0;
                                    const total = entry.orderedQuantityKg ?? entry.quantityKg ?? 0;
-                                   const remaining = Math.max(0, total - shipped);
+                                   const remaining = total - shipped;
                                    return (
-                                     <span>Shipped: {shipped.toLocaleString()} / {total.toLocaleString()} kg • Remaining: {remaining.toLocaleString()} kg</span>
+                                     <span>Shipped: {shipped.toLocaleString()} / {total.toLocaleString()} kg • Remaining: {remaining.toLocaleString()} kg {remaining < 0 && <span className="ml-2 text-red-600 font-bold">OVER-SHIPPED</span>}</span>
                                    );
                                  })()}
                                </div>
                                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                                  <div 
-                                   className={`h-full transition-all ${entry.status === 'completed' ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                                   style={{ width: `${Math.min(100, ((entry.quantityKg ?? 0) / (entry.orderedQuantityKg ?? entry.quantityKg ?? 1)) * 100)}%` }}
+                                   className={`h-full transition-all ${((entry.quantityKg ?? 0) > (entry.orderedQuantityKg ?? entry.quantityKg ?? 0)) ? 'bg-red-500' : (entry.status === 'completed' ? 'bg-emerald-500' : 'bg-blue-500')}`}
+                                   style={{ width: `${Math.min(100, ((entry.quantityKg ?? 0) / Math.max(1, (entry.orderedQuantityKg ?? entry.quantityKg ?? 1))) * 100)}%` }}
                                  />
                                </div>
                              </div>

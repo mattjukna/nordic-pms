@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type { IntakeEntry, OutputEntry, DispatchEntry } from "../../types";
 import { isShippedStatus, getShippedKg, getShippedRevenue, getShipmentsByDate } from "../../utils/dispatchMath";
+import { formatDate } from '../../utils/date';
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
 
@@ -60,9 +61,10 @@ const EmptyState: React.FC<{ title: string; hint?: string }> = ({ title, hint })
 
 export const TrendsTab: React.FC = () => {
   const { intakeEntries, outputEntries, dispatchEntries, globalConfig, products, suppliers, milkTypes } = useStore();
+  const { userSettings } = useStore();
 
   const [activeView, setActiveView] = useState<ViewMode>("financial");
-  const [timeRange, setTimeRange] = useState<TimeRange>("month");
+  const [timeRange, setTimeRange] = useState<TimeRange>((userSettings?.defaultAnalyticsRange as any) || "month");
   const [customStart, setCustomStart] = useState<string>("");
   const [customEnd, setCustomEnd] = useState<string>("");
 
@@ -843,7 +845,7 @@ export const TrendsTab: React.FC = () => {
                     <tbody className="divide-y divide-slate-100">
                       {outliers.map(o => (
                         <tr key={o.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-2 font-mono text-xs">{new Date(o.timestamp).toLocaleDateString()}</td>
+                          <td className="p-2 font-mono text-xs">{formatDate(o.timestamp, userSettings?.dateFormat || 'ISO')}</td>
                           <td className="p-2">{suppliers.find(s=>s.id===o.supplierId)?.name || o.supplierId}</td>
                           <td className="p-2">{o.milkType}</td>
                           <td className="p-2 text-right">{Math.round(o.quantityKg).toLocaleString()}</td>

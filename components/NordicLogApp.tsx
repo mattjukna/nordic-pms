@@ -2,6 +2,7 @@ import React from 'react';
 import { Factory, LayoutDashboard, BarChart3, Bot, FileInput, Package, Settings, Scale, Box, Layers } from 'lucide-react';
 import { useStore } from '../store';
 import { GlassCard } from './ui/GlassCard';
+import UserMenu from './ui/UserMenu';
 import { InputTab } from './tabs/InputTab';
 import { LivePreviewTab } from './tabs/LivePreviewTab';
 import { TrendsTab } from './tabs/TrendsTab';
@@ -9,15 +10,11 @@ import { AITab } from './tabs/AITab';
 import { InventoryTab } from './tabs/InventoryTab';
 import { SettingsTab } from './tabs/SettingsTab';
 
-const NordicLogApp: React.FC = () => {
-  const { activeTab, setActiveTab, hydrateFromApi, isHydrating, hydrateError } = useStore();
-
-  React.useEffect(() => {
-    hydrateFromApi();
-  }, [hydrateFromApi]);
+const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) => {
+  const { activeTab, setActiveTab, isHydrating, hydrateError, userSettings } = useStore();
 
   return (
-    <div className="w-full max-w-7xl mx-auto flex flex-col min-h-screen bg-slate-50">
+    <div className={`${userSettings?.compactMode ? 'compact' : ''} w-full max-w-7xl mx-auto flex flex-col min-h-screen bg-slate-50`}>
       
       {/* Header & Nav */}
       <div className="p-2 md:p-4 shrink-0 z-50 sticky top-0">
@@ -32,10 +29,15 @@ const NordicLogApp: React.FC = () => {
                   Nordic Proteins <span className="text-slate-400 font-light">PMS</span>
                 </h1>
                 <p className="text-[10px] md:text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
-                  Fractionation Plant 01 • Shift A
+                  {userSettings?.plantLabel} • {userSettings?.shiftLabel}
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* User menu on the right */}
+          <div className="ml-4">
+            <UserMenu />
           </div>
 
           {/* Tab Navigation */}
@@ -71,11 +73,11 @@ const NordicLogApp: React.FC = () => {
       <main className="flex-1 relative px-2 md:px-4 pb-8">
         {isHydrating ? (
           <div className="p-6 text-center">Loading data...</div>
-        ) : hydrateError ? (
-          <div className="p-6 text-center">
-            <div className="mb-4 text-red-700 font-bold">Failed to load data: {hydrateError}</div>
-            <button onClick={() => hydrateFromApi()} className="px-4 py-2 bg-blue-600 text-white rounded">Retry</button>
-          </div>
+          ) : hydrateError ? (
+            <div className="p-6 text-center">
+              <div className="mb-4 text-red-700 font-bold">Failed to load data: {hydrateError}</div>
+              <button onClick={() => useStore().hydrateFromApi()} className="px-4 py-2 bg-blue-600 text-white rounded">Retry</button>
+            </div>
         ) : (
           <>
             {activeTab === 'input' && <InputTab />}

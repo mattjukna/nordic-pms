@@ -7,6 +7,7 @@ interface GlassCardProps {
 }
 
 export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', onClick }) => {
+  const compact = typeof document !== 'undefined' && !!document.querySelector('.compact');
   return (
     <div 
       onClick={onClick}
@@ -18,6 +19,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', 
         text-slate-900
         transition-all duration-300
         ${className}
+        ${compact ? ' p-2' : ''}
       `}
     >
       {children}
