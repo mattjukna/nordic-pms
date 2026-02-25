@@ -178,6 +178,16 @@ async function startServer() {
         res.json({ status: 'ok', timestamp: Date.now() });
     });
 
+    // Runtime auth config for SPA to read MSAL values from the hosting environment
+    app.get('/api/config', (req, res) => {
+        res.json({
+            clientId: process.env.MSAL_CLIENT_ID || '',
+            tenantId: process.env.MSAL_TENANT_ID || '',
+            allowedDomain: process.env.MSAL_ALLOWED_DOMAIN || '',
+            apiScope: process.env.MSAL_API_SCOPE || '',
+        });
+    });
+
     // Monthly Excel report export
     app.get('/api/reports/monthly', async (req, res) => {
         try {
