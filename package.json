@@ -16,6 +16,7 @@
     "prisma:seed": "prisma db seed",
     "lint": "tsc --noEmit",
     "preview": "vite preview"
+    "fix:esm": "node scripts/fix-esm-imports.mjs dist-server",
   },
   "dependencies": {
     "@azure/msal-browser": "2.38.4",

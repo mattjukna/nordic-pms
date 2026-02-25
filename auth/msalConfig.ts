@@ -1,18 +1,14 @@
 // src/auth/msalConfig.ts
 import type { Configuration } from "@azure/msal-browser";
 
-// Helper to require env vars in server builds
-const must = (name: string) => {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env var: ${name}`);
-  return v as string;
-};
-
-// Read server-safe env vars (no VITE_ prefix)
-const clientId = process.env.MSAL_CLIENT_ID || must('MSAL_CLIENT_ID');
-const tenantId = process.env.MSAL_TENANT_ID || must('MSAL_TENANT_ID');
-const allowedDomain = process.env.MSAL_ALLOWED_DOMAIN || must('MSAL_ALLOWED_DOMAIN');
-const apiScope = process.env.MSAL_API_SCOPE || must('MSAL_API_SCOPE');
+/**
+ * Read Vite-provided env vars in client builds.
+ * These are injected by Vite as import.meta.env.VITE_*
+ */
+const clientId = (import.meta.env.VITE_AAD_CLIENT_ID as string) || "";
+const tenantId = (import.meta.env.VITE_AAD_TENANT_ID as string) || "";
+const allowedDomain = (import.meta.env.VITE_AAD_ALLOWED_DOMAIN as string) || "";
+const apiScope = (import.meta.env.VITE_AAD_API_SCOPE as string) || "";
 
 export const AAD_CLIENT_ID: string = clientId;
 export const AAD_TENANT_ID: string = tenantId;
