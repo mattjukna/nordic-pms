@@ -847,8 +847,14 @@ async function startServer() {
         });
     }
 
+    console.log("[BOOT] starting server", {
+        node: process.version,
+        env: process.env.NODE_ENV,
+        port: process.env.PORT,
+    });
+
     app.listen(port, host, () => {
-        console.log(`Server running on http://${host}:${port}`);
+        console.log(`[BOOT] listening on ${host}:${port}`);
     });
 }
 
