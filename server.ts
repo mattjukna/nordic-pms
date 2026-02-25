@@ -1,6 +1,3 @@
-import dotenv from 'dotenv';
-dotenv.config({ path: '.env' });
-dotenv.config({ path: '.env.local' }); // load VITE_* for dev too
 import path from 'path';
 import express from 'express';
 import cors from 'cors';
@@ -108,6 +105,18 @@ const toClientSupplier = (s: any) => ({
 });
 
 async function startServer() {
+    // Load dotenv only when running locally / in development so production Node
+    // does not require the `dotenv` package to be installed.
+    if (typeof process.env.WEBSITE_INSTANCE_ID === 'undefined' || process.env.NODE_ENV !== 'production') {
+        try {
+            const dotenv = await import('dotenv');
+            dotenv.config({ path: '.env' });
+            dotenv.config({ path: '.env.local' }); // load VITE_* for dev too
+        } catch (err: any) {
+            // Do not treat missing dotenv as fatal in local runs, just warn
+            console.warn('[BOOT] dotenv not available or failed to load:', err?.message ?? err);
+        }
+    }
     const app = express();
     const port = Number(process.env.PORT || 3000);
     const host = '0.0.0.0';
