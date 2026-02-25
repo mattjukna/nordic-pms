@@ -4,7 +4,9 @@ import { useMsal } from '@azure/msal-react';
 import { getAuthConfigErrors } from '../../auth/msalConfig';
 import { loadRuntimeAuthConfig, RuntimeAuthConfig } from '../../auth/runtimeConfig';
 
-export const LoginPage: React.FC<{ unauthorizedEmail?: string }> = ({ unauthorizedEmail }) => {
+export const LoginPage: React.FC<{
+  unauthorizedInfo?: { email?: string; userDomain?: string; allowed?: string };
+}> = ({ unauthorizedInfo }) => {
   const [loading, setLoading] = useState(true);
   const [cfg, setCfg] = useState<RuntimeAuthConfig | null>(null);
   const [configErrors, setConfigErrors] = useState<string[]>([]);
@@ -55,8 +57,16 @@ export const LoginPage: React.FC<{ unauthorizedEmail?: string }> = ({ unauthoriz
           </div>
         ) : null}
 
-        {unauthorizedEmail ? (
-          <div className="mb-4 text-red-600">Unauthorized domain: {unauthorizedEmail}</div>
+        {unauthorizedInfo ? (
+          <div className="mb-4 text-red-600 text-left">
+            <div className="font-bold">Unauthorized domain: {unauthorizedInfo.email || '(unknown email)'}</div>
+            <div className="text-xs mt-2">Details:</div>
+            <ul className="text-xs list-disc list-inside">
+              <li>Allowed: {unauthorizedInfo.allowed || '(no restriction set)'}</li>
+              <li>Extracted email: {unauthorizedInfo.email || '(none)'}</li>
+              <li>Extracted domain: {unauthorizedInfo.userDomain || '(none)'}</li>
+            </ul>
+          </div>
         ) : null}
 
         <button
@@ -67,7 +77,7 @@ export const LoginPage: React.FC<{ unauthorizedEmail?: string }> = ({ unauthoriz
           Sign in with Microsoft
         </button>
 
-        {unauthorizedEmail ? (
+        {unauthorizedInfo ? (
           <div className="text-xs text-slate-500 mt-3">If you believe this is an error, sign out and try with an allowed account.</div>
         ) : null}
       </GlassCard>
