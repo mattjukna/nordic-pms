@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build:client": "vite build",
-    "build:server": "prisma generate && tsup server.ts --format esm --platform node --target node22 --out-dir dist-server --clean --sourcemap --splitting=false --external vite --external lightningcss",
+    "build:server": "prisma generate && tsup server.ts --format esm --target node22 --out-dir dist-server --clean --sourcemap --splitting=false",
     "build": "npm run build:client && npm run build:server",
     "start": "node dist-server/server.js",
     "prisma:generate": "prisma generate",
