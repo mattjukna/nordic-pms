@@ -555,6 +555,14 @@ async function startServer() {
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: Date.now() });
   });
+  app.get("/api/config", (req, res) => {
+    res.json({
+      clientId: process.env.MSAL_CLIENT_ID || "",
+      tenantId: process.env.MSAL_TENANT_ID || "",
+      allowedDomain: process.env.MSAL_ALLOWED_DOMAIN || "",
+      apiScope: process.env.MSAL_API_SCOPE || ""
+    });
+  });
   app.get("/api/reports/monthly", async (req, res) => {
     try {
       const month = String(req.query.month || "");

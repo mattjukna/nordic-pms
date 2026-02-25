@@ -1,6 +1,25 @@
 import type { Configuration } from "@azure/msal-browser";
 import { getRuntimeAuthConfig } from "../src/auth/runtimeConfig";
 
+// Synchronous fallbacks for build-time / client-side imports (Vite injects these)
+const SYNC_CLIENT_ID = (import.meta as any).env?.VITE_AAD_CLIENT_ID || '';
+const SYNC_TENANT_ID = (import.meta as any).env?.VITE_AAD_TENANT_ID || '';
+const SYNC_ALLOWED_DOMAIN = (import.meta as any).env?.VITE_AAD_ALLOWED_DOMAIN || '';
+const SYNC_API_SCOPE = (import.meta as any).env?.VITE_AAD_API_SCOPE || '';
+
+export const loginRequest = { scopes: [SYNC_API_SCOPE, 'openid', 'profile', 'email'].filter(Boolean) as string[] };
+
+export function getAuthConfigErrors(): string[] {
+  const errs: string[] = [];
+  if (!SYNC_CLIENT_ID) errs.push('Missing MSAL_CLIENT_ID');
+  if (!SYNC_TENANT_ID) errs.push('Missing MSAL_TENANT_ID');
+  if (!SYNC_ALLOWED_DOMAIN) errs.push('Missing MSAL_ALLOWED_DOMAIN');
+  if (!SYNC_API_SCOPE) errs.push('Missing MSAL_API_SCOPE (required for calling your backend API)');
+  return errs;
+}
+
+export const allowedDomainExport = SYNC_ALLOWED_DOMAIN;
+
 export type BuiltMsal = {
   msalConfig: Configuration;
   loginRequest: { scopes: string[] };

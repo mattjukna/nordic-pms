@@ -1,6 +1,8 @@
-import { msalInstance } from './msalInstance';
+import msalInstance from './msalInstance';
 import { InteractionRequiredAuthError } from '@azure/msal-browser';
-import { AAD_API_SCOPE } from './msalConfig';
+
+// Read API scope from build-time env (Vite) as a fallback; runtime config is preferred elsewhere.
+const AAD_API_SCOPE = (import.meta as any).env?.VITE_AAD_API_SCOPE as string | undefined;
 
 export async function getAccessToken(): Promise<string> {
   const accounts = msalInstance.getAllAccounts();
