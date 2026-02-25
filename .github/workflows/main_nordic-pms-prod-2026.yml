@@ -32,6 +32,12 @@ jobs:
       - name: Run tests
         run: npm run test --if-present
 
+      - name: Prune dev dependencies
+        run: npm prune --omit=dev
+
+      - name: Pack production node_modules
+        run: tar -czf node_modules.tar.gz -C node_modules .
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -42,6 +48,7 @@ jobs:
             package.json
             package-lock.json
             prisma/**
+            node_modules.tar.gz
 
   deploy:
     runs-on: ubuntu-latest
