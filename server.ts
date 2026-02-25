@@ -157,11 +157,38 @@ async function startServer() {
                 `https://sts.windows.net/${tid}/`,
             ] : [];
 
-            const audienceOptions = [AAD_CLIENT, `api://${AAD_CLIENT}`].filter(Boolean);
+            const apiScope =
+                process.env.MSAL_API_SCOPE || process.env.AAD_API_SCOPE || process.env.VITE_AAD_API_SCOPE || '';
+
+            // Derive API audience (aud) from explicit env or from the configured scope
+            let apiAudience = (process.env.MSAL_API_AUDIENCE || process.env.AAD_API_AUDIENCE || '').trim();
+            if (!apiAudience && apiScope) {
+                const s = apiScope.trim();
+                if (s.startsWith('api://')) {
+                    // keep first three segments to form 'api://<id>' (e.g. api://<id>/access_as_user)
+                    const parts = s.split('/').slice(0, 3);
+                    apiAudience = parts.join('/');
+                } else {
+                    // fallback: take the left-hand part before the first '/'
+                    apiAudience = s.split('/')[0] || '';
+                }
+            }
+
+            const audienceOptions: string[] = [];
+            if (apiAudience) {
+                audienceOptions.push(apiAudience);
+                // if apiAudience is an api:// URI, also accept the raw id portion as fallback
+                if (apiAudience.startsWith('api://')) {
+                    const raw = apiAudience.replace(/^api:\/\//, '').split('/')[0];
+                    if (raw) audienceOptions.push(raw);
+                }
+            }
+
+            console.log('[BOOT] audienceOptions =', audienceOptions);
 
             const { payload } = await jwtVerify(token, JWKS, {
                 issuer: allowedIssuers.length ? allowedIssuers : undefined,
-                audience: audienceOptions
+                audience: audienceOptions.length ? audienceOptions : undefined
             } as any);
 
             // Post-verification sanity checks
