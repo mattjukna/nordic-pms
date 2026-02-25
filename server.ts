@@ -132,6 +132,15 @@ async function startServer() {
     const jwksUri = AAD_TENANT ? `https://login.microsoftonline.com/${AAD_TENANT}/discovery/v2.0/keys` : null;
     const JWKS = jwksUri ? createRemoteJWKSet(new URL(jwksUri)) : null;
 
+    // Public runtime config for the SPA (no auth, no token required)
+    app.get('/config', (req, res) => {
+        const clientId = process.env.MSAL_CLIENT_ID || process.env.AAD_CLIENT_ID || '';
+        const tenantId = process.env.MSAL_TENANT_ID || process.env.AAD_TENANT_ID || '';
+        const allowedDomain = process.env.MSAL_ALLOWED_DOMAIN || process.env.AAD_ALLOWED_DOMAIN || '';
+        const apiScope = process.env.MSAL_API_SCOPE || process.env.VITE_AAD_API_SCOPE || '';
+        res.json({ clientId, tenantId, allowedDomain, apiScope });
+    });
+
     app.use('/api', async (req: any, res: any, next: any) => {
         if (AUTH_DISABLED) return next();
         if (req.path === '/health') return next();
@@ -178,15 +187,7 @@ async function startServer() {
         res.json({ status: 'ok', timestamp: Date.now() });
     });
 
-    // Runtime auth config for SPA to read MSAL values from the hosting environment
-    app.get('/api/config', (req, res) => {
-        res.json({
-            clientId: process.env.MSAL_CLIENT_ID || '',
-            tenantId: process.env.MSAL_TENANT_ID || '',
-            allowedDomain: process.env.MSAL_ALLOWED_DOMAIN || '',
-            apiScope: process.env.MSAL_API_SCOPE || '',
-        });
-    });
+    // (removed /api/config — public runtime /config used instead)
 
     // Monthly Excel report export
     app.get('/api/reports/monthly', async (req, res) => {

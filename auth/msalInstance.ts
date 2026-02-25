@@ -1,8 +1,8 @@
 import { PublicClientApplication } from '@azure/msal-browser';
-import buildMsalConfig from './msalConfig';
+import { loadRuntimeAuthConfig } from './runtimeConfig';
+import { buildMsalConfig } from './msalConfig';
 
 // Synchronous fallback instance using Vite-provided env at build/dev time.
-// This keeps existing modules that import `msalInstance` working during build.
 const syncClientId = (import.meta as any).env?.VITE_AAD_CLIENT_ID || '';
 const syncTenantId = (import.meta as any).env?.VITE_AAD_TENANT_ID || '';
 const syncAuthority = syncTenantId ? `https://login.microsoftonline.com/${syncTenantId}` : 'https://login.microsoftonline.com/common';
@@ -19,7 +19,6 @@ const msalConfigSync = {
 		cacheLocation: 'localStorage',
 		storeAuthStateInCookie: false,
 	},
-	system: { loggerOptions: { piiLoggingEnabled: false } },
 } as any;
 
 export const msalInstance = new PublicClientApplication(msalConfigSync as any);
@@ -29,7 +28,8 @@ let singleton: PublicClientApplication | null = null;
 
 export async function getMsalInstance(): Promise<PublicClientApplication> {
 	if (singleton) return singleton;
-	const built = await buildMsalConfig();
-	singleton = new PublicClientApplication(built.msalConfig as any);
+	const cfg = await loadRuntimeAuthConfig();
+	const cfgMsal = buildMsalConfig(cfg);
+	singleton = new PublicClientApplication(cfgMsal as any);
 	return singleton;
 }

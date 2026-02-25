@@ -1,81 +1,47 @@
 import type { Configuration } from "@azure/msal-browser";
-import { getRuntimeAuthConfig } from "../src/auth/runtimeConfig";
+import type { RuntimeAuthConfig } from "./runtimeConfig";
 
-// Synchronous fallbacks for build-time / client-side imports (Vite injects these)
+// Synchronous fallbacks for build-time usage (Vite injects these values)
 const SYNC_CLIENT_ID = (import.meta as any).env?.VITE_AAD_CLIENT_ID || '';
 const SYNC_TENANT_ID = (import.meta as any).env?.VITE_AAD_TENANT_ID || '';
 const SYNC_ALLOWED_DOMAIN = (import.meta as any).env?.VITE_AAD_ALLOWED_DOMAIN || '';
 const SYNC_API_SCOPE = (import.meta as any).env?.VITE_AAD_API_SCOPE || '';
 
-export const loginRequest = { scopes: [SYNC_API_SCOPE, 'openid', 'profile', 'email'].filter(Boolean) as string[] };
-
-export function getAuthConfigErrors(): string[] {
-  const errs: string[] = [];
-  if (!SYNC_CLIENT_ID) errs.push('Missing MSAL_CLIENT_ID');
-  if (!SYNC_TENANT_ID) errs.push('Missing MSAL_TENANT_ID');
-  if (!SYNC_ALLOWED_DOMAIN) errs.push('Missing MSAL_ALLOWED_DOMAIN');
-  if (!SYNC_API_SCOPE) errs.push('Missing MSAL_API_SCOPE (required for calling your backend API)');
-  return errs;
-}
-
-export const allowedDomainExport = SYNC_ALLOWED_DOMAIN;
-
-export type BuiltMsal = {
-  msalConfig: Configuration;
-  loginRequest: { scopes: string[] };
-  allowedDomainExport: string;
-  getAuthConfigErrors: () => string[];
-};
-
-export async function buildMsalConfig(): Promise<BuiltMsal> {
-  const runtime = await getRuntimeAuthConfig();
-  const clientId = runtime.clientId || '';
-  const tenantId = runtime.tenantId || '';
-  const allowedDomain = runtime.allowedDomain || '';
-  const apiScope = runtime.apiScope || '';
-
-  const authority = tenantId
-    ? `https://login.microsoftonline.com/${tenantId}`
+export function buildMsalConfig(cfg: RuntimeAuthConfig): Configuration {
+  const authority = cfg.tenantId
+    ? `https://login.microsoftonline.com/${cfg.tenantId}`
     : "https://login.microsoftonline.com/common";
 
-  const msalConfig: Configuration = {
+  return {
     auth: {
-      clientId,
+      clientId: cfg.clientId,
       authority,
-      redirectUri: typeof window !== 'undefined' ? window.location.origin : '',
-      postLogoutRedirectUri: typeof window !== 'undefined' ? window.location.origin : '',
+      redirectUri: window.location.origin,
+      postLogoutRedirectUri: window.location.origin,
       navigateToLoginRequestUrl: true,
     },
     cache: {
       cacheLocation: "localStorage",
       storeAuthStateInCookie: false,
     },
-    system: {
-      loggerOptions: {
-        loggerCallback: (_level, _message, containsPii) => {
-          if (containsPii) return;
-        },
-        piiLoggingEnabled: false,
-      },
-    },
-  };
-
-  const loginRequest = {
-    scopes: [apiScope, "openid", "profile", "email"].filter(Boolean) as string[],
-  };
-
-  const allowedDomainExport = allowedDomain;
-
-  const getAuthConfigErrors = () => {
-    const errs: string[] = [];
-    if (!clientId) errs.push('Missing MSAL_CLIENT_ID');
-    if (!tenantId) errs.push('Missing MSAL_TENANT_ID');
-    if (!allowedDomain) errs.push('Missing MSAL_ALLOWED_DOMAIN');
-    if (!apiScope) errs.push('Missing MSAL_API_SCOPE (required for calling your backend API)');
-    return errs;
-  };
-
-  return { msalConfig, loginRequest, allowedDomainExport, getAuthConfigErrors };
+  } as Configuration;
 }
+
+export function getAuthConfigErrors(cfg?: RuntimeAuthConfig): string[] {
+  const errs: string[] = [];
+  const clientId = cfg?.clientId ?? SYNC_CLIENT_ID;
+  const tenantId = cfg?.tenantId ?? SYNC_TENANT_ID;
+  const allowedDomain = cfg?.allowedDomain ?? SYNC_ALLOWED_DOMAIN;
+  const apiScope = cfg?.apiScope ?? SYNC_API_SCOPE;
+  if (!clientId) errs.push("Missing MSAL_CLIENT_ID");
+  if (!tenantId) errs.push("Missing MSAL_TENANT_ID");
+  if (!allowedDomain) errs.push("Missing MSAL_ALLOWED_DOMAIN");
+  if (!apiScope) errs.push("Missing MSAL_API_SCOPE (required for calling your backend API)");
+  return errs;
+}
+
+// Export synchronous helpers so existing components can still import them at build time.
+export const loginRequest = { scopes: [SYNC_API_SCOPE, 'openid', 'profile', 'email'].filter(Boolean) as string[] };
+export const allowedDomainExport = SYNC_ALLOWED_DOMAIN;
 
 export default buildMsalConfig;

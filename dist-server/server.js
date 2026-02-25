@@ -515,6 +515,13 @@ async function startServer() {
   const AAD_ALLOWED = process.env.AAD_ALLOWED_DOMAIN || process.env.AAD_ALLOWED || "";
   const jwksUri = AAD_TENANT ? `https://login.microsoftonline.com/${AAD_TENANT}/discovery/v2.0/keys` : null;
   const JWKS = jwksUri ? createRemoteJWKSet(new URL(jwksUri)) : null;
+  app.get("/config", (req, res) => {
+    const clientId = process.env.MSAL_CLIENT_ID || process.env.AAD_CLIENT_ID || "";
+    const tenantId = process.env.MSAL_TENANT_ID || process.env.AAD_TENANT_ID || "";
+    const allowedDomain = process.env.MSAL_ALLOWED_DOMAIN || process.env.AAD_ALLOWED_DOMAIN || "";
+    const apiScope = process.env.MSAL_API_SCOPE || process.env.VITE_AAD_API_SCOPE || "";
+    res.json({ clientId, tenantId, allowedDomain, apiScope });
+  });
   app.use("/api", async (req, res, next) => {
     if (AUTH_DISABLED)
       return next();
@@ -554,14 +561,6 @@ async function startServer() {
   });
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: Date.now() });
-  });
-  app.get("/api/config", (req, res) => {
-    res.json({
-      clientId: process.env.MSAL_CLIENT_ID || "",
-      tenantId: process.env.MSAL_TENANT_ID || "",
-      allowedDomain: process.env.MSAL_ALLOWED_DOMAIN || "",
-      apiScope: process.env.MSAL_API_SCOPE || ""
-    });
   });
   app.get("/api/reports/monthly", async (req, res) => {
     try {
