@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build:client": "vite build",
-    "build:server": "prisma generate && tsc -p tsconfig.server.json",
+    "build:server": "prisma generate && tsup server.ts --format esm --platform node --target node22 --out-dir dist-server --clean --sourcemap --splitting=false --entry server.ts --out-file server.js",
     "build": "npm run build:client && npm run build:server",
-    "start": "node --experimental-specifier-resolution=node dist-server/server.js",
+    "start": "node dist-server/server.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
@@ -47,10 +47,12 @@
     "cross-env": "^7.0.3",
     "prisma": "6.15.0",
     "tsx": "^4.21.0",
+    "tsup": "^6.8.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   }
+
 }
