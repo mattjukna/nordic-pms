@@ -860,9 +860,10 @@ async function startServer() {
         const distPath = path.resolve('dist');
         app.use(express.static(distPath));
 
-        // Fallback for client-side routing: serve index.html for any non-/api and non-/config route
-        // Use a RegExp route so Express 5 does not treat '*' as a parameter name.
-        app.get(/^(?!\/api|\/config).*/, (req, res) => {
+        // Fallback for client-side routing: serve index.html for any route that is
+        // not /api or /config (and their subpaths). Use a RegExp compatible with
+        // Express 5 so '*' is not treated as a parameter name.
+        app.get(/^(?!\/(api|config)(\/|$)).*/, (req, res) => {
             return res.sendFile(path.resolve(distPath, 'index.html'));
         });
     }
