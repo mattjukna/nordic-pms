@@ -850,8 +850,8 @@ async function startServer() {
         app.use(express.static(distPath));
 
         // Fallback for client-side routing: serve index.html for any non-/api route
-        app.get('*', (req, res) => {
-            if (req.path.startsWith('/api')) return res.status(404).end();
+        // Use a RegExp route so Express 5 does not treat '*' as a parameter name.
+        app.get(/^(?!\/api).*/, (req, res) => {
             return res.sendFile(path.resolve(distPath, 'index.html'));
         });
     }

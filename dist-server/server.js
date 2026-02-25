@@ -1204,8 +1204,8 @@ async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     console.log("[ENV] VITE_AAD_API_SCOPE =", process.env.VITE_AAD_API_SCOPE);
     const root = process.cwd();
-    const { createServer } = await import("vite");
-    const vite = await createServer({
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
       root,
       envDir: root,
       configFile: path.resolve(root, "vite.config.ts"),
@@ -1223,9 +1223,7 @@ async function startServer() {
   } else {
     const distPath = path.resolve("dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      if (req.path.startsWith("/api"))
-        return res.status(404).end();
+    app.get(/^(?!\/api).*/, (req, res) => {
       return res.sendFile(path.resolve(distPath, "index.html"));
     });
   }
