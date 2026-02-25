@@ -2,34 +2,29 @@ import { PublicClientApplication } from '@azure/msal-browser';
 import { loadRuntimeAuthConfig } from './runtimeConfig';
 import { buildMsalConfig } from './msalConfig';
 
-// Synchronous fallback instance using Vite-provided env at build/dev time.
-const syncClientId = (import.meta as any).env?.VITE_AAD_CLIENT_ID || '';
-const syncTenantId = (import.meta as any).env?.VITE_AAD_TENANT_ID || '';
-const syncAuthority = syncTenantId ? `https://login.microsoftonline.com/${syncTenantId}` : 'https://login.microsoftonline.com/common';
+let pcaPromise: Promise<PublicClientApplication> | null = null;
 
-const msalConfigSync = {
-	auth: {
-		clientId: syncClientId,
-		authority: syncAuthority,
-		redirectUri: typeof window !== 'undefined' ? window.location.origin : '',
-		postLogoutRedirectUri: typeof window !== 'undefined' ? window.location.origin : '',
-		navigateToLoginRequestUrl: true,
-	},
-	cache: {
-		cacheLocation: 'localStorage',
-		storeAuthStateInCookie: false,
-	},
-} as any;
-
-export const msalInstance = new PublicClientApplication(msalConfigSync as any);
-export default msalInstance;
-
-let singleton: PublicClientApplication | null = null;
+export async function initMsal(): Promise<PublicClientApplication> {
+	if (pcaPromise) return pcaPromise;
+	pcaPromise = (async () => {
+		const cfg = await loadRuntimeAuthConfig();
+		const cfgMsal = buildMsalConfig(cfg);
+		const clientId = (cfgMsal as any)?.auth?.clientId;
+		const authority = (cfgMsal as any)?.auth?.authority;
+		if (!clientId) throw new Error('Missing MSAL clientId after loading runtime config');
+		console.log('[MSAL init]', clientId, authority);
+		const pca = new PublicClientApplication(cfgMsal as any);
+		try {
+			// initialize if available (msal v3+ may expose initialize)
+			if (typeof (pca as any).initialize === 'function') await (pca as any).initialize();
+		} catch (e) {
+			// non-fatal
+		}
+		return pca;
+	})();
+	return pcaPromise;
+}
 
 export async function getMsalInstance(): Promise<PublicClientApplication> {
-	if (singleton) return singleton;
-	const cfg = await loadRuntimeAuthConfig();
-	const cfgMsal = buildMsalConfig(cfg);
-	singleton = new PublicClientApplication(cfgMsal as any);
-	return singleton;
+	return initMsal();
 }

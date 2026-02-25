@@ -1,9 +1,8 @@
-import { msalInstance } from '../../auth/msalInstance';
+import type { PublicClientApplication } from '@azure/msal-browser';
 
-export function installLogoutDebug() {
+export function installLogoutDebug(instance: any) {
   try {
-    // Avoid double-patching
-    const anyMsal: any = msalInstance as any;
+    const anyMsal: any = instance as any;
     if ((anyMsal.__logoutDebugInstalled)) return;
     anyMsal.__logoutDebugInstalled = true;
 
@@ -22,7 +21,6 @@ export function installLogoutDebug() {
       return Promise.resolve();
     };
 
-    // Keep originals accessible for later restore if needed
     anyMsal.__origLogoutRedirect = origLogoutRedirect;
     anyMsal.__origLogoutPopup = origLogoutPopup;
   } catch (e) {
@@ -32,9 +30,9 @@ export function installLogoutDebug() {
 
 export default installLogoutDebug;
 
-export function restoreLogoutDebug() {
+export function restoreLogoutDebug(instance: any) {
   try {
-    const anyMsal: any = msalInstance as any;
+    const anyMsal: any = instance as any;
     if (anyMsal.__origLogoutRedirect) anyMsal.logoutRedirect = anyMsal.__origLogoutRedirect;
     if (anyMsal.__origLogoutPopup) anyMsal.logoutPopup = anyMsal.__origLogoutPopup;
     delete anyMsal.__logoutDebugInstalled;

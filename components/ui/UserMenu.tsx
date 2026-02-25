@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { msalInstance } from '../../auth/msalInstance';
+import { useMsal } from '@azure/msal-react';
 import { restoreLogoutDebug } from '../../src/auth/logoutDebug';
 import { useStore } from '../../store';
 import UserSettingsModal from './UserSettingsModal';
@@ -11,7 +11,8 @@ const initials = (name?: string, email?: string) => {
 };
 
 const UserMenu: React.FC = () => {
-  const accounts = msalInstance.getAllAccounts();
+  const { instance } = useMsal();
+  const accounts = instance.getAllAccounts();
   const acct: any = accounts && accounts.length > 0 ? accounts[0] : null;
   const name = acct?.name || acct?.idTokenClaims?.name || acct?.username || '';
   const email = acct?.username || acct?.idTokenClaims?.preferred_username || '';
@@ -33,16 +34,14 @@ const UserMenu: React.FC = () => {
             <button onClick={() => { setShowSettings(true); setOpen(false); }} className="w-full text-left px-2 py-2 text-sm hover:bg-slate-50">Settings</button>
             <button
               onClick={() => {
-                // If debug patch was installed, restore originals first so Sign out always works
-                try { restoreLogoutDebug(); } catch (e) { /* continue */ }
-                const anyMsal: any = msalInstance as any;
-                const realLogout = anyMsal.__origLogoutRedirect?.bind(anyMsal) || msalInstance.logoutRedirect.bind(msalInstance);
-                const account = msalInstance.getAllAccounts()?.[0];
+                try { restoreLogoutDebug(instance); } catch (e) { /* continue */ }
+                const anyMsal: any = instance as any;
+                const realLogout = anyMsal.__origLogoutRedirect?.bind(anyMsal) || instance.logoutRedirect.bind(instance);
+                const account = instance.getAllAccounts()?.[0];
                 try {
                   realLogout({ account, postLogoutRedirectUri: window.location.origin });
                 } catch (e) {
-                  // best-effort fallback
-                  try { msalInstance.logoutRedirect(); } catch (_e) { console.error('Logout failed', _e); }
+                  try { instance.logoutRedirect(); } catch (_e) { console.error('Logout failed', _e); }
                 }
               }}
               className="w-full text-left px-2 py-2 text-sm text-red-600 hover:bg-slate-50"

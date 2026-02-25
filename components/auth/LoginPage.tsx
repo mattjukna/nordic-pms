@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GlassCard } from '../ui/GlassCard';
-import { msalInstance } from '../../auth/msalInstance';
+import { useMsal } from '@azure/msal-react';
 import { getAuthConfigErrors } from '../../auth/msalConfig';
 import { loadRuntimeAuthConfig, RuntimeAuthConfig } from '../../auth/runtimeConfig';
 
@@ -32,6 +32,7 @@ export const LoginPage: React.FC<{ unauthorizedEmail?: string }> = ({ unauthoriz
   }, []);
 
   const loginRequest = { scopes: [(cfg?.apiScope || ''), 'openid', 'profile', 'email'].filter(Boolean) as string[] };
+  const { instance } = useMsal();
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4">
@@ -59,7 +60,7 @@ export const LoginPage: React.FC<{ unauthorizedEmail?: string }> = ({ unauthoriz
         ) : null}
 
         <button
-          onClick={() => msalInstance.loginRedirect(loginRequest)}
+          onClick={() => instance.loginRedirect(loginRequest)}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-bold"
           disabled={loading || configErrors.length > 0}
         >

@@ -1230,7 +1230,7 @@ async function startServer() {
   } else {
     const distPath = path.resolve("dist");
     app.use(express.static(distPath));
-    app.get(/^(?!\/api).*/, (req, res) => {
+    app.get(/^(?!\/(api|config)(\/|$)).*/, (req, res) => {
       return res.sendFile(path.resolve(distPath, "index.html"));
     });
   }
