@@ -828,8 +828,8 @@ async function startServer() {
         // expose the configured VITE_* env var for troubleshooting
         console.log('[ENV] VITE_AAD_API_SCOPE =', process.env.VITE_AAD_API_SCOPE);
         const root = process.cwd();
-        const { createServer } = await import('vite');
-        const vite = await createServer({
+        const { createServer: createViteServer } = await import('vite');
+        const vite = await createViteServer({
             root,
             envDir: root,
             configFile: path.resolve(root, 'vite.config.ts'),
