@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build:client": "vite build",
-    "build:server": "prisma generate && tsup server.ts --format esm --platform node --target node22 --out-dir dist-server --clean --sourcemap --splitting=false --external vite --external lightningcss",
+    "build:server": "prisma generate && tsc -p tsconfig.server.json && npm run fix:esm",
     "build": "npm run build:client && npm run build:server",
     "start": "node dist-server/server.js",
     "prisma:generate": "prisma generate",
@@ -15,7 +15,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
     "lint": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
     "fix:esm": "node scripts/fix-esm-imports.mjs dist-server",
   },
   "dependencies": {
