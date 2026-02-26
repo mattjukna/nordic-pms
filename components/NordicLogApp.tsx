@@ -18,30 +18,25 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
       
       {/* Header & Nav */}
       <div className="p-2 md:p-4 shrink-0 z-50 sticky top-0">
-        <GlassCard className="p-3 md:px-6 md:py-4 flex flex-col md:flex-row justify-between items-center gap-3 md:gap-4 shadow-md md:shadow-sm ring-1 ring-slate-900/5 backdrop-blur-xl bg-white/80">
-          <div className="flex justify-between w-full md:w-auto items-center">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-600 rounded-lg p-2 text-white shadow-sm shrink-0">
-                <Factory size={20} className="md:w-6 md:h-6" />
-              </div>
-              <div className="flex-1 md:flex-none">
-                <h1 className="text-base md:text-xl font-bold tracking-tight text-slate-900 leading-tight">
-                  Nordic Proteins <span className="text-slate-400 font-light">PMS</span>
-                </h1>
-                <p className="text-[10px] md:text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
-                  {userSettings?.plantLabel} • {userSettings?.shiftLabel}
-                </p>
-              </div>
+        <GlassCard className="p-3 md:px-6 md:py-4 flex items-center justify-between gap-3 md:gap-4 shadow-md md:shadow-sm ring-1 ring-slate-900/5 backdrop-blur-xl bg-white/80 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-blue-600 rounded-lg p-2 text-white shadow-sm shrink-0">
+              <Factory size={18} className="md:w-6 md:h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-sm md:text-xl font-bold tracking-tight text-slate-900 leading-tight truncate">
+                Nordic Proteins PM
+              </h1>
             </div>
           </div>
 
           {/* User menu on the right */}
-          <div className="ml-4">
+          <div className="ml-4 shrink-0">
             <UserMenu />
           </div>
 
           {/* Tab Navigation */}
-          <div className="w-full md:w-auto overflow-x-auto pb-1 md:pb-0 -mx-1 px-1 scrollbar-hide">
+          <div className="w-full md:w-auto mt-2 md:mt-0 overflow-x-auto pb-1 md:pb-0 -mx-1 px-1 scrollbar-hide">
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 w-max md:w-auto">
               {[
                 { id: 'input', label: 'Input', icon: FileInput },

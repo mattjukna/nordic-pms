@@ -185,7 +185,7 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
     for (const day of days) {
       const row: any = { date: day };
       const outputs = dailyMap[day].outputs;
-      for (const p of productNames) row[`prod_${p}`] = outputs[p] || 0;
+      for (const p of productNames) row[`prod_${p}`] = outputs[String(p)] || 0;
       row.intake = dailyMap[day].intakeKg || 0;
       cumulativeIntake += row.intake || 0;
       // monthlyQuota repeated per row (overall total for the month)
