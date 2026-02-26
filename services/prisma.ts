@@ -20,7 +20,8 @@ try {
   console.warn('[BOOT] @prisma/adapter-mssql not installed or failed to load:', err?.message || err)
 }
 
-export const prisma = globalThis.__prisma ?? new PrismaClient(adapter ? { adapter, log: ['error', 'warn'] } : { log: ['error', 'warn'] })
+const clientOptions: any = adapter ? { adapter, log: ['error', 'warn'] } : { log: ['error', 'warn'] }
+export const prisma = globalThis.__prisma ?? new PrismaClient(clientOptions as any)
 
 if (process.env.NODE_ENV !== 'production') globalThis.__prisma = prisma
 
