@@ -8,10 +8,11 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
 import { buildMonthlyWorkbook } from './services/reportExcel';
 
-// --- Mapping helpers: convert Prisma rows into frontend DTO shapes defined in types.ts
-const mapDate = (d: Date | string | null | undefined): number => {
-    if (!d) return 0;
-    try { return new Date(d as any).getTime(); } catch { return 0; }
+// --- Mapping helpers: convert Prisma rows into frontend DTO shapes defined in types.ts ---
+const mapDate = (d: Date | string | number | null | undefined): number | null => {
+    if (!d && d !== 0) return null;
+    const date = new Date(d as any);
+    return isNaN(date.getTime()) ? null : date.getTime();
 };
 
 const toParsed = (row: any) => ({
@@ -301,7 +302,7 @@ async function startServer() {
                 isEco: body.isEco ?? false,
                 defaultMilkType: body.defaultMilkType ?? null
             }});
-            void logAudit(req, { action: 'CREATE', tableName: 'Supplier', recordId: created.id, details: toClientSupplier(created) });
+            void logAudit(req, { action: 'CREATE', tableName: 'Supplier', recordId: created.id, details: JSON.stringify(toClientSupplier(created)) });
             res.json(toClientSupplier(created));
         } catch (err: any) { res.status(500).json({ error: err.message }); }
     });
@@ -313,7 +314,7 @@ async function startServer() {
             // ensure proper types
             if (data.createdOn) data.createdOn = new Date(data.createdOn);
             const updated = await prisma.supplier.update({ where: { id }, data });
-            void logAudit(req, { action: 'UPDATE', tableName: 'Supplier', recordId: updated.id, details: toClientSupplier(updated) });
+            void logAudit(req, { action: 'UPDATE', tableName: 'Supplier', recordId: updated.id, details: JSON.stringify(toClientSupplier(updated)) });
             res.json(toClientSupplier(updated));
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
@@ -584,7 +585,7 @@ async function startServer() {
             }
 
             const fetched = await prisma.intakeEntry.findUnique({ where: { id: created.id }, include: { tags: true } });
-            void logAudit(req, { action: 'CREATE', tableName: 'IntakeEntry', recordId: created.id, details: toClientIntake(fetched) });
+            void logAudit(req, { action: 'CREATE', tableName: 'IntakeEntry', recordId: created.id, details: JSON.stringify(toClientIntake(fetched)) });
             res.json(toClientIntake(fetched));
         } catch (err: any) { res.status(500).json({ error: err.message }); }
     });
@@ -623,7 +624,7 @@ async function startServer() {
             }
 
             const fetched = await prisma.intakeEntry.findUnique({ where: { id }, include: { tags: true } });
-            void logAudit(req, { action: 'UPDATE', tableName: 'IntakeEntry', recordId: id, details: toClientIntake(fetched) });
+            void logAudit(req, { action: 'UPDATE', tableName: 'IntakeEntry', recordId: id, details: JSON.stringify(toClientIntake(fetched)) });
             res.json(toClientIntake(fetched));
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
@@ -656,7 +657,7 @@ async function startServer() {
                 tanks: parsed.tanks,
                 totalWeight: parsed.totalWeight
             }});
-            void logAudit(req, { action: 'CREATE', tableName: 'OutputEntry', recordId: created.id, details: toClientOutput(created) });
+            void logAudit(req, { action: 'CREATE', tableName: 'OutputEntry', recordId: created.id, details: JSON.stringify(toClientOutput(created)) });
             res.json(toClientOutput(created));
         } catch (err: any) { res.status(500).json({ error: err.message }); }
     });
@@ -676,7 +677,7 @@ async function startServer() {
                 tanks: parsed.tanks,
                 totalWeight: parsed.totalWeight
             }});
-            void logAudit(req, { action: 'UPDATE', tableName: 'OutputEntry', recordId: updated.id, details: toClientOutput(updated) });
+            void logAudit(req, { action: 'UPDATE', tableName: 'OutputEntry', recordId: updated.id, details: JSON.stringify(toClientOutput(updated)) });
             res.json(toClientOutput(updated));
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
@@ -713,7 +714,7 @@ async function startServer() {
                 status: b.status ?? 'planned'
             }});
             const fetched = await prisma.dispatchEntry.findUnique({ where: { id: created.id }, include: { shipments: true } });
-            void logAudit(req, { action: 'CREATE', tableName: 'DispatchEntry', recordId: created.id, details: toClientDispatch(fetched) });
+            void logAudit(req, { action: 'CREATE', tableName: 'DispatchEntry', recordId: created.id, details: JSON.stringify(toClientDispatch(fetched)) });
             res.json(toClientDispatch(fetched));
         } catch (err: any) { res.status(500).json({ error: err.message }); }
     });
@@ -733,7 +734,7 @@ async function startServer() {
 
             await prisma.dispatchEntry.update({ where: { id: req.params.id }, data });
             const fetched = await prisma.dispatchEntry.findUnique({ where: { id: req.params.id }, include: { shipments: true } });
-            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: req.params.id, details: toClientDispatch(fetched) });
+            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: req.params.id, details: JSON.stringify(toClientDispatch(fetched)) });
             res.json(toClientDispatch(fetched));
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
@@ -788,7 +789,7 @@ async function startServer() {
                 totalWeight: parsed.totalWeight || null
             }});
 
-            void logAudit(req, { action: 'CREATE', tableName: 'DispatchShipment', recordId: created.id, details: { dispatchEntryId: dispatchId, quantityKg: created.quantityKg } });
+            void logAudit(req, { action: 'CREATE', tableName: 'DispatchShipment', recordId: created.id, details: JSON.stringify({ dispatchEntryId: dispatchId, quantityKg: created.quantityKg }) });
 
             // Recalculate summed quantity
             const shipments = await prisma.dispatchShipment.findMany({ where: { dispatchEntryId: dispatchId } });
@@ -798,7 +799,7 @@ async function startServer() {
             await prisma.dispatchEntry.update({ where: { id: dispatchId }, data: { quantityKg: total, totalRevenue } });
 
             const fetched = await prisma.dispatchEntry.findUnique({ where: { id: dispatchId }, include: { shipments: true } });
-            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: dispatchId, details: toClientDispatch(fetched) });
+            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: dispatchId, details: JSON.stringify(toClientDispatch(fetched)) });
             res.json(toClientDispatch(fetched));
         } catch (err: any) { res.status(500).json({ error: err.message }); }
     });
@@ -814,7 +815,7 @@ async function startServer() {
             const totalRevenue = (dispatch?.salesPricePerKg ?? 0) * total;
             await prisma.dispatchEntry.update({ where: { id }, data: { quantityKg: total, totalRevenue } });
             const fetched = await prisma.dispatchEntry.findUnique({ where: { id }, include: { shipments: true } });
-            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: id, details: toClientDispatch(fetched) });
+            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: id, details: JSON.stringify(toClientDispatch(fetched)) });
             res.json(toClientDispatch(fetched));
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
@@ -866,7 +867,7 @@ async function startServer() {
                 tanks: parsed.tanks || null,
                 totalWeight: parsed.totalWeight || null
             }});
-            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchShipment', recordId: updatedShipment.id, details: { id: updatedShipment.id, quantityKg: updatedShipment.quantityKg } });
+            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchShipment', recordId: updatedShipment.id, details: JSON.stringify({ id: updatedShipment.id, quantityKg: updatedShipment.quantityKg }) });
 
             // Recalculate parent dispatch totals
             const shipments = await prisma.dispatchShipment.findMany({ where: { dispatchEntryId: id } });
@@ -876,7 +877,7 @@ async function startServer() {
             await prisma.dispatchEntry.update({ where: { id }, data: { quantityKg: total, totalRevenue } });
 
             const fetched = await prisma.dispatchEntry.findUnique({ where: { id }, include: { shipments: true } });
-            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: id, details: toClientDispatch(fetched) });
+            void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: id, details: JSON.stringify(toClientDispatch(fetched)) });
             res.json(toClientDispatch(fetched));
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });

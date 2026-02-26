@@ -112,44 +112,50 @@ const calculateMilkCost = (quantity: number, fat: number, protein: number, suppl
   return quantity * price;
 };
 
-// Parsers: convert incoming ISO date strings to epoch ms for frontend
+// Parsers: handle incoming data (could be ISO string or number) safely
+const parseDate = (d: any): number | null => {
+  if (d === null || typeof d === 'undefined') return null;
+  const date = new Date(d);
+  return isNaN(date.getTime()) ? null : date.getTime();
+};
+
 const parseSupplier = (s: any): Supplier => ({
   ...s,
-  createdOn: s?.createdOn ? new Date(s.createdOn).getTime() : null,
+  createdOn: parseDate(s?.createdOn),
 });
 
 const parseBuyerContract = (c: any): BuyerContract => ({
   ...c,
-  startDate: c?.startDate ? new Date(c.startDate).getTime() : null,
-  endDate: c?.endDate ? new Date(c.endDate).getTime() : null,
+  startDate: parseDate(c?.startDate),
+  endDate: parseDate(c?.endDate),
 });
 
 const parseBuyer = (b: any): Buyer => ({
   ...b,
-  createdOn: b?.createdOn ? new Date(b.createdOn).getTime() : null,
+  createdOn: parseDate(b?.createdOn),
   contracts: Array.isArray(b.contracts) ? b.contracts.map(parseBuyerContract) : []
 });
 
 const parseIntakeEntry = (i: any): IntakeEntry => ({
   ...i,
-  timestamp: i?.timestamp ? new Date(i.timestamp).getTime() : null,
+  timestamp: parseDate(i?.timestamp),
   tags: Array.isArray(i.tags) ? i.tags : []
 });
 
 const parseOutputEntry = (o: any): OutputEntry => ({
   ...o,
-  timestamp: o?.timestamp ? new Date(o.timestamp).getTime() : null,
+  timestamp: parseDate(o?.timestamp),
   parsed: o?.parsed ? { ...o.parsed } : { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0 }
 });
 
 const parseDispatchShipment = (s: any): any => ({
   ...s,
-  date: s?.date ? new Date(s.date).getTime() : null,
+  date: parseDate(s?.date),
 });
 
 const parseDispatchEntry = (d: any): DispatchEntry => ({
   ...d,
-  date: d?.date ? new Date(d.date).getTime() : null,
+  date: parseDate(d?.date),
   shipments: Array.isArray(d.shipments) ? d.shipments.map(parseDispatchShipment) : []
 });
 
