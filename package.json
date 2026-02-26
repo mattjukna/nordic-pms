@@ -19,6 +19,7 @@
     "fix:esm": "node scripts/fix-esm-imports.mjs dist-server"
   },
   "dependencies": {
+    "@prisma/adapter-mssql": "^1.0.0",
     "@azure/msal-browser": "2.38.4",
     "@azure/msal-react": "1.5.13",
     "@prisma/client": "^7.4.1",
