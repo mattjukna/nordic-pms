@@ -198,3 +198,16 @@ model DispatchShipment {
   tanks       Float?
   totalWeight Float?
 }
+
+model AuditLog {
+  id        String  @id @default(cuid())
+  userEmail String
+  action    String
+  tableName String
+  recordId  String?
+  details   String
+  timestamp BigInt
+
+  @@index([timestamp])
+  @@index([userEmail])
+}
