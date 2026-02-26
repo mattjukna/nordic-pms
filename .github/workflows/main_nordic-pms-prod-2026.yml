@@ -75,6 +75,6 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'nordic-pms-prod-2026'
-          slot-name: 'Production'
+          resource-group: 'nordic-pms-rg'
           package: .
           
