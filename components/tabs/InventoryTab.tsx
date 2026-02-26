@@ -15,8 +15,12 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings } = useStore();
-  if (!products || products.length === 0) return <div className="p-6 text-center">Loading products…</div>;
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating } = useStore();
+
+  // Only show the loading placeholder while the store is hydrating.
+  // When hydration is finished but `products` is empty, allow the UI to render
+  // so the user can access the Database tab to add products.
+  if (isHydrating) return <div className="p-6 text-center">Loading products…</div>;
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState<boolean>(() => (userSettings?.defaultStockView === 'pallets'));
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);

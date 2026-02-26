@@ -18,7 +18,8 @@ export const SettingsTab: React.FC = () => {
     suppliers, addSupplier, updateSupplier, removeSupplier, 
     buyers, addBuyer, updateBuyer, removeBuyer,
     products, addProduct, updateProduct, removeProduct,
-    milkTypes, addMilkType, removeMilkType
+    milkTypes, addMilkType, removeMilkType,
+    isHydrating
   } = useStore();
 
   // Search State
@@ -459,6 +460,9 @@ export const SettingsTab: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in h-full">
+      {isHydrating && (
+        <div className="p-3 text-sm text-slate-500">Loading data…</div>
+      )}
       
       <ConfirmationModal 
         isOpen={confirmModal.isOpen}
