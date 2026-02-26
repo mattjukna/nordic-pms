@@ -78,6 +78,6 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'nordic-pms-prod-2026'
-          resource-group: 'nordic-pms-rg'
+          resource-group: 'rg-nordic-pms-prod'
           package: .
           
