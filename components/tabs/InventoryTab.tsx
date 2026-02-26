@@ -9,8 +9,8 @@ import { formatDate } from '../../utils/date';
 import { anyFractional } from '../../utils/wholeUnits';
 import { inferPackagingStringFromKg } from '../../utils/packagingNormalize';
 import { Package, Truck, ArrowUpRight, Box, Filter, Search, Calendar, ChevronDown, ChevronUp, FileText, Download, Scale, Layers, Tag, Calculator, CheckCircle2, Clock, Trash2, Check, Pencil, Plus, X } from 'lucide-react';
-// @ts-ignore
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
+// autoptable has no types exposed here
 // @ts-ignore
 import autoTable from 'jspdf-autotable';
 
@@ -585,7 +585,7 @@ export const InventoryTab: React.FC = () => {
     }
 
     // Invoice Details
-    doc.text(`Date: ${formatDate(entry.date, (useStore().userSettings?.dateFormat || 'ISO'))}`, 140, 30);
+    doc.text(`Date: ${formatDate(entry.date, (userSettings?.dateFormat || 'ISO'))}`, 140, 30);
     doc.text(`Ref #: ${entry.id.toUpperCase()}`, 140, 35);
     if (entry.contractNumber) {
         doc.text(`Contract: ${entry.contractNumber}`, 140, 40);
