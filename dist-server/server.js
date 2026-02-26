@@ -18,8 +18,7 @@ __export(packagingNormalize_exports, {
 });
 function parsePackagingSegments(rawInput, defaultPalletWeight, defaultBBWeight) {
   const input = norm(rawInput || "");
-  if (!input)
-    return [];
+  if (!input) return [];
   const segs = [];
   const segmentRegex = /(\d+(?:\.\d+)?)\s*(pad|pal|pl|bb|big\s*bag|tank|t)(?:\s*\*\s*(\d+(?:\.\d+)?))?/g;
   const looseRegex = /(\d+(?:\.\d+)?)\s*(kg|loose)\b/g;
@@ -28,26 +27,20 @@ function parsePackagingSegments(rawInput, defaultPalletWeight, defaultBBWeight) 
     const count = Number(m[1]);
     const typeRaw = m[2];
     const override = m[3] ? Number(m[3]) : void 0;
-    if (!Number.isFinite(count) || count <= 0)
-      continue;
-    if (typeRaw.startsWith("bb") || typeRaw.includes("big"))
-      segs.push({ unit: "bb", count, unitWeight: override ?? defaultBBWeight });
-    else if (typeRaw === "tank" || typeRaw === "t")
-      segs.push({ unit: "tank", count, unitWeight: override ?? 25e3 });
-    else
-      segs.push({ unit: "pad", count, unitWeight: override ?? defaultPalletWeight });
+    if (!Number.isFinite(count) || count <= 0) continue;
+    if (typeRaw.startsWith("bb") || typeRaw.includes("big")) segs.push({ unit: "bb", count, unitWeight: override ?? defaultBBWeight });
+    else if (typeRaw === "tank" || typeRaw === "t") segs.push({ unit: "tank", count, unitWeight: override ?? 25e3 });
+    else segs.push({ unit: "pad", count, unitWeight: override ?? defaultPalletWeight });
   }
   while ((m = looseRegex.exec(input)) !== null) {
     const kg = Number(m[1]);
-    if (Number.isFinite(kg) && kg > 0)
-      segs.push({ unit: "kg", count: kg });
+    if (Number.isFinite(kg) && kg > 0) segs.push({ unit: "kg", count: kg });
   }
   return segs;
 }
 function normalizePackagingString(rawInput, defaultPalletWeight, defaultBBWeight, opts) {
   const segs = parsePackagingSegments(rawInput, defaultPalletWeight, defaultBBWeight);
-  if (segs.length === 0)
-    return { normalized: rawInput.trim(), changed: false, looseKgAdded: 0, notes: ["empty"] };
+  if (segs.length === 0) return { normalized: rawInput.trim(), changed: false, looseKgAdded: 0, notes: ["empty"] };
   const fullGroups = /* @__PURE__ */ new Map();
   const partialGroups = /* @__PURE__ */ new Map();
   let looseKg = 0;
@@ -91,8 +84,7 @@ function normalizePackagingString(rawInput, defaultPalletWeight, defaultBBWeight
     }
   }
   const looseRounded = opts && opts.roundLoose === false ? looseKg : Math.round(looseKg);
-  if (looseRounded >= 1)
-    parts.push(`${looseRounded} kg`);
+  if (looseRounded >= 1) parts.push(`${looseRounded} kg`);
   const normalized = parts.join("; ");
   const changed = norm(normalized) !== norm(rawInput || "");
   return { normalized, changed, looseKgAdded: looseRounded, notes };
@@ -127,8 +119,7 @@ function inferPackagingStringFromKg(kg, product) {
     }
   }
   const loose = Math.round(remaining);
-  if (loose >= 1)
-    parts.push(`${loose} kg`);
+  if (loose >= 1) parts.push(`${loose} kg`);
   const raw = parts.join("; ");
   const normalized = normalizePackagingString(raw, palletW, bagW).normalized;
   return normalized || raw;
@@ -202,8 +193,7 @@ import cors from "cors";
 // services/prisma.ts
 import { PrismaClient } from "@prisma/client";
 var prisma = globalThis.__prisma ?? new PrismaClient({ log: ["error", "warn"] });
-if (process.env.NODE_ENV !== "production")
-  globalThis.__prisma = prisma;
+if (process.env.NODE_ENV !== "production") globalThis.__prisma = prisma;
 var prisma_default = prisma;
 
 // server.ts
@@ -213,8 +203,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 // utils/wholeUnits.ts
 var UNIT_TOLERANCE = 1e-3;
 function isWhole2(value) {
-  if (value == null || Number.isNaN(value))
-    return true;
+  if (value == null || Number.isNaN(value)) return true;
   return Math.abs(value - Math.round(value)) <= UNIT_TOLERANCE;
 }
 function anyFractional(parsed) {
@@ -257,8 +246,7 @@ async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
   const byDay = {};
   for (const e of intakeEntries) {
     const day = fmtDate(e.timestamp);
-    if (!byDay[day])
-      byDay[day] = { kg: 0, fatSum: 0, proteinSum: 0, phSum: 0, count: 0 };
+    if (!byDay[day]) byDay[day] = { kg: 0, fatSum: 0, proteinSum: 0, phSum: 0, count: 0 };
     byDay[day].kg += e.quantityKg || 0;
     byDay[day].fatSum += e.fatPct || 0;
     byDay[day].proteinSum += e.proteinPct || 0;
@@ -268,15 +256,13 @@ async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
   const dailyMap = {};
   for (const o of outputEntries) {
     const day = fmtDate(o.timestamp);
-    if (!dailyMap[day])
-      dailyMap[day] = { date: day, outputs: {}, intakeKg: 0 };
+    if (!dailyMap[day]) dailyMap[day] = { date: day, outputs: {}, intakeKg: 0 };
     const pname = o.productId || "Unknown";
     dailyMap[day].outputs[pname] = (dailyMap[day].outputs[pname] || 0) + (o.totalWeight || 0);
   }
   for (const i of intakeEntries) {
     const day = fmtDate(i.timestamp);
-    if (!dailyMap[day])
-      dailyMap[day] = { date: day, outputs: {}, intakeKg: 0 };
+    if (!dailyMap[day]) dailyMap[day] = { date: day, outputs: {}, intakeKg: 0 };
     dailyMap[day].intakeKg += i.quantityKg || 0;
   }
   if (report === "full" || report === "intake") {
@@ -374,19 +360,25 @@ async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
   }
   if (report === "full" || report === "accounting") {
     const sheet = workbook.addWorksheet("Accounting Overview");
+    const suppliers = await prisma_default.supplier.findMany();
+    const totalMonthlyQuota = suppliers.reduce((s, sup) => s + (sup.contractQuota || 0), 0);
     const productNames = Array.from(new Set(outputEntries.map((o) => o.productId || "Unknown"))).slice(0, 20);
     const headers = [{ header: "Date", key: "date", width: 14 }];
-    for (const p of productNames)
-      headers.push({ header: String(p), key: `prod_${p}`, width: 12 });
+    for (const p of productNames) headers.push({ header: String(p), key: `prod_${p}`, width: 12 });
     headers.push({ header: "Total Intake Kg", key: "intake", width: 14 });
+    headers.push({ header: "Monthly Quota (kg)", key: "monthlyQuota", width: 16 });
+    headers.push({ header: "Quota Reached (%)", key: "quotaReached", width: 14 });
     addHeader(sheet, headers);
     const days = Object.keys(dailyMap).sort();
+    let cumulativeIntake = 0;
     for (const day of days) {
       const row = { date: day };
       const outputs = dailyMap[day].outputs;
-      for (const p of productNames)
-        row[`prod_${p}`] = outputs[p] || 0;
+      for (const p of productNames) row[`prod_${p}`] = outputs[p] || 0;
       row.intake = dailyMap[day].intakeKg || 0;
+      cumulativeIntake += row.intake || 0;
+      row.monthlyQuota = totalMonthlyQuota || 0;
+      row.quotaReached = totalMonthlyQuota > 0 ? cumulativeIntake / totalMonthlyQuota : 0;
       sheet.addRow(row);
     }
     const lastRow = sheet.rowCount + 1;
@@ -396,6 +388,9 @@ async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
       const colLetter = sheet.getColumn(c).letter;
       totalRow.getCell(c).value = { formula: `SUM(${colLetter}2:${colLetter}${sheet.rowCount - 1})` };
     }
+    sheet.getColumn("intake").numFmt = "#,##0";
+    sheet.getColumn("monthlyQuota").numFmt = "#,##0";
+    sheet.getColumn("quotaReached").numFmt = "0.00%";
   }
   const buf = await workbook.xlsx.writeBuffer();
   return Buffer.from(buf);
@@ -403,8 +398,7 @@ async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
 
 // server.ts
 var mapDate = (d) => {
-  if (!d)
-    return 0;
+  if (!d) return 0;
   try {
     return new Date(d).getTime();
   } catch {
@@ -418,10 +412,8 @@ var toParsed = (row) => ({
   totalWeight: typeof row?.totalWeight === "number" ? row.totalWeight : 0
 });
 var toClientDestination = (d) => {
-  if (!d)
-    return "Warehouse";
-  if (d === "PienoZvaigzde")
-    return "Pieno \u017Dvaig\u017Ed\u0117";
+  if (!d) return "Warehouse";
+  if (d === "PienoZvaigzde") return "Pieno \u017Dvaig\u017Ed\u0117";
   return d;
 };
 var toClientOutput = (o) => ({
@@ -458,10 +450,8 @@ var toClientShipment = (s) => {
     date: mapDate(s.date),
     quantityKg: s.quantityKg
   };
-  if (s.batchId)
-    base.batchId = s.batchId;
-  if (s.note)
-    base.note = s.note;
+  if (s.batchId) base.batchId = s.batchId;
+  if (s.note) base.note = s.note;
   if (s.packagingString) {
     base.packagingString = s.packagingString;
     base.parsed = toParsed(s);
@@ -523,16 +513,12 @@ async function startServer() {
     res.json({ clientId, tenantId, allowedDomain, apiScope });
   });
   app.use("/api", async (req, res, next) => {
-    if (AUTH_DISABLED)
-      return next();
-    if (req.path === "/health")
-      return next();
+    if (AUTH_DISABLED) return next();
+    if (req.path === "/health") return next();
     const auth = req.headers?.authorization || "";
-    if (!auth.startsWith("Bearer "))
-      return res.status(401).json({ error: "Missing Authorization Bearer token" });
+    if (!auth.startsWith("Bearer ")) return res.status(401).json({ error: "Missing Authorization Bearer token" });
     const token = auth.split(" ")[1];
-    if (!JWKS)
-      return res.status(500).json({ error: "JWKS not configured on server" });
+    if (!JWKS) return res.status(500).json({ error: "JWKS not configured on server" });
     try {
       const tid = process.env.AAD_TENANT_ID || process.env.AAD_TENANT || "";
       const allowedIssuers = tid ? [
@@ -540,10 +526,29 @@ async function startServer() {
         `https://login.microsoftonline.com/${tid}/v2.0/`,
         `https://sts.windows.net/${tid}/`
       ] : [];
-      const audienceOptions = [AAD_CLIENT, `api://${AAD_CLIENT}`].filter(Boolean);
+      const apiScope = process.env.MSAL_API_SCOPE || process.env.AAD_API_SCOPE || process.env.VITE_AAD_API_SCOPE || "";
+      let apiAudience = (process.env.MSAL_API_AUDIENCE || process.env.AAD_API_AUDIENCE || "").trim();
+      if (!apiAudience && apiScope) {
+        const s = apiScope.trim();
+        if (s.startsWith("api://")) {
+          const parts = s.split("/").slice(0, 3);
+          apiAudience = parts.join("/");
+        } else {
+          apiAudience = s.split("/")[0] || "";
+        }
+      }
+      const audienceOptions = [];
+      if (apiAudience) {
+        audienceOptions.push(apiAudience);
+        if (apiAudience.startsWith("api://")) {
+          const raw = apiAudience.replace(/^api:\/\//, "").split("/")[0];
+          if (raw) audienceOptions.push(raw);
+        }
+      }
+      console.log("[BOOT] audienceOptions =", audienceOptions);
       const { payload } = await jwtVerify(token, JWKS, {
         issuer: allowedIssuers.length ? allowedIssuers : void 0,
-        audience: audienceOptions
+        audience: audienceOptions.length ? audienceOptions : void 0
       });
       const payloadAny = payload;
       if (payloadAny.tid && tid && payloadAny.tid !== tid) {
@@ -566,8 +571,7 @@ async function startServer() {
     try {
       const month = String(req.query.month || "");
       const report = String(req.query.report || "full");
-      if (!/^\d{4}-\d{2}$/.test(month))
-        return res.status(400).json({ error: "Invalid month. Expected YYYY-MM" });
+      if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: "Invalid month. Expected YYYY-MM" });
       const [y, m] = month.split("-").map(Number);
       const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
       const nextMonth = new Date(Date.UTC(y, m, 1, 0, 0, 0));
@@ -585,8 +589,7 @@ async function startServer() {
     }
   });
   app.get("/api/whoami", (req, res) => {
-    if (AUTH_DISABLED)
-      return res.json({ email: "AUTH_DISABLED" });
+    if (AUTH_DISABLED) return res.json({ email: "AUTH_DISABLED" });
     return res.json({ email: req.user?.email ?? null, name: req.user?.name ?? null, oid: req.user?.oid ?? null, tid: req.user?.tid ?? null });
   });
   app.get("/api/bootstrap", async (req, res) => {
@@ -619,8 +622,7 @@ async function startServer() {
   });
   app.post("/api/suppliers", async (req, res) => {
     const body = req.body;
-    if (!body.name || !body.routeGroup)
-      return res.status(400).json({ error: "Missing name or routeGroup" });
+    if (!body.name || !body.routeGroup) return res.status(400).json({ error: "Missing name or routeGroup" });
     try {
       const created = await prisma_default.supplier.create({ data: {
         name: body.name,
@@ -648,8 +650,7 @@ async function startServer() {
     const id = req.params.id;
     try {
       const data = { ...req.body };
-      if (data.createdOn)
-        data.createdOn = new Date(data.createdOn);
+      if (data.createdOn) data.createdOn = new Date(data.createdOn);
       const updated = await prisma_default.supplier.update({ where: { id }, data });
       res.json(toClientSupplier(updated));
     } catch (err) {
@@ -667,8 +668,7 @@ async function startServer() {
   });
   app.post("/api/buyers", async (req, res) => {
     const b = req.body;
-    if (!b.name)
-      return res.status(400).json({ error: "Missing buyer name" });
+    if (!b.name) return res.status(400).json({ error: "Missing buyer name" });
     try {
       const created = await prisma_default.buyer.create({ data: {
         name: b.name,
@@ -705,8 +705,7 @@ async function startServer() {
   app.post("/api/buyers/:id/contracts", async (req, res) => {
     const buyerId = req.params.id;
     const c = req.body;
-    if (!c.contractNumber || !c.productId || c.pricePerKg == null || !c.startDate || !c.endDate)
-      return res.status(400).json({ error: "Invalid contract body" });
+    if (!c.contractNumber || !c.productId || c.pricePerKg == null || !c.startDate || !c.endDate) return res.status(400).json({ error: "Invalid contract body" });
     try {
       const created = await prisma_default.buyerContract.create({ data: {
         contractNumber: c.contractNumber,
@@ -725,10 +724,8 @@ async function startServer() {
   app.put("/api/contracts/:id", async (req, res) => {
     try {
       const data = { ...req.body };
-      if (data.startDate)
-        data.startDate = new Date(data.startDate);
-      if (data.endDate)
-        data.endDate = new Date(data.endDate);
+      if (data.startDate) data.startDate = new Date(data.startDate);
+      if (data.endDate) data.endDate = new Date(data.endDate);
       const updated = await prisma_default.buyerContract.update({ where: { id: req.params.id }, data });
       res.json(updated);
     } catch (err) {
@@ -745,8 +742,7 @@ async function startServer() {
   });
   app.post("/api/products", async (req, res) => {
     const p = req.body;
-    if (!p.id || !p.name)
-      return res.status(400).json({ error: "Missing product id or name" });
+    if (!p.id || !p.name) return res.status(400).json({ error: "Missing product id or name" });
     try {
       const created = await prisma_default.product.create({ data: p });
       res.json(created);
@@ -772,8 +768,7 @@ async function startServer() {
   });
   app.post("/api/milk-types", async (req, res) => {
     const { name } = req.body;
-    if (!name)
-      return res.status(400).json({ error: "Missing milk type name" });
+    if (!name) return res.status(400).json({ error: "Missing milk type name" });
     try {
       const created = await prisma_default.milkType.upsert({ where: { name }, update: {}, create: { name } });
       res.json(created);
@@ -796,8 +791,7 @@ async function startServer() {
       let periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
       if (month) {
         const [y, m] = month.split("-").map(Number);
-        if (!isNaN(y) && !isNaN(m))
-          periodStart = new Date(y, m - 1, 1);
+        if (!isNaN(y) && !isNaN(m)) periodStart = new Date(y, m - 1, 1);
       }
       const periods = await prisma_default.supplierPricingPeriod.findMany({ where: { periodStart }, include: { supplier: true } });
       res.json(periods.map((p) => ({ id: p.id, supplierId: p.supplierId, supplierName: p.supplier?.name ?? "", periodStart: mapDate(p.periodStart), basePricePerKg: p.basePricePerKg ?? null, normalMilkPricePerKg: p.normalMilkPricePerKg ?? null, fatBonusPerPct: p.fatBonusPerPct ?? null, proteinBonusPerPct: p.proteinBonusPerPct ?? null })));
@@ -807,8 +801,7 @@ async function startServer() {
   });
   app.put("/api/supplier-pricing", async (req, res) => {
     const body = req.body;
-    if (!body.supplierId || !body.periodStart)
-      return res.status(400).json({ error: "Missing supplierId or periodStart" });
+    if (!body.supplierId || !body.periodStart) return res.status(400).json({ error: "Missing supplierId or periodStart" });
     try {
       const periodStart = typeof body.periodStart === "string" && body.periodStart.match(/^\d{4}-\d{2}$/) ? (() => {
         const [y, m] = body.periodStart.split("-").map(Number);
@@ -845,8 +838,7 @@ async function startServer() {
       let start = new Date(now.getFullYear(), now.getMonth(), 1);
       if (month) {
         const [y, m] = month.split("-").map(Number);
-        if (!isNaN(y) && !isNaN(m))
-          start = new Date(y, m - 1, 1);
+        if (!isNaN(y) && !isNaN(m)) start = new Date(y, m - 1, 1);
       }
       const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
       const entries = await prisma_default.intakeEntry.findMany({ where: { timestamp: { gte: start, lt: end }, isDiscarded: false } });
@@ -855,8 +847,7 @@ async function startServer() {
       const bySupplierMap = {};
       for (const e of entries) {
         const key = e.supplierId;
-        if (!bySupplierMap[key])
-          bySupplierMap[key] = { supplierId: e.supplierId, supplierName: e.supplierName, cost: 0, kg: 0 };
+        if (!bySupplierMap[key]) bySupplierMap[key] = { supplierId: e.supplierId, supplierName: e.supplierName, cost: 0, kg: 0 };
         bySupplierMap[key].cost += e.calculatedCost ?? 0;
         bySupplierMap[key].kg += e.quantityKg ?? 0;
       }
@@ -870,12 +861,10 @@ async function startServer() {
     try {
       const from = req.query.from;
       const to = req.query.to;
-      if (!from || !to)
-        return res.status(400).json({ error: "Missing from or to query parameters (ISO strings expected)" });
+      if (!from || !to) return res.status(400).json({ error: "Missing from or to query parameters (ISO strings expected)" });
       const start = new Date(from);
       const end = new Date(to);
-      if (isNaN(start.getTime()) || isNaN(end.getTime()))
-        return res.status(400).json({ error: "Invalid date format for from/to" });
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) return res.status(400).json({ error: "Invalid date format for from/to" });
       const entries = await prisma_default.intakeEntry.findMany({ where: { timestamp: { gte: start, lt: end }, isDiscarded: false } });
       const totalCost = entries.reduce((s, e) => s + (e.calculatedCost ?? 0), 0);
       const totalKg = entries.reduce((s, e) => s + (e.quantityKg ?? 0), 0);
@@ -883,8 +872,7 @@ async function startServer() {
       const bySupplierMap = {};
       for (const e of entries) {
         const key = e.supplierId;
-        if (!bySupplierMap[key])
-          bySupplierMap[key] = { supplierId: e.supplierId, supplierName: e.supplierName, totalCost: 0, totalKg: 0 };
+        if (!bySupplierMap[key]) bySupplierMap[key] = { supplierId: e.supplierId, supplierName: e.supplierName, totalCost: 0, totalKg: 0 };
         bySupplierMap[key].totalCost += e.calculatedCost ?? 0;
         bySupplierMap[key].totalKg += e.quantityKg ?? 0;
       }
@@ -896,8 +884,7 @@ async function startServer() {
   });
   app.post("/api/intake-entries", async (req, res) => {
     const body = req.body;
-    if (!body.supplierId || !body.timestamp)
-      return res.status(400).json({ error: "Missing supplierId or timestamp" });
+    if (!body.supplierId || !body.timestamp) return res.status(400).json({ error: "Missing supplierId or timestamp" });
     try {
       const ts = new Date(body.timestamp);
       const year = ts.getFullYear();
@@ -943,8 +930,7 @@ async function startServer() {
     const id = req.params.id;
     try {
       const data = { ...req.body };
-      if (data.timestamp)
-        data.timestamp = new Date(data.timestamp);
+      if (data.timestamp) data.timestamp = new Date(data.timestamp);
       const ts = data.timestamp ? new Date(data.timestamp) : null;
       if (data.supplierId && ts) {
         const year = ts.getFullYear();
@@ -984,13 +970,11 @@ async function startServer() {
   });
   app.post("/api/output-entries", async (req, res) => {
     const body = req.body;
-    if (!body.productId || !body.timestamp)
-      return res.status(400).json({ error: "Missing productId or timestamp" });
+    if (!body.productId || !body.timestamp) return res.status(400).json({ error: "Missing productId or timestamp" });
     try {
       const product = await prisma_default.product.findUnique({ where: { id: body.productId } });
       const parsed = parsePackagingString(body.packagingString || "", product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
-      if (anyFractional(parsed))
-        return res.status(400).json({ error: "Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose." });
+      if (anyFractional(parsed)) return res.status(400).json({ error: "Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose." });
       const created = await prisma_default.outputEntry.create({ data: {
         productId: body.productId,
         batchId: body.batchId || "",
@@ -1011,12 +995,10 @@ async function startServer() {
     const id = req.params.id;
     try {
       const existing = await prisma_default.outputEntry.findUnique({ where: { id } });
-      if (!existing)
-        return res.status(404).json({ error: "Not found" });
+      if (!existing) return res.status(404).json({ error: "Not found" });
       const product = await prisma_default.product.findUnique({ where: { id: existing.productId } });
       const parsed = parsePackagingString(req.body.packagingString || existing.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
-      if (anyFractional(parsed))
-        return res.status(400).json({ error: "Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose." });
+      if (anyFractional(parsed)) return res.status(400).json({ error: "Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose." });
       const updated = await prisma_default.outputEntry.update({ where: { id }, data: {
         packagingString: req.body.packagingString ?? existing.packagingString,
         pallets: parsed.pallets,
@@ -1039,8 +1021,7 @@ async function startServer() {
   });
   app.post("/api/dispatch-entries", async (req, res) => {
     const b = req.body;
-    if (!b.productId || b.quantityKg == null)
-      return res.status(400).json({ error: "Missing productId or quantityKg" });
+    if (!b.productId || b.quantityKg == null) return res.status(400).json({ error: "Missing productId or quantityKg" });
     try {
       const created = await prisma_default.dispatchEntry.create({ data: {
         date: b.date ? new Date(b.date) : /* @__PURE__ */ new Date(),
@@ -1069,8 +1050,7 @@ async function startServer() {
   app.put("/api/dispatch-entries/:id", async (req, res) => {
     try {
       const data = { ...req.body };
-      if (data.date)
-        data.date = new Date(data.date);
+      if (data.date) data.date = new Date(data.date);
       if (typeof data.orderedQuantityKg === "number") {
         const parent = await prisma_default.dispatchEntry.findUnique({ where: { id: req.params.id }, include: { shipments: true } });
         const shipped = parent ? (parent.shipments || []).reduce((acc, s) => acc + (s.quantityKg || 0), 0) : 0;
@@ -1096,12 +1076,10 @@ async function startServer() {
   app.post("/api/dispatch-entries/:id/shipments", async (req, res) => {
     const dispatchId = req.params.id;
     const s = req.body;
-    if (!s.quantityKg)
-      return res.status(400).json({ error: "Missing quantityKg" });
+    if (!s.quantityKg) return res.status(400).json({ error: "Missing quantityKg" });
     try {
       const parent = await prisma_default.dispatchEntry.findUnique({ where: { id: dispatchId }, include: { shipments: true } });
-      if (!parent)
-        return res.status(404).json({ error: "Dispatch not found" });
+      if (!parent) return res.status(404).json({ error: "Dispatch not found" });
       const product = await prisma_default.product.findUnique({ where: { id: s.productId ?? void 0 } });
       const parsed = s.packagingString ? parsePackagingString(s.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850) : { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0, isValid: false };
       if (parsed.isValid && anyFractional(parsed)) {
@@ -1160,11 +1138,9 @@ async function startServer() {
     const body = req.body;
     try {
       const existing = await prisma_default.dispatchShipment.findUnique({ where: { id: shipmentId } });
-      if (!existing)
-        return res.status(404).json({ error: "Shipment not found" });
+      if (!existing) return res.status(404).json({ error: "Shipment not found" });
       const dispatchEntry = await prisma_default.dispatchEntry.findUnique({ where: { id } });
-      if (!dispatchEntry)
-        return res.status(404).json({ error: "Dispatch not found" });
+      if (!dispatchEntry) return res.status(404).json({ error: "Dispatch not found" });
       const product = await prisma_default.product.findUnique({ where: { id: dispatchEntry.productId } });
       let parsed = { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0, isValid: false };
       if (typeof body.packagingString === "string" && body.packagingString.trim() !== "") {
@@ -1172,8 +1148,7 @@ async function startServer() {
         const norm2 = normalizePackagingString2(body.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
         const { parsePackagingString: parsePackagingString2 } = await Promise.resolve().then(() => (init_parser(), parser_exports));
         parsed = parsePackagingString2(norm2.normalized, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
-        if (parsed.isValid && anyFractional(parsed))
-          return res.status(400).json({ error: "Fractional unit counts in shipment packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose." });
+        if (parsed.isValid && anyFractional(parsed)) return res.status(400).json({ error: "Fractional unit counts in shipment packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose." });
       }
       const finalQty = parsed.isValid && parsed.totalWeight > 0 ? parsed.totalWeight : body.quantityKg ?? existing.quantityKg;
       const parent = await prisma_default.dispatchEntry.findUnique({ where: { id }, include: { shipments: true } });

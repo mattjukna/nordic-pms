@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "sqlserver"
-  url      = env("DATABASE_URL")
 }
 
 model Supplier {
@@ -41,6 +40,7 @@ model SupplierPricingPeriod {
   createdAt            DateTime @default(now())
 
   @@unique([supplierId, periodStart])
+  @@index([supplierId])
   @@index([periodStart])
 }
 
@@ -92,6 +92,7 @@ model BuyerContract {
 
   @@unique([buyerId, contractNumber])
   @@index([productId])
+  @@index([buyerId])
 }
 
 model IntakeEntry {
@@ -127,6 +128,7 @@ model IntakeTag {
   tag           String
 
   @@unique([intakeEntryId, tag])
+  @@index([tag])
 }
 
 model OutputEntry {
@@ -149,8 +151,8 @@ model OutputEntry {
 }
 
 model DispatchEntry {
-  id   String   @id @default(cuid())
-  date DateTime
+  id       String   @id @default(cuid())
+  date     DateTime
 
   buyerId String?
   buyer   Buyer?  @relation(fields: [buyerId], references: [id], onDelete: SetNull)
@@ -180,6 +182,7 @@ model DispatchEntry {
   @@index([date])
   @@index([status])
   @@index([productId])
+  @@index([buyerId])
 }
 
 model DispatchShipment {
@@ -197,6 +200,9 @@ model DispatchShipment {
   bigBags     Float?
   tanks       Float?
   totalWeight Float?
+
+  @@index([dispatchEntryId])
+  @@index([date])
 }
 
 model AuditLog {
