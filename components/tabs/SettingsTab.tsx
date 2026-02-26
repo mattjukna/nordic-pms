@@ -538,7 +538,7 @@ export const SettingsTab: React.FC = () => {
               <InputField placeholder="Country*" value={newSupplier.country} onChange={e => setNewSupplier({...newSupplier, country: e.target.value})} />
               <InputField placeholder="Address Line 1*" value={newSupplier.addressLine1} onChange={e => setNewSupplier({...newSupplier, addressLine1: e.target.value})} />
               <InputField placeholder="Address Line 2" value={newSupplier.addressLine2} onChange={e => setNewSupplier({...newSupplier, addressLine2: e.target.value})} />
-              <InputField type="number" placeholder="Quota (kg)" value={newSupplier.contractQuota} onChange={e => setNewSupplier({...newSupplier, contractQuota: e.target.value})} />
+              <InputField type="number" placeholder="Monthly Quota (kg)" value={newSupplier.contractQuota} onChange={e => setNewSupplier({...newSupplier, contractQuota: e.target.value})} />
               <div className="col-span-2">
                  <label className="text-xs text-slate-500 font-bold ml-1">Created On*</label>
                  <InputField type="date" value={newSupplier.createdOn} onChange={e => setNewSupplier({...newSupplier, createdOn: e.target.value})} />

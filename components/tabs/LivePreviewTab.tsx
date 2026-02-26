@@ -59,7 +59,7 @@ export const LivePreviewTab: React.FC = () => {
       const currentMonthEntries = intakeEntries.filter(e => e.supplierId === supplier.id && e.timestamp >= startOfMonth && !e.isDiscarded);
       const currentMonthTotal = currentMonthEntries.reduce((sum, e) => sum + e.quantityKg, 0);
       
-      const monthlyQuota = supplier.contractQuota / 12; // Assuming annual quota
+      const monthlyQuota = supplier.contractQuota || 1; // Treat contractQuota as Monthly Quota; fallback to 1 to prevent division by zero
       const quotaProgress = (currentMonthTotal / monthlyQuota) * 100;
       
       // Quota Health Check
