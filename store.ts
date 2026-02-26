@@ -112,6 +112,48 @@ const calculateMilkCost = (quantity: number, fat: number, protein: number, suppl
   return quantity * price;
 };
 
+// Parsers: convert incoming ISO date strings to epoch ms for frontend
+const parseSupplier = (s: any): Supplier => ({
+  ...s,
+  createdOn: s?.createdOn ? new Date(s.createdOn).getTime() : null,
+});
+
+const parseBuyerContract = (c: any): BuyerContract => ({
+  ...c,
+  startDate: c?.startDate ? new Date(c.startDate).getTime() : null,
+  endDate: c?.endDate ? new Date(c.endDate).getTime() : null,
+});
+
+const parseBuyer = (b: any): Buyer => ({
+  ...b,
+  createdOn: b?.createdOn ? new Date(b.createdOn).getTime() : null,
+  contracts: Array.isArray(b.contracts) ? b.contracts.map(parseBuyerContract) : []
+});
+
+const parseIntakeEntry = (i: any): IntakeEntry => ({
+  ...i,
+  timestamp: i?.timestamp ? new Date(i.timestamp).getTime() : null,
+  tags: Array.isArray(i.tags) ? i.tags : []
+});
+
+const parseOutputEntry = (o: any): OutputEntry => ({
+  ...o,
+  timestamp: o?.timestamp ? new Date(o.timestamp).getTime() : null,
+  parsed: o?.parsed ? { ...o.parsed } : { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0 }
+});
+
+const parseDispatchShipment = (s: any): any => ({
+  ...s,
+  date: s?.date ? new Date(s.date).getTime() : null,
+});
+
+const parseDispatchEntry = (d: any): DispatchEntry => ({
+  ...d,
+  date: d?.date ? new Date(d.date).getTime() : null,
+  shipments: Array.isArray(d.shipments) ? d.shipments.map(parseDispatchShipment) : []
+});
+
+
 async function api<T>(url: string, opts?: RequestInit): Promise<T> {
   return apiFetch(url, opts) as Promise<T>;
 }
@@ -167,13 +209,13 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const data = await api<any>('/api/bootstrap');
       set(() => ({
-        suppliers: (data.suppliers || []).map((s: any) => ({ ...s })),
-        buyers: (data.buyers || []).map((b: any) => ({ ...b, contracts: b.contracts?.map((c: any) => ({ ...c })) || [] })),
+        suppliers: (data.suppliers || []).map((s: any) => parseSupplier(s)),
+        buyers: (data.buyers || []).map((b: any) => parseBuyer(b)),
         products: data.products || [],
         milkTypes: data.milkTypes || [],
-        intakeEntries: (data.intakeEntries || []).map((i: any) => ({ ...i })),
-        outputEntries: (data.outputEntries || []).map((o: any) => ({ ...o })),
-        dispatchEntries: (data.dispatchEntries || []).map((d: any) => ({ ...d })),
+        intakeEntries: (data.intakeEntries || []).map((i: any) => parseIntakeEntry(i)),
+        outputEntries: (data.outputEntries || []).map((o: any) => parseOutputEntry(o)),
+        dispatchEntries: (data.dispatchEntries || []).map((d: any) => parseDispatchEntry(d)),
         isHydrating: false
       }));
     } catch (err: any) {
@@ -216,12 +258,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   addSupplier: async (supplier) => {
     const created = await api<Supplier>('/api/suppliers', { method: 'POST', body: JSON.stringify(supplier) });
-    set((state) => ({ suppliers: [created, ...state.suppliers] }));
+    set((state) => ({ suppliers: [parseSupplier(created), ...state.suppliers] }));
   },
 
   updateSupplier: async (id, updates) => {
     const updated = await api<Supplier>(`/api/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
-    set((state) => ({ suppliers: state.suppliers.map(s => s.id === id ? { ...s, ...updated } : s) }));
+    const parsed = parseSupplier(updated);
+    set((state) => ({ suppliers: state.suppliers.map(s => s.id === id ? { ...s, ...parsed } : s) }));
   },
 
   removeSupplier: async (id) => {
@@ -231,12 +274,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   addBuyer: async (buyer) => {
     const created = await api<Buyer>('/api/buyers', { method: 'POST', body: JSON.stringify(buyer) });
-    set((state) => ({ buyers: [created, ...state.buyers] }));
+    set((state) => ({ buyers: [parseBuyer(created), ...state.buyers] }));
   },
 
   updateBuyer: async (id, updates) => {
     const updated = await api<Buyer>(`/api/buyers/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
-    set((state) => ({ buyers: state.buyers.map(b => b.id === id ? { ...b, ...updated } : b) }));
+    set((state) => ({ buyers: state.buyers.map(b => b.id === id ? { ...b, ...parseBuyer(updated) } : b) }));
   },
 
   removeBuyer: async (id) => {
@@ -246,12 +289,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   addContract: async (buyerId, contract) => {
     const created = await api<BuyerContract>(`/api/buyers/${buyerId}/contracts`, { method: 'POST', body: JSON.stringify(contract) });
-    set((state) => ({ buyers: state.buyers.map(b => b.id === buyerId ? { ...b, contracts: [...(b.contracts || []), created] } : b) }));
+    const parsed = parseBuyerContract(created as any);
+    set((state) => ({ buyers: state.buyers.map(b => b.id === buyerId ? { ...b, contracts: [...(b.contracts || []), parsed] } : b) }));
   },
 
   updateContract: async (id, updates) => {
     const updated = await api<BuyerContract>(`/api/contracts/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
-    set((state) => ({ buyers: state.buyers.map(b => ({ ...b, contracts: b.contracts?.map(c => c.id === id ? { ...c, ...updated } : c) || [] })) }));
+    const parsed = parseBuyerContract(updated as any);
+    set((state) => ({ buyers: state.buyers.map(b => ({ ...b, contracts: b.contracts?.map(c => c.id === id ? { ...c, ...parsed } : c) || [] })) }));
   },
 
   removeContract: async (id) => {
@@ -290,7 +335,7 @@ export const useStore = create<AppState>((set, get) => ({
     const calculatedCost = calculateMilkCost(entry.quantityKg, entry.fatPct, entry.proteinPct, supplier, state.globalConfig);
     const payload = { ...entry, calculatedCost, tags: entry.tags || [] };
     const created = await api<IntakeEntry>('/api/intake-entries', { method: 'POST', body: JSON.stringify(payload) });
-    set((s) => ({ intakeEntries: [{ ...created }, ...s.intakeEntries] }));
+    set((s) => ({ intakeEntries: [parseIntakeEntry(created), ...s.intakeEntries] }));
   },
 
   updateIntakeEntry: async (id, updates) => {
@@ -300,7 +345,7 @@ export const useStore = create<AppState>((set, get) => ({
     const calculatedCost = calculateMilkCost((updates.quantityKg ?? existing?.quantityKg) || 0, (updates.fatPct ?? existing?.fatPct) || 0, (updates.proteinPct ?? existing?.proteinPct) || 0, supplier, state.globalConfig);
     const payload = { ...updates, calculatedCost, tags: (updates as any).tags ?? undefined };
     const updated = await api<IntakeEntry>(`/api/intake-entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
-    set((s) => ({ intakeEntries: s.intakeEntries.map(i => i.id === id ? { ...i, ...updated } : i), editingIntakeId: null }));
+    set((s) => ({ intakeEntries: s.intakeEntries.map(i => i.id === id ? { ...i, ...parseIntakeEntry(updated) } : i), editingIntakeId: null }));
   },
 
   toggleIntakeDiscard: async (id) => {
@@ -332,12 +377,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   addOutputEntry: async (payload) => {
     const created = await api<OutputEntry>('/api/output-entries', { method: 'POST', body: JSON.stringify({ ...payload, timestamp: Date.now() }) });
-    set((s) => ({ outputEntries: [{ ...created }, ...s.outputEntries] }));
+    set((s) => ({ outputEntries: [parseOutputEntry(created), ...s.outputEntries] }));
   },
 
   updateOutputEntry: async (id, packagingString) => {
     const updated = await api<OutputEntry>(`/api/output-entries/${id}`, { method: 'PUT', body: JSON.stringify({ packagingString }) });
-    set((s) => ({ outputEntries: s.outputEntries.map(e => e.id === id ? { ...e, ...updated } : e), editingOutputId: null }));
+    set((s) => ({ outputEntries: s.outputEntries.map(e => e.id === id ? { ...e, ...parseOutputEntry(updated) } : e), editingOutputId: null }));
   },
 
   removeOutputEntry: async (id) => {
@@ -347,12 +392,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   addDispatchEntry: async (entry) => {
     const created = await api<DispatchEntry>('/api/dispatch-entries', { method: 'POST', body: JSON.stringify(entry) });
-    set((s) => ({ dispatchEntries: [{ ...created }, ...s.dispatchEntries] }));
+    set((s) => ({ dispatchEntries: [parseDispatchEntry(created), ...s.dispatchEntries] }));
   },
 
   updateDispatchEntry: async (id, updates) => {
     const updated = await api<DispatchEntry>(`/api/dispatch-entries/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
-    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === id ? { ...d, ...updated } : d) }));
+    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === id ? { ...d, ...parseDispatchEntry(updated) } : d) }));
   },
 
   removeDispatchEntry: async (id) => {
@@ -362,17 +407,17 @@ export const useStore = create<AppState>((set, get) => ({
 
   addDispatchShipment: async (dispatchId, payload) => {
     const updated = await api<DispatchEntry>(`/api/dispatch-entries/${dispatchId}/shipments`, { method: 'POST', body: JSON.stringify(payload) });
-    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? { ...updated } : d) }));
+    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? parseDispatchEntry(updated) : d) }));
   },
 
   removeDispatchShipment: async (dispatchId, shipmentId) => {
     const updated = await api<DispatchEntry>(`/api/dispatch-entries/${dispatchId}/shipments/${shipmentId}`, { method: 'DELETE' });
-    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? { ...updated } : d) }));
+    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? parseDispatchEntry(updated) : d) }));
   },
 
   updateDispatchShipment: async (dispatchId, shipmentId, payload) => {
     const updated = await api<DispatchEntry>(`/api/dispatch-entries/${dispatchId}/shipments/${shipmentId}`, { method: 'PUT', body: JSON.stringify(payload) });
-    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? { ...updated } : d) }));
+    set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? parseDispatchEntry(updated) : d) }));
   },
 
   generateAIInsights: async () => {

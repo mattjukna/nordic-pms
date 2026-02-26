@@ -20,7 +20,8 @@ export interface Supplier {
   country: string;
   addressLine1: string;
   addressLine2: string;
-  createdOn: number;
+  createdOn: number | null;
+  
   // Financial Fields
   basePricePerKg: number; // Base price per kg of raw milk (e.g. 0.32)
   normalMilkPricePerKg?: number; // Optional normal milk price per kg
@@ -37,8 +38,8 @@ export interface BuyerContract {
   productId: string; // Contracts are usually specific to a product
   pricePerKg: number;
   agreedAmountKg: number; // New field: Agreed amount in kg
-  startDate: number;
-  endDate: number;
+  startDate: number | null;
+  endDate: number | null;
 }
 
 export interface Buyer {
@@ -50,7 +51,7 @@ export interface Buyer {
   country: string;
   addressLine1: string;
   addressLine2: string;
-  createdOn: number;
+  createdOn: number | null;
   contracts: BuyerContract[];
 }
 
@@ -78,7 +79,8 @@ export interface IntakeEntry {
   isEcological: boolean; // New field for Red/Black font distinction
   tags: string[]; // e.g., #HighAcid
   note: string;
-  timestamp: number;
+  timestamp: number | null;
+  
   // Financials
   calculatedCost: number; // Total cost of this load in EUR
   isTempAlertDismissed?: boolean; // New field to track if alert was dismissed
@@ -97,12 +99,12 @@ export interface OutputEntry {
     totalWeight: number;
   };
   destination: 'Warehouse' | 'Pieno Žvaigždė' | 'Export';
-  timestamp: number;
+  timestamp: number | null;
 }
 
 export interface DispatchShipment {
   id: string;
-  date: number;
+  date: number | null;
   quantityKg: number;
   batchId?: string;
   note?: string;
@@ -117,7 +119,7 @@ export interface DispatchShipment {
 
 export interface DispatchEntry {
   id: string;
-  date: number;
+  date: number | null;
   buyer: string;
   contractNumber?: string; // Track which contract was used
   productId: string;
@@ -151,12 +153,12 @@ export interface Alert {
   id: string;
   type: 'warning' | 'danger' | 'info';
   message: string;
-  timestamp: number;
+  timestamp: number | null;
 }
 
 export interface ProductionLogEntry {
   id: string;
-  timestamp: number;
+  timestamp: number | null;
   batchId?: string;
   productId: string;
   productName: string;
