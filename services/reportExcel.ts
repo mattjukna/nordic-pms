@@ -167,19 +167,31 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
   // Accounting Overview (daily rows) - simple implementation
   if (report === 'full' || report === 'accounting') {
     const sheet = workbook.addWorksheet('Accounting Overview');
+    // total monthly quota across all suppliers
+    const suppliers = await prisma.supplier.findMany();
+    const totalMonthlyQuota = suppliers.reduce((s: number, sup: any) => s + (sup.contractQuota || 0), 0);
     // build product columns
     const productNames = Array.from(new Set(outputEntries.map(o => o.productId || 'Unknown'))).slice(0, 20);
     const headers: { header: string; key: string; width?: number }[] = [ { header: 'Date', key: 'date', width: 14 } ];
     for (const p of productNames) headers.push({ header: String(p), key: `prod_${p}`, width: 12 });
     headers.push({ header: 'Total Intake Kg', key: 'intake', width: 14 });
+    // Add monthly quota and quota reached columns
+    headers.push({ header: 'Monthly Quota (kg)', key: 'monthlyQuota', width: 16 });
+    headers.push({ header: 'Quota Reached (%)', key: 'quotaReached', width: 14 });
     addHeader(sheet, headers);
 
     const days = Object.keys(dailyMap).sort();
+    let cumulativeIntake = 0;
     for (const day of days) {
       const row: any = { date: day };
       const outputs = dailyMap[day].outputs;
       for (const p of productNames) row[`prod_${p}`] = outputs[p] || 0;
       row.intake = dailyMap[day].intakeKg || 0;
+      cumulativeIntake += row.intake || 0;
+      // monthlyQuota repeated per row (overall total for the month)
+      row.monthlyQuota = totalMonthlyQuota || 0;
+      // quotaReached as fraction (0..1) so Excel percent format displays correctly
+      row.quotaReached = totalMonthlyQuota > 0 ? (cumulativeIntake / totalMonthlyQuota) : 0;
       sheet.addRow(row);
     }
     // totals row with formulas
@@ -190,6 +202,10 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
       const colLetter = sheet.getColumn(c).letter;
       totalRow.getCell(c).value = { formula: `SUM(${colLetter}2:${colLetter}${sheet.rowCount - 1})` } as any;
     }
+    // number formats for new columns
+    sheet.getColumn('intake').numFmt = '#,##0';
+    sheet.getColumn('monthlyQuota').numFmt = '#,##0';
+    sheet.getColumn('quotaReached').numFmt = '0.00%';
   }
 
   const buf = await workbook.xlsx.writeBuffer();
