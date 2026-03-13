@@ -1,4 +1,5 @@
 import path from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import cors from 'cors';
 import prisma from './services/prisma';
@@ -7,6 +8,9 @@ import { parsePackagingString } from './utils/parser';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
 import { buildMonthlyWorkbook } from './services/reportExcel';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // --- Mapping helpers: convert Prisma rows into frontend DTO shapes defined in types.ts ---
 const mapDate = (d: Date | string | number | null | undefined): number | null => {
@@ -905,14 +909,15 @@ async function startServer() {
         app.use(vite.middlewares);
     } else {
         // Serve static files in production and fallback to index.html for SPA routes
-        const distPath = path.resolve('dist');
+        const distPath = path.join(__dirname, '../dist');
+        const indexPath = path.join(distPath, 'index.html');
         app.use(express.static(distPath));
 
         // Fallback for client-side routing: serve index.html for any route that is
         // not /api or /config (and their subpaths). Use a RegExp compatible with
         // Express 5 so '*' is not treated as a parameter name.
         app.get(/^(?!\/(api|config)(\/|$)).*/, (req, res) => {
-            return res.sendFile(path.resolve(distPath, 'index.html'));
+            return res.sendFile(indexPath);
         });
     }
 

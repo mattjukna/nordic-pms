@@ -27,9 +27,13 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
+        env:
+          PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
         run: npx prisma generate
 
       - name: Build
+        env:
+          PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
         run: npm run build
 
       - name: Run tests
@@ -38,20 +42,28 @@ jobs:
       - name: Prune dev dependencies
         run: npm prune --omit=dev
 
-      - name: Pack production node_modules
-        run: tar -czf node_modules.tar.gz -C node_modules .
+      - name: Stage deployment payload
+        run: |
+          rm -rf deploy-package
+          mkdir -p deploy-package
+          cp package.json deploy-package/
+          cp package-lock.json deploy-package/
+          cp -R dist deploy-package/dist
+          cp -R dist-server deploy-package/dist-server
+          cp -R node_modules deploy-package/node_modules
+
+      - name: Archive deployment payload
+        run: |
+          cd deploy-package
+          zip -r ../release.zip .
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: node-app
           path: |
-            dist/**
-            dist-server/**
-            package.json
-            package-lock.json
-            prisma/**
-            node_modules.tar.gz
+            release.zip
+          if-no-files-found: error
 
   deploy:
     runs-on: ubuntu-latest
@@ -79,5 +91,5 @@ jobs:
         with:
           app-name: 'nordic-pms-prod-2026'
           resource-group: 'rg-nordic-pms-prod'
-          package: .
+          package: release.zip
           
