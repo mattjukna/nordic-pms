@@ -29,7 +29,7 @@ jobs:
       - name: Generate Prisma client
         env:
           PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
-        run: npx prisma generate
+        run: npx prisma generate --schema nordic-backend/prisma/schema.prisma
 
       - name: Build
         env:
