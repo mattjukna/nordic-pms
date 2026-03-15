@@ -13,6 +13,64 @@ const InputField = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
   />
 );
 
+const FormField: React.FC<{
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}> = ({ label, className = '', children }) => (
+  <div className={`flex flex-col gap-1 ${className}`}>
+    <label className="text-xs font-bold text-slate-500 ml-1">{label}</label>
+    {children}
+  </div>
+);
+
+type ProductFormState = {
+  id: string;
+  name: string;
+  details: string;
+  defaultPalletWeight: string;
+  defaultBagWeight: string;
+  proteinTargetPct: string;
+  yieldFactor: string;
+};
+
+const EMPTY_PRODUCT_FORM: ProductFormState = {
+  id: '',
+  name: '',
+  details: '',
+  defaultPalletWeight: '',
+  defaultBagWeight: '',
+  proteinTargetPct: '',
+  yieldFactor: ''
+};
+
+const parseProductNumber = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const parsed = parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const mapProductToForm = (product: Product): ProductFormState => ({
+  id: product.id,
+  name: product.name,
+  details: product.details,
+  defaultPalletWeight: product.defaultPalletWeight?.toString() ?? '',
+  defaultBagWeight: product.defaultBagWeight?.toString() ?? '',
+  proteinTargetPct: product.proteinTargetPct?.toString() ?? '',
+  yieldFactor: product.yieldFactor?.toString() ?? ''
+});
+
+const mapFormToProduct = (form: ProductFormState): Product => ({
+  id: form.id.trim(),
+  name: form.name.trim(),
+  details: form.details.trim(),
+  defaultPalletWeight: parseProductNumber(form.defaultPalletWeight),
+  defaultBagWeight: parseProductNumber(form.defaultBagWeight),
+  proteinTargetPct: parseProductNumber(form.proteinTargetPct),
+  yieldFactor: parseProductNumber(form.yieldFactor)
+});
+
 export const SettingsTab: React.FC = () => {
   const { 
     suppliers, addSupplier, updateSupplier, removeSupplier, 
@@ -79,15 +137,7 @@ export const SettingsTab: React.FC = () => {
 
   // Product Form State
   const [showProductForm, setShowProductForm] = useState(false);
-  const [newProduct, setNewProduct] = useState<Product>({
-    id: '',
-    name: '',
-    details: '',
-    defaultPalletWeight: 750,
-    defaultBagWeight: 1000,
-    proteinTargetPct: 0,
-    yieldFactor: 0
-  });
+  const [newProduct, setNewProduct] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
 
   // Milk Type Form State
   const [newMilkType, setNewMilkType] = useState('');
@@ -114,21 +164,23 @@ export const SettingsTab: React.FC = () => {
 
   // --- Logic for Products ---
   const confirmProductSubmit = () => {
-    if (!newProduct.id || !newProduct.name) return;
+    const productData = mapFormToProduct(newProduct);
+    if (!productData.id || !productData.name) return;
     setConfirmModal({
       isOpen: true,
       title: editingProductId ? "Update Product" : "Add New Product",
-      message: `Are you sure you want to ${editingProductId ? 'update' : 'add'} ${newProduct.name}?`,
+      message: `Are you sure you want to ${editingProductId ? 'update' : 'add'} ${productData.name}?`,
       action: executeProductSubmit,
       isDanger: false
     });
   };
 
   const executeProductSubmit = () => {
+    const productData = mapFormToProduct(newProduct);
     if (editingProductId) {
-      updateProduct(editingProductId, newProduct);
+      updateProduct(editingProductId, productData);
     } else {
-      addProduct(newProduct);
+      addProduct(productData);
     }
     resetProductForm();
   };
@@ -144,16 +196,14 @@ export const SettingsTab: React.FC = () => {
   };
 
   const resetProductForm = () => {
-    setNewProduct({
-      id: '', name: '', details: '', defaultPalletWeight: 750, defaultBagWeight: 1000, proteinTargetPct: 0, yieldFactor: 0
-    });
+    setNewProduct(EMPTY_PRODUCT_FORM);
     setShowProductForm(false);
     setEditingProductId(null);
   };
 
   const startEditProduct = (p: Product) => {
     setEditingProductId(p.id);
-    setNewProduct(p);
+    setNewProduct(mapProductToForm(p));
     setShowProductForm(true);
   };
 
@@ -755,15 +805,27 @@ export const SettingsTab: React.FC = () => {
                <button onClick={resetProductForm}><X size={14} className="text-slate-400 hover:text-red-500"/></button>
              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-              <InputField placeholder="Product ID (e.g. MPC85)*" value={newProduct.id} onChange={e => setNewProduct({...newProduct, id: e.target.value})} disabled={!!editingProductId} />
-              <InputField placeholder="Product Name*" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
-              <div className="col-span-2">
-                 <InputField placeholder="Details / Description" value={newProduct.details} onChange={e => setNewProduct({...newProduct, details: e.target.value})} />
-              </div>
-              <InputField type="number" placeholder="Pallet Weight (kg)" value={newProduct.defaultPalletWeight} onChange={e => setNewProduct({...newProduct, defaultPalletWeight: parseFloat(e.target.value) || 0})} />
-              <InputField type="number" placeholder="Bag Weight (kg)" value={newProduct.defaultBagWeight} onChange={e => setNewProduct({...newProduct, defaultBagWeight: parseFloat(e.target.value) || 0})} />
-              <InputField type="number" placeholder="Target Protein %" value={newProduct.proteinTargetPct} onChange={e => setNewProduct({...newProduct, proteinTargetPct: parseFloat(e.target.value) || 0})} />
-              <InputField type="number" step="0.001" placeholder="Yield Factor" value={newProduct.yieldFactor} onChange={e => setNewProduct({...newProduct, yieldFactor: parseFloat(e.target.value) || 0})} />
+              <FormField label="Product ID" className="md:col-span-1">
+                <InputField placeholder="e.g. MPC85*" value={newProduct.id} onChange={e => setNewProduct({...newProduct, id: e.target.value})} disabled={!!editingProductId} />
+              </FormField>
+              <FormField label="Product Name" className="md:col-span-1">
+                <InputField placeholder="Required*" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+              </FormField>
+              <FormField label="Details / Description" className="col-span-2">
+                 <InputField placeholder="Optional product notes" value={newProduct.details} onChange={e => setNewProduct({...newProduct, details: e.target.value})} />
+              </FormField>
+              <FormField label="Pallet Weight (kg)">
+                <InputField type="number" placeholder="e.g. 750" value={newProduct.defaultPalletWeight} onChange={e => setNewProduct({...newProduct, defaultPalletWeight: e.target.value})} />
+              </FormField>
+              <FormField label="Bag Weight (kg)">
+                <InputField type="number" placeholder="e.g. 1000" value={newProduct.defaultBagWeight} onChange={e => setNewProduct({...newProduct, defaultBagWeight: e.target.value})} />
+              </FormField>
+              <FormField label="Target Protein %">
+                <InputField type="number" placeholder="e.g. 85" value={newProduct.proteinTargetPct} onChange={e => setNewProduct({...newProduct, proteinTargetPct: e.target.value})} />
+              </FormField>
+              <FormField label="Yield Factor">
+                <InputField type="number" step="0.001" placeholder="e.g. 0.125" value={newProduct.yieldFactor} onChange={e => setNewProduct({...newProduct, yieldFactor: e.target.value})} />
+              </FormField>
             </div>
             <div className="flex gap-2">
               <button onClick={confirmProductSubmit} className="bg-amber-600 text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2">
