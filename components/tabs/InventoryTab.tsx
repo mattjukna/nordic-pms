@@ -8,6 +8,7 @@ import { parsePackagingString, normalizePackagingString, parsePackagingSegments 
 import { formatDate } from '../../utils/date';
 import { anyFractional } from '../../utils/wholeUnits';
 import { inferPackagingStringFromKg } from '../../utils/packagingNormalize';
+import { getPrimaryCompanyCode, parseCompanyCodes } from '../../utils/companyCodes';
 import { Package, Truck, ArrowUpRight, Box, Filter, Search, Calendar, ChevronDown, ChevronUp, FileText, Download, Scale, Layers, Tag, Calculator, CheckCircle2, Clock, Trash2, Check, Pencil, Plus, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 // autoptable has no types exposed here
@@ -36,6 +37,7 @@ export const InventoryTab: React.FC = () => {
   const [dispatchStatus, setDispatchStatus] = useState<'confirmed' | 'planned'>('confirmed');
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedBuyerId, setSelectedBuyerId] = useState('');
+  const [selectedBuyerCompanyCode, setSelectedBuyerCompanyCode] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(products[0]?.id || '');
   const [selectedContractId, setSelectedContractId] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -69,6 +71,7 @@ export const InventoryTab: React.FC = () => {
 
   // Derived: Current Buyer Object
   const currentBuyer = useMemo(() => buyers.find(b => b.id === selectedBuyerId), [buyers, selectedBuyerId]);
+  const currentBuyerCompanyCodes = useMemo(() => parseCompanyCodes(currentBuyer?.companyCode), [currentBuyer?.companyCode]);
   
   // Derived: Active Product Object
   const activeProduct = useMemo(() => products.find(p => p.id === selectedProduct), [selectedProduct, products]);
@@ -88,6 +91,17 @@ export const InventoryTab: React.FC = () => {
        }
     }
   }, [selectedContractId, availableContracts]);
+
+  useEffect(() => {
+    if (currentBuyerCompanyCodes.length === 0) {
+      if (selectedBuyerCompanyCode) setSelectedBuyerCompanyCode('');
+      return;
+    }
+
+    if (!selectedBuyerCompanyCode || !currentBuyerCompanyCodes.includes(selectedBuyerCompanyCode)) {
+      setSelectedBuyerCompanyCode(currentBuyerCompanyCodes[0]);
+    }
+  }, [currentBuyerCompanyCodes, selectedBuyerCompanyCode]);
 
   // Parse Packaging String automatically
   const parserPreview = useMemo(() => {
@@ -354,7 +368,10 @@ export const InventoryTab: React.FC = () => {
     // Construct Pending Data
     const pendingData = {
       date: new Date(dispatchDate).getTime(),
-      buyer: buyerName, 
+      buyer: buyerName,
+      buyerId: selectedBuyerId,
+      buyerName,
+      buyerCompanyCode: selectedBuyerCompanyCode || getPrimaryCompanyCode(currentBuyer?.companyCode) || undefined,
       productId: selectedProduct,
       contractNumber: contractNum,
       quantityKg: dispatchStatus === 'planned' ? qty : (editingDispatchId ? (dispatchEntries.find(e => e.id === editingDispatchId)?.quantityKg || 0) : 0), 
@@ -460,8 +477,9 @@ export const InventoryTab: React.FC = () => {
     setDispatchStatus(entry.status === 'completed' ? 'confirmed' : entry.status);
     setDispatchDate(new Date(entry.date).toISOString().split('T')[0]);
     
-    const buyer = buyers.find(b => b.name === entry.buyer);
+    const buyer = buyers.find(b => b.id === entry.buyerId) || buyers.find(b => b.name === entry.buyer);
     setSelectedBuyerId(buyer ? buyer.id : '');
+    setSelectedBuyerCompanyCode(entry.buyerCompanyCode || getPrimaryCompanyCode(buyer?.companyCode) || '');
     
     setSelectedProduct(entry.productId);
     
@@ -557,6 +575,7 @@ export const InventoryTab: React.FC = () => {
     setSelectedContractId('');
     setDispatchStatus('confirmed');
     setDispatchDate(new Date().toISOString().split('T')[0]);
+    setSelectedBuyerCompanyCode('');
     setShipmentQty('');
     setShipmentPkgString('');
     setShipmentNote('');
@@ -564,7 +583,8 @@ export const InventoryTab: React.FC = () => {
 
   const generateInvoice = (entry: typeof dispatchEntries[0]) => {
     const doc = new jsPDF();
-    const buyer = buyers.find(b => b.name === entry.buyer);
+    const buyer = buyers.find(b => b.id === entry.buyerId) || buyers.find(b => b.name === entry.buyer);
+    const invoiceCompanyCode = entry.buyerCompanyCode || getPrimaryCompanyCode(buyer?.companyCode) || '';
 
     // Header
     doc.setFontSize(22);
@@ -585,7 +605,7 @@ export const InventoryTab: React.FC = () => {
     if (buyer) {
       doc.text(buyer.addressLine1 || '', 14, 67);
       doc.text(buyer.country, 14, 72);
-      doc.text(`VAT: ${buyer.companyCode}`, 14, 77);
+      doc.text(`VAT: ${invoiceCompanyCode}`, 14, 77);
     }
 
     // Invoice Details
@@ -922,6 +942,8 @@ export const InventoryTab: React.FC = () => {
                     value={selectedBuyerId}
                     onChange={(e) => {
                          setSelectedBuyerId(e.target.value);
+                         const nextBuyer = buyers.find(b => b.id === e.target.value);
+                         setSelectedBuyerCompanyCode(getPrimaryCompanyCode(nextBuyer?.companyCode) || '');
                          setSelectedContractId(''); // Reset contract on buyer change
                          setPricePerKg('');
                     }}
@@ -929,6 +951,19 @@ export const InventoryTab: React.FC = () => {
                   >
                     {buyers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Company Code for Invoice</label>
+                  <select
+                    value={selectedBuyerCompanyCode}
+                    onChange={(e) => setSelectedBuyerCompanyCode(e.target.value)}
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    disabled={currentBuyerCompanyCodes.length <= 1}
+                  >
+                    {currentBuyerCompanyCodes.length === 0 && <option value="">No code available</option>}
+                    {currentBuyerCompanyCodes.map((code) => <option key={code} value={code}>{code}</option>)}
+                  </select>
+                  <div className="mt-1 text-[11px] text-slate-400">Used only on invoice PDF export.</div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">Product</label>

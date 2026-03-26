@@ -5,6 +5,7 @@ import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calendar, Globe, ChevronDown, ChevronUp, Pencil, Building2, Coins, FileText, CheckCircle, RotateCcw, Package, Droplets } from 'lucide-react';
 import { Supplier, Buyer, BuyerContract, Product } from '../../types';
+import { normalizeCompanyCodes } from '../../utils/companyCodes';
 
 const InputField = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
   <input 
@@ -240,12 +241,14 @@ export const SettingsTab: React.FC = () => {
 
   const executeSupplierSubmit = () => {
     if (!newSupplier.name || !newSupplier.routeGroup || !newSupplier.companyCode || !newSupplier.addressLine1 || !newSupplier.country || !newSupplier.createdOn) return;
+    const normalizedCompanyCode = normalizeCompanyCodes(newSupplier.companyCode);
+    if (!normalizedCompanyCode) return;
     
     const supplierData = {
       name: newSupplier.name,
       routeGroup: newSupplier.routeGroup,
       contractQuota: parseFloat(newSupplier.contractQuota) || 0,
-      companyCode: newSupplier.companyCode,
+      companyCode: normalizedCompanyCode,
       phoneNumber: newSupplier.phoneNumber,
       country: newSupplier.country,
       addressLine1: newSupplier.addressLine1,
@@ -333,10 +336,12 @@ export const SettingsTab: React.FC = () => {
 
   const executeBuyerSubmit = () => {
     if (!newBuyer.name || !newBuyer.companyCode || !newBuyer.addressLine1 || !newBuyer.country || !newBuyer.createdOn) return;
+    const normalizedCompanyCode = normalizeCompanyCodes(newBuyer.companyCode);
+    if (!normalizedCompanyCode) return;
     
     const buyerData = {
       name: newBuyer.name,
-      companyCode: newBuyer.companyCode,
+      companyCode: normalizedCompanyCode,
       phoneNumber: newBuyer.phoneNumber,
       country: newBuyer.country,
       addressLine1: newBuyer.addressLine1,
@@ -490,7 +495,7 @@ export const SettingsTab: React.FC = () => {
     const lower = supplierSearch.toLowerCase();
     return suppliers.filter(s => 
       s.name.toLowerCase().includes(lower) || 
-      s.companyCode.includes(lower) || 
+      s.companyCode.toLowerCase().includes(lower) || 
       s.routeGroup.toLowerCase().includes(lower)
     );
   }, [suppliers, supplierSearch]);
@@ -500,7 +505,7 @@ export const SettingsTab: React.FC = () => {
     const lower = buyerSearch.toLowerCase();
     return buyers.filter(b => 
       b.name.toLowerCase().includes(lower) || 
-      b.companyCode.includes(lower) || 
+      b.companyCode.toLowerCase().includes(lower) || 
       b.country.toLowerCase().includes(lower)
     );
   }, [buyers, buyerSearch]);
@@ -587,7 +592,10 @@ export const SettingsTab: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
               <InputField placeholder="Supplier Name*" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} />
               <InputField placeholder="Route Group (e.g. Kupiškio)*" value={newSupplier.routeGroup} onChange={e => setNewSupplier({...newSupplier, routeGroup: e.target.value})} />
-              <InputField placeholder="Company Code*" value={newSupplier.companyCode} onChange={e => setNewSupplier({...newSupplier, companyCode: e.target.value})} />
+              <div className="md:col-span-2">
+                <InputField placeholder="Company Code(s)* — separate multiple VAT codes with ; or ," value={newSupplier.companyCode} onChange={e => setNewSupplier({...newSupplier, companyCode: e.target.value})} />
+                <div className="mt-1 text-[11px] text-slate-400">Example: LT123456789; LT987654321</div>
+              </div>
               <InputField placeholder="Phone Number" value={newSupplier.phoneNumber} onChange={e => setNewSupplier({...newSupplier, phoneNumber: e.target.value})} />
               <InputField placeholder="Country*" value={newSupplier.country} onChange={e => setNewSupplier({...newSupplier, country: e.target.value})} />
               <InputField placeholder="Address Line 1*" value={newSupplier.addressLine1} onChange={e => setNewSupplier({...newSupplier, addressLine1: e.target.value})} />
@@ -664,7 +672,7 @@ export const SettingsTab: React.FC = () => {
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
               <tr>
                 <th className="p-3">Name</th>
-                <th className="p-3 hidden md:table-cell">Code</th>
+                <th className="p-3 hidden md:table-cell">Codes</th>
                 <th className="p-3 text-right">Route/Info</th>
                 <th className="p-3 text-center w-10"></th>
               </tr>
@@ -712,7 +720,7 @@ export const SettingsTab: React.FC = () => {
                                   <Building2 size={16} className="text-slate-400 shrink-0"/>
                                   <div>
                                     <div className="font-semibold text-slate-700">{s.name}</div>
-                                    <div className="text-slate-500 text-xs">Code: {s.companyCode}</div>
+                                    <div className="text-slate-500 text-xs">Codes: {s.companyCode}</div>
                                   </div>
                                </div>
                                <div className="flex gap-2">
@@ -938,7 +946,10 @@ export const SettingsTab: React.FC = () => {
               <div className="col-span-2">
                 <InputField placeholder="Buyer Name*" value={newBuyer.name} onChange={e => setNewBuyer({...newBuyer, name: e.target.value})} />
               </div>
-              <InputField placeholder="Company Code*" value={newBuyer.companyCode} onChange={e => setNewBuyer({...newBuyer, companyCode: e.target.value})} />
+              <div className="md:col-span-2">
+                <InputField placeholder="Company Code(s)* — separate multiple VAT codes with ; or ," value={newBuyer.companyCode} onChange={e => setNewBuyer({...newBuyer, companyCode: e.target.value})} />
+                <div className="mt-1 text-[11px] text-slate-400">Dispatch invoice PDF can use any one of these codes.</div>
+              </div>
               <InputField placeholder="Phone Number" value={newBuyer.phoneNumber} onChange={e => setNewBuyer({...newBuyer, phoneNumber: e.target.value})} />
               <InputField placeholder="Country*" value={newBuyer.country} onChange={e => setNewBuyer({...newBuyer, country: e.target.value})} />
               <InputField placeholder="Address Line 1*" value={newBuyer.addressLine1} onChange={e => setNewBuyer({...newBuyer, addressLine1: e.target.value})} />
@@ -1101,7 +1112,7 @@ export const SettingsTab: React.FC = () => {
                                    <Building2 size={16} className="text-slate-400 shrink-0"/>
                                    <div>
                                      <div className="font-semibold text-slate-700">{b.name}</div>
-                                     <div className="text-slate-500 text-xs">Code: {b.companyCode}</div>
+                                     <div className="text-slate-500 text-xs">Codes: {b.companyCode}</div>
                                    </div>
                                 </div>
                                 <div className="flex gap-2">

@@ -158,6 +158,7 @@ model DispatchEntry {
   buyer   Buyer?  @relation(fields: [buyerId], references: [id], onDelete: SetNull)
 
   buyerName      String
+  buyerCompanyCode String?
   contractNumber String?
 
   productId String

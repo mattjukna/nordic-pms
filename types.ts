@@ -15,7 +15,7 @@ export interface Supplier {
   routeGroup: string; // e.g. "Kupiškio grupė"
   contractQuota: number;
   // Extended Fields
-  companyCode: string;
+  companyCode: string; // One or more VAT/company codes, separated by '; '
   phoneNumber: string;
   country: string;
   addressLine1: string;
@@ -46,7 +46,7 @@ export interface Buyer {
   id: string;
   name: string;
   // Extended Fields
-  companyCode: string;
+  companyCode: string; // One or more VAT/company codes, separated by '; '
   phoneNumber: string;
   country: string;
   addressLine1: string;
@@ -121,6 +121,8 @@ export interface DispatchEntry {
   id: string;
   date: number | null;
   buyer: string;
+  buyerId?: string;
+  buyerCompanyCode?: string;
   contractNumber?: string; // Track which contract was used
   productId: string;
   quantityKg: number; // This will now represent the TOTAL SHIPPED amount if shipments exist, or the single amount if legacy.

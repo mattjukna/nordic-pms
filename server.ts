@@ -8,6 +8,7 @@ import { parsePackagingString } from './utils/parser';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
 import { buildMonthlyWorkbook } from './services/reportExcel';
+import { getPrimaryCompanyCode, normalizeCompanyCodes } from './utils/companyCodes';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -87,6 +88,8 @@ const toClientDispatch = (d: any) => ({
     id: d.id,
     date: mapDate(d.date),
     buyer: d.buyerName || '',
+    buyerId: d.buyerId ?? undefined,
+    buyerCompanyCode: d.buyerCompanyCode ?? undefined,
     contractNumber: d.contractNumber ?? undefined,
     productId: d.productId,
     quantityKg: d.quantityKg,
@@ -293,7 +296,7 @@ async function startServer() {
                 name: body.name,
                 routeGroup: body.routeGroup,
                 contractQuota: body.contractQuota ?? null,
-                companyCode: body.companyCode ?? null,
+                companyCode: normalizeCompanyCodes(body.companyCode),
                 phoneNumber: body.phoneNumber ?? null,
                 country: body.country ?? null,
                 addressLine1: body.addressLine1 ?? null,
@@ -317,6 +320,7 @@ async function startServer() {
             const data = { ...req.body };
             // ensure proper types
             if (data.createdOn) data.createdOn = new Date(data.createdOn);
+            if (Object.prototype.hasOwnProperty.call(data, 'companyCode')) data.companyCode = normalizeCompanyCodes(data.companyCode);
             const updated = await prisma.supplier.update({ where: { id }, data });
             void logAudit(req, { action: 'UPDATE', tableName: 'Supplier', recordId: updated.id, details: JSON.stringify(toClientSupplier(updated)) });
             res.json(toClientSupplier(updated));
@@ -339,7 +343,7 @@ async function startServer() {
         try {
             const created = await prisma.buyer.create({ data: {
                 name: b.name,
-                companyCode: b.companyCode ?? null,
+                companyCode: normalizeCompanyCodes(b.companyCode),
                 phoneNumber: b.phoneNumber ?? null,
                 country: b.country ?? null,
                 addressLine1: b.addressLine1 ?? null,
@@ -353,7 +357,9 @@ async function startServer() {
 
     app.put('/api/buyers/:id', async (req, res) => {
         try {
-            await prisma.buyer.update({ where: { id: req.params.id }, data: req.body });
+            const data = { ...req.body };
+            if (Object.prototype.hasOwnProperty.call(data, 'companyCode')) data.companyCode = normalizeCompanyCodes(data.companyCode);
+            await prisma.buyer.update({ where: { id: req.params.id }, data });
             const fetched = await prisma.buyer.findUnique({ where: { id: req.params.id }, include: { contracts: true } });
             res.json({ ...fetched, createdOn: mapDate(fetched?.createdOn), contracts: fetched?.contracts?.map((c: any) => ({ ...c, startDate: mapDate(c.startDate), endDate: mapDate(c.endDate) })) });
         } catch (err: any) { res.status(400).json({ error: err.message }); }
@@ -702,7 +708,8 @@ async function startServer() {
             const created = await prisma.dispatchEntry.create({ data: {
                 date: b.date ? new Date(b.date) : new Date(),
                 buyerId: b.buyerId ?? null,
-                buyerName: b.buyerName || '',
+                buyerName: b.buyerName || b.buyer || '',
+                buyerCompanyCode: normalizeCompanyCodes(b.buyerCompanyCode) ?? getPrimaryCompanyCode(b.companyCode) ?? null,
                 contractNumber: b.contractNumber ?? null,
                 productId: b.productId,
                 quantityKg: b.quantityKg,
@@ -727,6 +734,13 @@ async function startServer() {
         try {
             const data = { ...req.body };
             if (data.date) data.date = new Date(data.date);
+            if (Object.prototype.hasOwnProperty.call(data, 'buyer')) {
+                data.buyerName = data.buyer;
+                delete data.buyer;
+            }
+            if (Object.prototype.hasOwnProperty.call(data, 'buyerCompanyCode')) {
+                data.buyerCompanyCode = normalizeCompanyCodes(data.buyerCompanyCode) ?? null;
+            }
             // Prevent lowering orderedQuantityKg below already shipped total
             if (typeof data.orderedQuantityKg === 'number') {
                 const parent = await prisma.dispatchEntry.findUnique({ where: { id: req.params.id }, include: { shipments: true } });
