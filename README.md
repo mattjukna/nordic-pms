@@ -2,11 +2,9 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Nordic Proteins PM
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/12a4bb4e-88a0-4845-8cc7-36d8dc0ecb69
+This repository contains the Nordic Proteins production, stock, dispatch, and master-data app.
 
 ## Run Locally
 
@@ -15,7 +13,7 @@ View your app in AI Studio: https://ai.studio/apps/12a4bb4e-88a0-4845-8cc7-36d8d
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Configure the required authentication and backend environment variables.
 3. Run the app:
    `npm run dev`
 
@@ -33,6 +31,7 @@ Backend env vars:
 - `AAD_CLIENT_ID`
 - `AAD_TENANT_ID`
 - `AAD_ALLOWED_DOMAIN`
+- `CORS_ALLOWED_ORIGINS` (semicolon- or comma-separated allowlist; defaults to localhost)
 - `AUTH_DISABLED` (optional; set to `true` to bypass auth for local debugging)
 
 After installing dependencies, run `npm install` then `npm run dev` and open http://localhost:3000. The app will require Microsoft sign-in.
@@ -62,3 +61,10 @@ The importer reads `entities_master.csv` and, when present, supplements it with 
 - If no usable code is available, the importer falls back to normalized `name` matching.
 - Normalized names trim whitespace, collapse repeated spaces, and compare case-insensitively.
 - Ambiguous matches are logged and skipped instead of guessed.
+
+## Quality checks
+
+- Lint: `npm run lint`
+- Format check: `npm run format:check`
+- Tests: `npm run test`
+- Pilot hardening notes: [PILOT_HARDENING.md](PILOT_HARDENING.md)

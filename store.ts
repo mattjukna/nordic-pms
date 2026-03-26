@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { apiFetch } from './services/apiFetch';
 import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract } from './types';
 import { DEFAULT_CONFIG } from './constants';
+import { calculateMilkCost } from './utils/milkCost';
 
 interface AppState {
   activeTab: 'input' | 'preview' | 'trends' | 'ai' | 'inventory' | 'settings';
@@ -100,19 +101,6 @@ interface AppState {
 
   generateAIInsights: () => Promise<string>;
 }
-
-const calculateMilkCost = (quantity: number, fat: number, protein: number, supplier: Supplier | undefined, defaultConfig: GlobalConfig) => {
-  if (!supplier) return quantity * defaultConfig.defaultMilkBasePrice;
-
-  const fatDiff = fat - 4.0;
-  const protDiff = protein - 3.2;
-
-  let price = supplier.basePricePerKg ?? defaultConfig.defaultMilkBasePrice;
-  price += (fatDiff * 10) * (supplier.fatBonusPerPct ?? 0);
-  price += (protDiff * 10) * (supplier.proteinBonusPerPct ?? 0);
-  price = Math.max(0, price);
-  return quantity * price;
-};
 
 // Parsers: handle incoming data (could be ISO string or number) safely
 const parseDate = (d: any): number | null => {

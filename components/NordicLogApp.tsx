@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Factory, LayoutDashboard, BarChart3, Bot, FileInput, Package, Settings, Scale, Box, Layers } from 'lucide-react';
 import { useStore } from '../store';
 import { GlassCard } from './ui/GlassCard';
@@ -9,6 +9,7 @@ import { TrendsTab } from './tabs/TrendsTab';
 import { AITab } from './tabs/AITab';
 import { InventoryTab } from './tabs/InventoryTab';
 import { SettingsTab } from './tabs/SettingsTab';
+import { clearSessionEvent, readSessionEvent, SessionEvent, subscribeSessionEvent } from '../services/sessionEvents';
 
 const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) => {
   const activeTab = useStore((state) => state.activeTab);
@@ -17,6 +18,12 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
   const hydrateError = useStore((state) => state.hydrateError);
   const userSettings = useStore((state) => state.userSettings);
   const hydrateFromApi = useStore((state) => state.hydrateFromApi);
+  const [sessionEvent, setSessionEvent] = useState<SessionEvent | null>(null);
+
+  useEffect(() => {
+    setSessionEvent(readSessionEvent());
+    return subscribeSessionEvent((event) => setSessionEvent(event));
+  }, []);
 
   return (
     <div className={`${userSettings?.compactMode ? 'compact' : ''} w-full max-w-7xl mx-auto flex flex-col min-h-screen bg-slate-50`}>
@@ -48,8 +55,8 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
                 { id: 'preview', label: 'Live View', icon: LayoutDashboard },
                 { id: 'inventory', label: 'Stock', icon: Package },
                 { id: 'trends', label: 'Analytics', icon: BarChart3 },
-                { id: 'ai', label: 'AI', icon: Bot },
-                { id: 'settings', label: 'Database', icon: Settings },
+                { id: 'ai', label: 'Insights', icon: Bot },
+                { id: 'settings', label: 'Master Data', icon: Settings },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -71,6 +78,26 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
 
       {/* Main Content Area */}
       <main className="flex-1 relative px-2 md:px-4 pb-8">
+        {sessionEvent && (
+          <div className={`mb-4 rounded-xl border px-4 py-3 text-sm flex items-center justify-between gap-3 ${
+            sessionEvent.level === 'error'
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : sessionEvent.level === 'warning'
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-blue-50 border-blue-200 text-blue-800'
+          }`}>
+            <span>{sessionEvent.message}</span>
+            <button
+              onClick={() => {
+                clearSessionEvent();
+                setSessionEvent(null);
+              }}
+              className="text-xs font-semibold underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {isHydrating ? (
           <div className="p-6 text-center">Loading data...</div>
           ) : hydrateError ? (

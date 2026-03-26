@@ -9,9 +9,15 @@ import { SmartSelect } from '../ui/SmartSelect';
 import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, LayoutGrid, Calculator, Droplets, Factory, Ban } from 'lucide-react';
 import { parsePackagingString } from '../../utils/parser';
 import { anyFractional } from '../../utils/wholeUnits';
+import { buildIntakeTags, getIntakeWarnings } from '../../utils/intakeRules';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
+import { validateIntakeForm, validateOutputForm } from '../../utils/validation';
 
 // --- Smart Note Input Component ---
 const SUGGESTED_TAGS = ['#HighTemp', '#HighAcid', '#LowProtein', '#DamagedPackaging', '#LateArrival'];
+const INTAKE_DRAFT_KEY = 'nordic-pms-draft-intake';
+const OUTPUT_DRAFT_KEY = 'nordic-pms-draft-output';
 
 const SmartNoteInput: React.FC<{ 
   value: string; 
@@ -79,6 +85,15 @@ const SelectField = (props: React.SelectHTMLAttributes<HTMLSelectElement>) => (
     className={`w-full bg-white border border-slate-300 rounded-md px-3 py-2.5 md:py-2 text-base md:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${props.className || ''}`}
   />
 );
+
+const FieldHint: React.FC<{ message?: string; tone?: 'error' | 'warning' | 'muted' }> = ({ message, tone = 'error' }) => {
+  if (!message) return null;
+  return (
+    <div className={`mt-1 text-xs ${tone === 'error' ? 'text-red-600' : tone === 'warning' ? 'text-amber-600' : 'text-slate-400'}`}>
+      {message}
+    </div>
+  );
+};
 
 // --- Filter Component with Range ---
 interface FilterState {
@@ -216,6 +231,7 @@ export const InputTab: React.FC = () => {
   const [pkgString, setPkgString] = useState('');
   const [showWizard, setShowWizard] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const defaultBatchId = `MPC-${new Date().toISOString().slice(0,10)}`;
 
   // Supplier Options for SmartSelect
   const supplierOptions = useMemo(() => suppliers.map(s => ({
@@ -339,6 +355,68 @@ export const InputTab: React.FC = () => {
     if (!activeProduct) return null;
     return parsePackagingString(pkgString, activeProduct.defaultPalletWeight, activeProduct.defaultBagWeight);
   }, [pkgString, activeProduct]);
+  const intakeErrors = useMemo(() => validateIntakeForm({
+    supplierId: selectedSupplierId,
+    milkType,
+    intakeDate,
+    intakeKg,
+    fat,
+    protein,
+    ph,
+    temp,
+  }), [selectedSupplierId, milkType, intakeDate, intakeKg, fat, protein, ph, temp]);
+  const outputErrors = useMemo(() => validateOutputForm({
+    productId: selectedProductId,
+    batchId,
+    packagingString: pkgString,
+    parserPreview,
+  }), [selectedProductId, batchId, pkgString, parserPreview]);
+  const intakeWarnings = useMemo(() => {
+    const nextTemp = Number(temp);
+    const nextPh = Number(ph);
+    if (!Number.isFinite(nextTemp) || !Number.isFinite(nextPh)) return [];
+    return getIntakeWarnings({ tempCelsius: nextTemp, ph: nextPh });
+  }, [temp, ph]);
+  const hasIntakeChanges = Boolean(intakeKg || fat || protein || ph || temp || isEcological || note || tags.length || editingIntakeId);
+  const hasOutputChanges = Boolean(pkgString || editingOutputId || (batchId && batchId !== defaultBatchId));
+
+  useUnsavedChangesWarning(hasIntakeChanges || hasOutputChanges);
+
+  useEffect(() => {
+    if (editingIntakeId) return;
+    const draft = loadDraft<any>(INTAKE_DRAFT_KEY);
+    if (!draft) return;
+    if (draft.selectedSupplierId) setSelectedSupplierId(draft.selectedSupplierId);
+    if (draft.milkType) setMilkType(draft.milkType);
+    if (draft.intakeKg) setIntakeKg(draft.intakeKg);
+    if (draft.intakeDate) setIntakeDate(draft.intakeDate);
+    if (draft.fat) setFat(draft.fat);
+    if (draft.protein) setProtein(draft.protein);
+    if (draft.ph) setPh(draft.ph);
+    if (draft.temp) setTemp(draft.temp);
+    if (typeof draft.isEcological === 'boolean') setIsEcological(draft.isEcological);
+    if (draft.note) setNote(draft.note);
+    if (Array.isArray(draft.tags)) setTags(draft.tags);
+  }, [editingIntakeId]);
+
+  useEffect(() => {
+    if (editingOutputId) return;
+    const draft = loadDraft<any>(OUTPUT_DRAFT_KEY);
+    if (!draft) return;
+    if (draft.selectedProductId) setSelectedProductId(draft.selectedProductId);
+    if (draft.batchId) setBatchId(draft.batchId);
+    if (draft.pkgString) setPkgString(draft.pkgString);
+  }, [editingOutputId]);
+
+  useEffect(() => {
+    if (editingIntakeId) return;
+    saveDraft(INTAKE_DRAFT_KEY, { selectedSupplierId, milkType, intakeKg, intakeDate, fat, protein, ph, temp, isEcological, note, tags });
+  }, [selectedSupplierId, milkType, intakeKg, intakeDate, fat, protein, ph, temp, isEcological, note, tags, editingIntakeId]);
+
+  useEffect(() => {
+    if (editingOutputId) return;
+    saveDraft(OUTPUT_DRAFT_KEY, { selectedProductId, batchId, pkgString });
+  }, [selectedProductId, batchId, pkgString, editingOutputId]);
 
   // Filter Logic: Intake
   const displayedIntake = useMemo(() => {
@@ -399,7 +477,7 @@ export const InputTab: React.FC = () => {
   // Handlers
   const confirmIntakeSubmit = () => {
     const supplier = suppliers.find(s => s.id === selectedSupplierId);
-    if (!supplier || !intakeKg) return;
+    if (!supplier || Object.keys(intakeErrors).length > 0) return;
 
     setConfirmModal({
       isOpen: true,
@@ -412,7 +490,7 @@ export const InputTab: React.FC = () => {
 
   const executeIntakeSubmit = async () => {
     const supplier = suppliers.find(s => s.id === selectedSupplierId);
-    if (!supplier || !intakeKg) return;
+    if (!supplier || Object.keys(intakeErrors).length > 0) return;
 
     // Construct Timestamp
     const selectedDate = new Date(intakeDate);
@@ -426,19 +504,24 @@ export const InputTab: React.FC = () => {
     }
     
     const timestamp = selectedDate.getTime();
+    const parsedPh = Number(ph);
+    const parsedTemp = Number(temp);
+    const parsedFat = Number(fat);
+    const parsedProtein = Number(protein);
+    const autoTags = buildIntakeTags({ tempCelsius: parsedTemp, ph: parsedPh }, tags);
 
     const entryData = {
       supplierId: supplier.id,
       supplierName: supplier.name,
       routeGroup: supplier.routeGroup,
       milkType: milkType,
-      quantityKg: parseFloat(intakeKg),
-      ph: parseFloat(ph) || 6.65,
-      fatPct: parseFloat(fat) || 0,
-      proteinPct: parseFloat(protein) || 0,
-      tempCelsius: parseFloat(temp) || 0,
+      quantityKg: Number(intakeKg),
+      ph: parsedPh,
+      fatPct: parsedFat,
+      proteinPct: parsedProtein,
+      tempCelsius: parsedTemp,
       isEcological,
-      tags: [...tags, (parseFloat(temp) > 8 ? '#HighTemp' : ''), (parseFloat(ph) > 6.74 || parseFloat(ph) < 6.55 ? '#BadAcidity' : '')].filter(Boolean),
+      tags: autoTags,
       note: note,
       timestamp: timestamp
     };
@@ -455,6 +538,7 @@ export const InputTab: React.FC = () => {
       setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setNote(''); setTags([]); setIsEcological(false);
       setMilkType(milkTypes[0] || 'Skim milk');
       setIntakeDate(new Date().toISOString().split('T')[0]);
+      clearDraft(INTAKE_DRAFT_KEY);
     } catch (error) {
       console.error('Failed to save intake entry', error);
     }
@@ -475,11 +559,11 @@ export const InputTab: React.FC = () => {
     setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setNote(''); setTags([]); setIsEcological(false);
     setMilkType(milkTypes[0] || 'Skim milk');
     setIntakeDate(new Date().toISOString().split('T')[0]);
+    clearDraft(INTAKE_DRAFT_KEY);
   };
 
   const confirmOutputSubmit = () => {
-    if (!batchId || !pkgString) return;
-    if (!parserPreview || !parserPreview.isValid) return;
+    if (Object.keys(outputErrors).length > 0) return;
     if (anyFractional(parserPreview)) {
       setConfirmModal({ isOpen: true, title: 'Invalid Packaging', message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder.", action: () => setConfirmModal(prev => ({ ...prev, isOpen: false })), isDanger: false });
       return;
@@ -495,12 +579,14 @@ export const InputTab: React.FC = () => {
 
   const executeOutputSubmit = async () => {
     try {
+      if (Object.keys(outputErrors).length > 0) return;
       if (editingOutputId) {
         await updateOutputEntry(editingOutputId, pkgString);
       } else {
         await addOutputEntry({ productId: selectedProductId, batchId, packagingString: pkgString, destination: 'Warehouse' });
       }
       setPkgString('');
+      clearDraft(OUTPUT_DRAFT_KEY);
     } catch (error) {
       console.error('Failed to save production output', error);
     }
@@ -519,10 +605,11 @@ export const InputTab: React.FC = () => {
   const handleCancelOutputEdit = () => {
     setEditingOutputId(null);
     setPkgString('');
-    setBatchId(`MPC-${new Date().toISOString().slice(0,10)}`);
+    setBatchId(defaultBatchId);
+    clearDraft(OUTPUT_DRAFT_KEY);
   };
 
-  const isOutputValid = parserPreview && parserPreview.isValid;
+  const isOutputValid = parserPreview && parserPreview.isValid && Object.keys(outputErrors).length === 0;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -585,6 +672,16 @@ export const InputTab: React.FC = () => {
         
         {/* Entry Form */}
         <GlassCard className={`p-4 md:p-5 transition-all duration-300 ${editingIntakeId ? 'bg-amber-50/50 border-amber-200 shadow-md ring-2 ring-amber-100' : 'bg-slate-50/50'}`}>
+          {(Object.keys(intakeErrors).length > 0 || intakeWarnings.length > 0) && (
+            <div className="mb-4 rounded-lg border px-3 py-2 text-sm bg-white">
+              {Object.values(intakeErrors).map((message) => (
+                <div key={message} className="text-red-600">• {message}</div>
+              ))}
+              {intakeWarnings.map((message) => (
+                <div key={message} className="text-amber-600">• {message}</div>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-12 gap-3 md:gap-4 items-end">
              {/* ... Form Fields ... */}
              {/* Note: Kept existing logic mostly same, just ensuring PackagingWizard usage below */}
@@ -602,6 +699,7 @@ export const InputTab: React.FC = () => {
                 onChange={setSelectedSupplierId}
                 filters={supplierFilters}
               />
+                <FieldHint message={intakeErrors.supplierId} />
             </div>
             
             <div className="col-span-12 md:col-span-4">
@@ -609,6 +707,7 @@ export const InputTab: React.FC = () => {
                <SelectField value={milkType} onChange={e => setMilkType(e.target.value)}>
                   {milkTypes.map(t => <option key={t} value={t}>{t}</option>)}
                </SelectField>
+              <FieldHint message={intakeErrors.milkType} />
             </div>
 
             <div className="col-span-12 md:col-span-4">
@@ -618,6 +717,7 @@ export const InputTab: React.FC = () => {
                 value={intakeDate}
                 onChange={(e) => setIntakeDate(e.target.value)}
               />
+              <FieldHint message={intakeErrors.intakeDate} />
             </div>
 
             <div className="col-span-4 md:col-span-3">
@@ -628,6 +728,7 @@ export const InputTab: React.FC = () => {
                 onChange={(e) => setIntakeKg(e.target.value)}
                 placeholder="0"
               />
+              <FieldHint message={intakeErrors.intakeKg} />
             </div>
 
             <div className="col-span-4 md:col-span-2">
@@ -638,6 +739,7 @@ export const InputTab: React.FC = () => {
                 onChange={(e) => setFat(e.target.value)}
                 placeholder="0.00"
               />
+              <FieldHint message={intakeErrors.fat} />
             </div>
             <div className="col-span-4 md:col-span-2">
               <label className="text-xs font-semibold text-slate-600 block mb-1.5">Prot %</label>
@@ -647,6 +749,7 @@ export const InputTab: React.FC = () => {
                 onChange={(e) => setProtein(e.target.value)}
                 placeholder="0.00"
               />
+              <FieldHint message={intakeErrors.protein} />
             </div>
             <div className="col-span-4 md:col-span-2">
               <label className="text-xs font-semibold text-slate-600 block mb-1.5">pH</label>
@@ -657,6 +760,7 @@ export const InputTab: React.FC = () => {
                 onChange={(e) => setPh(e.target.value)}
                 placeholder="6.65"
               />
+              <FieldHint message={intakeErrors.ph} />
             </div>
             <div className="col-span-4 md:col-span-2">
                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Temp °C</label>
@@ -666,6 +770,7 @@ export const InputTab: React.FC = () => {
                     onChange={(e) => setTemp(e.target.value)}
                     placeholder="4.0"
                   />
+                  <FieldHint message={intakeErrors.temp} />
             </div>
 
             {/* Ecological Toggle */}
@@ -694,7 +799,8 @@ export const InputTab: React.FC = () => {
                 <>
                    <button 
                     onClick={confirmIntakeSubmit}
-                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all font-bold"
+                    disabled={Object.keys(intakeErrors).length > 0}
+                    className={`flex-1 text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all font-bold ${Object.keys(intakeErrors).length > 0 ? 'bg-amber-300 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'}`}
                     title="Update Entry"
                   >
                     <Check size={20} /> Update Entry
@@ -710,7 +816,8 @@ export const InputTab: React.FC = () => {
               ) : (
                 <button 
                   onClick={confirmIntakeSubmit}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] font-bold"
+                  disabled={Object.keys(intakeErrors).length > 0}
+                  className={`w-full text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] font-bold ${Object.keys(intakeErrors).length > 0 ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                 >
                   <Plus size={20} /> Add Intake Entry
                 </button>
@@ -826,6 +933,13 @@ export const InputTab: React.FC = () => {
 
         {/* Output Form */}
         <GlassCard className={`p-4 md:p-5 transition-all duration-300 relative overflow-visible ${editingOutputId ? 'bg-amber-50/50 border-amber-200 shadow-md ring-2 ring-amber-100' : 'bg-slate-50/50'}`}>
+          {Object.keys(outputErrors).length > 0 && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm">
+              {Object.values(outputErrors).map((message) => (
+                <div key={message} className="text-red-600">• {message}</div>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4">
             {editingOutputId && (
                <div className="flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider mb-[-8px]">
@@ -848,6 +962,7 @@ export const InputTab: React.FC = () => {
                 className="w-full md:w-1/3 font-mono"
                 disabled={!!editingOutputId}
               />
+              <FieldHint message={outputErrors.batchId} />
             </div>
             
             <div className="relative">
@@ -900,6 +1015,7 @@ export const InputTab: React.FC = () => {
                   </button>
                 )}
               </div>
+              <FieldHint message={outputErrors.packagingString} />
             </div>
 
             {parserPreview && (

@@ -6,6 +6,11 @@ import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calendar, Globe, ChevronDown, ChevronUp, Pencil, Building2, Coins, FileText, CheckCircle, RotateCcw, Package, Droplets, GripVertical } from 'lucide-react';
 import { Supplier, Buyer, BuyerContract, Product } from '../../types';
 import { normalizeCompanyCodes } from '../../utils/companyCodes';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
+import { findBuyerDuplicateWarning, findSupplierDuplicateWarning, validateBuyerForm, validateContractForm, validateMilkTypeName, validateProductForm, validateSupplierForm } from '../../utils/validation';
+
+const SETTINGS_DRAFT_KEY = 'nordic-pms-draft-settings';
 
 const InputField = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
   <input 
@@ -80,6 +85,11 @@ const moveItem = <T,>(items: T[], fromIndex: number, toIndex: number) => {
   return next;
 };
 
+const InlineNotice: React.FC<{ message?: string | null; tone?: 'error' | 'warning' | 'muted' }> = ({ message, tone = 'error' }) => {
+  if (!message) return null;
+  return <div className={`mt-1 text-xs ${tone === 'error' ? 'text-red-600' : tone === 'warning' ? 'text-amber-600' : 'text-slate-400'}`}>{message}</div>;
+};
+
 export const SettingsTab: React.FC = () => {
   const { 
     suppliers, addSupplier, updateSupplier, removeSupplier, 
@@ -92,6 +102,7 @@ export const SettingsTab: React.FC = () => {
   // Search State
   const [supplierSearch, setSupplierSearch] = useState('');
   const [buyerSearch, setBuyerSearch] = useState('');
+  const [activeSubTab, setActiveSubTab] = useState<'suppliers' | 'products' | 'buyers'>('suppliers');
 
   // Expansion State
   const [expandedSupplierId, setExpandedSupplierId] = useState<string | null>(null);
@@ -178,6 +189,44 @@ export const SettingsTab: React.FC = () => {
   }>({ isOpen: false, title: '', message: '', action: () => {} });
 
   const defaultMilkTypeOption = milkTypes[0] || '';
+  const supplierErrors = useMemo(() => validateSupplierForm(newSupplier), [newSupplier]);
+  const buyerErrors = useMemo(() => validateBuyerForm(newBuyer), [newBuyer]);
+  const productErrors = useMemo(() => validateProductForm(newProduct), [newProduct]);
+  const contractErrors = useMemo(() => validateContractForm(contractForm), [contractForm]);
+  const milkTypeError = useMemo(() => validateMilkTypeName(newMilkType), [newMilkType]);
+  const supplierDuplicateWarning = useMemo(() => findSupplierDuplicateWarning(newSupplier, suppliers, editingSupplierId), [newSupplier, suppliers, editingSupplierId]);
+  const buyerDuplicateWarning = useMemo(() => findBuyerDuplicateWarning(newBuyer, buyers, editingBuyerId), [newBuyer, buyers, editingBuyerId]);
+  const hasOpenFormChanges = showSupplierForm || showBuyerForm || showProductForm || Boolean(newMilkType) || Boolean(editingContractId);
+
+  useUnsavedChangesWarning(hasOpenFormChanges);
+
+  useEffect(() => {
+    const draft = loadDraft<any>(SETTINGS_DRAFT_KEY);
+    if (!draft) return;
+    if (draft.activeSubTab) setActiveSubTab(draft.activeSubTab);
+    if (draft.showSupplierForm) setShowSupplierForm(true);
+    if (draft.showBuyerForm) setShowBuyerForm(true);
+    if (draft.showProductForm) setShowProductForm(true);
+    if (draft.newSupplier) setNewSupplier((prev) => ({ ...prev, ...draft.newSupplier }));
+    if (draft.newBuyer) setNewBuyer((prev) => ({ ...prev, ...draft.newBuyer }));
+    if (draft.newProduct) setNewProduct((prev) => ({ ...prev, ...draft.newProduct }));
+    if (draft.contractForm) setContractForm((prev) => ({ ...prev, ...draft.contractForm }));
+    if (draft.newMilkType) setNewMilkType(draft.newMilkType);
+  }, []);
+
+  useEffect(() => {
+    saveDraft(SETTINGS_DRAFT_KEY, {
+      activeSubTab,
+      showSupplierForm,
+      showBuyerForm,
+      showProductForm,
+      newSupplier,
+      newBuyer,
+      newProduct,
+      contractForm,
+      newMilkType,
+    });
+  }, [activeSubTab, showSupplierForm, showBuyerForm, showProductForm, newSupplier, newBuyer, newProduct, contractForm, newMilkType]);
 
   useEffect(() => {
     if (!showSupplierForm) return;
@@ -190,7 +239,7 @@ export const SettingsTab: React.FC = () => {
   // --- Logic for Products ---
   const confirmProductSubmit = () => {
     const productData = mapFormToProduct(newProduct);
-    if (!productData.id || !productData.name) return;
+    if (!productData.id || !productData.name || Object.keys(productErrors).length > 0) return;
     setConfirmModal({
       isOpen: true,
       title: editingProductId ? "Update Product" : "Add New Product",
@@ -202,6 +251,7 @@ export const SettingsTab: React.FC = () => {
 
   const executeProductSubmit = () => {
     const productData = mapFormToProduct(newProduct);
+    if (Object.keys(productErrors).length > 0) return;
     if (editingProductId) {
       updateProduct(editingProductId, productData);
     } else {
@@ -224,6 +274,7 @@ export const SettingsTab: React.FC = () => {
     setNewProduct(EMPTY_PRODUCT_FORM);
     setShowProductForm(false);
     setEditingProductId(null);
+    clearDraft(SETTINGS_DRAFT_KEY);
   };
 
   const startEditProduct = (p: Product) => {
@@ -234,7 +285,7 @@ export const SettingsTab: React.FC = () => {
 
   // --- Logic for Milk Types ---
   const handleAddMilkType = () => {
-    if (newMilkType && !milkTypes.includes(newMilkType)) {
+    if (!milkTypeError && newMilkType && !milkTypes.includes(newMilkType)) {
       addMilkType(newMilkType);
       setNewMilkType('');
     }
@@ -297,7 +348,7 @@ export const SettingsTab: React.FC = () => {
   // --- Logic for Suppliers ---
 
   const confirmSupplierSubmit = () => {
-    if (!newSupplier.name || !newSupplier.routeGroup) return;
+    if (!newSupplier.name || !newSupplier.routeGroup || Object.keys(supplierErrors).length > 0) return;
     setConfirmModal({
        isOpen: true,
        title: editingSupplierId ? "Update Supplier" : "Add New Supplier",
@@ -308,7 +359,7 @@ export const SettingsTab: React.FC = () => {
   };
 
   const executeSupplierSubmit = () => {
-    if (!newSupplier.name || !newSupplier.routeGroup || !newSupplier.companyCode || !newSupplier.addressLine1 || !newSupplier.country || !newSupplier.createdOn) return;
+    if (!newSupplier.name || !newSupplier.routeGroup || !newSupplier.companyCode || !newSupplier.addressLine1 || !newSupplier.country || !newSupplier.createdOn || Object.keys(supplierErrors).length > 0) return;
     const normalizedCompanyCode = normalizeCompanyCodes(newSupplier.companyCode);
     if (!normalizedCompanyCode) return;
     
@@ -358,6 +409,7 @@ export const SettingsTab: React.FC = () => {
     });
     setShowSupplierForm(false);
     setEditingSupplierId(null);
+    clearDraft(SETTINGS_DRAFT_KEY);
   };
 
   const startEditSupplier = (s: Supplier, e: React.MouseEvent) => {
@@ -392,7 +444,7 @@ export const SettingsTab: React.FC = () => {
   // --- Logic for Buyers ---
 
   const confirmBuyerSubmit = () => {
-    if (!newBuyer.name) return;
+    if (!newBuyer.name || Object.keys(buyerErrors).length > 0) return;
     setConfirmModal({
        isOpen: true,
        title: editingBuyerId ? "Update Buyer" : "Add New Buyer",
@@ -403,7 +455,7 @@ export const SettingsTab: React.FC = () => {
   };
 
   const executeBuyerSubmit = () => {
-    if (!newBuyer.name || !newBuyer.companyCode || !newBuyer.addressLine1 || !newBuyer.country || !newBuyer.createdOn) return;
+    if (!newBuyer.name || !newBuyer.companyCode || !newBuyer.addressLine1 || !newBuyer.country || !newBuyer.createdOn || Object.keys(buyerErrors).length > 0) return;
     const normalizedCompanyCode = normalizeCompanyCodes(newBuyer.companyCode);
     if (!normalizedCompanyCode) return;
     
@@ -451,6 +503,7 @@ export const SettingsTab: React.FC = () => {
     setEditingContractId(null);
     setShowBuyerForm(false);
     setEditingBuyerId(null);
+    clearDraft(SETTINGS_DRAFT_KEY);
   };
 
   const startEditBuyer = (b: Buyer, e: React.MouseEvent) => {
@@ -477,7 +530,7 @@ export const SettingsTab: React.FC = () => {
 
   // Contract Logic
   const handleContractSubmit = () => {
-    if (!contractForm.contractNumber || !contractForm.pricePerKg) return;
+    if (!contractForm.contractNumber || !contractForm.pricePerKg || Object.keys(contractErrors).length > 0) return;
 
     if (editingContractId) {
        // Update existing
@@ -578,9 +631,6 @@ export const SettingsTab: React.FC = () => {
     );
   }, [buyers, buyerSearch]);
 
-  // Sub-Tab State
-  const [activeSubTab, setActiveSubTab] = useState<'suppliers' | 'products' | 'buyers'>('suppliers');
-
   return (
     <div className="flex flex-col gap-6 animate-fade-in h-full">
       {isHydrating && (
@@ -653,6 +703,12 @@ export const SettingsTab: React.FC = () => {
 
         {showSupplierForm && (
           <GlassCard className={`p-4 border-blue-200 animate-slide-up ${editingSupplierId ? 'bg-amber-50/50' : 'bg-blue-50/50'}`}>
+             {(Object.keys(supplierErrors).length > 0 || supplierDuplicateWarning) && (
+               <div className="mb-3 rounded-lg border bg-white px-3 py-2 text-sm">
+                 {Object.values(supplierErrors).map((message) => <div key={message} className="text-red-600">• {message}</div>)}
+                 {supplierDuplicateWarning && <div className="text-amber-600">• {supplierDuplicateWarning}</div>}
+               </div>
+             )}
              <div className="flex justify-between items-center mb-2">
                <h4 className="text-xs font-bold uppercase text-slate-500">{editingSupplierId ? 'Edit Supplier' : 'New Supplier'}</h4>
                <button onClick={resetSupplierForm}><X size={14} className="text-slate-400 hover:text-red-500"/></button>
@@ -663,6 +719,7 @@ export const SettingsTab: React.FC = () => {
               <div className="md:col-span-2">
                 <InputField placeholder="Company Code(s)* — separate multiple VAT codes with ; or ," value={newSupplier.companyCode} onChange={e => setNewSupplier({...newSupplier, companyCode: e.target.value})} />
                 <div className="mt-1 text-[11px] text-slate-400">Example: LT123456789; LT987654321</div>
+                <InlineNotice message={supplierErrors.companyCode} />
               </div>
               <InputField placeholder="Phone Number" value={newSupplier.phoneNumber} onChange={e => setNewSupplier({...newSupplier, phoneNumber: e.target.value})} />
               <InputField placeholder="Country*" value={newSupplier.country} onChange={e => setNewSupplier({...newSupplier, country: e.target.value})} />
@@ -672,6 +729,7 @@ export const SettingsTab: React.FC = () => {
               <div className="col-span-2">
                  <label className="text-xs text-slate-500 font-bold ml-1">Created On*</label>
                  <InputField type="date" value={newSupplier.createdOn} onChange={e => setNewSupplier({...newSupplier, createdOn: e.target.value})} />
+                  <InlineNotice message={supplierErrors.createdOn} />
               </div>
               
               <div className="col-span-2 grid grid-cols-2 gap-3">
@@ -729,7 +787,7 @@ export const SettingsTab: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={confirmSupplierSubmit} className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2">
+              <button disabled={Object.keys(supplierErrors).length > 0} onClick={confirmSupplierSubmit} className={`text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2 ${Object.keys(supplierErrors).length > 0 ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600'}`}>
                 <Save size={14}/> {editingSupplierId ? 'Update' : 'Save'}
               </button>
               <button onClick={resetSupplierForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">Cancel</button>
@@ -879,6 +937,11 @@ export const SettingsTab: React.FC = () => {
 
         {showProductForm && (
           <GlassCard className={`p-4 border-amber-200 animate-slide-up ${editingProductId ? 'bg-amber-50/50' : 'bg-amber-50/50'}`}>
+             {Object.keys(productErrors).length > 0 && (
+               <div className="mb-3 rounded-lg border bg-white px-3 py-2 text-sm">
+                 {Object.values(productErrors).map((message) => <div key={message} className="text-red-600">• {message}</div>)}
+               </div>
+             )}
              <div className="flex justify-between items-center mb-2">
                <h4 className="text-xs font-bold uppercase text-slate-500">{editingProductId ? 'Edit Product' : 'New Product'}</h4>
                <button onClick={resetProductForm}><X size={14} className="text-slate-400 hover:text-red-500"/></button>
@@ -907,7 +970,7 @@ export const SettingsTab: React.FC = () => {
               </FormField>
             </div>
             <div className="flex gap-2">
-              <button onClick={confirmProductSubmit} className="bg-amber-600 text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2">
+              <button disabled={Object.keys(productErrors).length > 0} onClick={confirmProductSubmit} className={`text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2 ${Object.keys(productErrors).length > 0 ? 'bg-amber-300 cursor-not-allowed' : 'bg-amber-600'}`}>
                 <Save size={14}/> {editingProductId ? 'Update' : 'Save'}
               </button>
               <button onClick={resetProductForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">Cancel</button>
@@ -981,6 +1044,7 @@ export const SettingsTab: React.FC = () => {
                  Add
                </button>
              </div>
+             <InlineNotice message={milkTypeError} />
              <div className="flex flex-wrap gap-2">
                {milkTypes.map(type => (
                  <div
@@ -1034,6 +1098,13 @@ export const SettingsTab: React.FC = () => {
 
         {showBuyerForm && (
           <GlassCard className={`p-4 border-emerald-200 animate-slide-up ${editingBuyerId ? 'bg-amber-50/50' : 'bg-emerald-50/50'}`}>
+             {(Object.keys(buyerErrors).length > 0 || buyerDuplicateWarning || Object.keys(contractErrors).length > 0) && (
+               <div className="mb-3 rounded-lg border bg-white px-3 py-2 text-sm">
+                 {Object.values(buyerErrors).map((message) => <div key={message} className="text-red-600">• {message}</div>)}
+                 {Object.values(contractErrors).map((message) => <div key={message} className="text-amber-600">• {message}</div>)}
+                 {buyerDuplicateWarning && <div className="text-amber-600">• {buyerDuplicateWarning}</div>}
+               </div>
+             )}
              <div className="flex justify-between items-center mb-2">
                <h4 className="text-xs font-bold uppercase text-slate-500">{editingBuyerId ? 'Edit Buyer' : 'New Buyer'}</h4>
                <button onClick={resetBuyerForm}><X size={14} className="text-slate-400 hover:text-red-500"/></button>
@@ -1100,7 +1171,8 @@ export const SettingsTab: React.FC = () => {
                     <div className="flex gap-1">
                       <button 
                         onClick={handleContractSubmit} 
-                        className={`flex-1 text-white rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 ${editingContractId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+                        disabled={Object.keys(contractErrors).length > 0}
+                        className={`flex-1 text-white rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 ${Object.keys(contractErrors).length > 0 ? 'bg-slate-300 cursor-not-allowed' : editingContractId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                       >
                         {editingContractId ? <Save size={12}/> : <Plus size={12}/>}
                         {editingContractId ? 'Update' : 'Add'}
@@ -1146,7 +1218,7 @@ export const SettingsTab: React.FC = () => {
             </div>
 
             <div className="flex gap-2 mt-4">
-              <button onClick={confirmBuyerSubmit} className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2">
+              <button disabled={Object.keys(buyerErrors).length > 0} onClick={confirmBuyerSubmit} className={`text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2 ${Object.keys(buyerErrors).length > 0 ? 'bg-emerald-300 cursor-not-allowed' : 'bg-emerald-600'}`}>
                 <Save size={14} /> {editingBuyerId ? 'Update' : 'Save'}
               </button>
               <button onClick={resetBuyerForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">Cancel</button>

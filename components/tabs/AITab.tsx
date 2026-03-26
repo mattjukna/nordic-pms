@@ -50,7 +50,7 @@ export const AITab: React.FC = () => {
       <div className="w-full md:w-2/3 flex flex-col gap-4 min-h-[400px]">
          <div className="flex items-center justify-between px-1">
             <h3 className="text-xs uppercase tracking-widest text-slate-500 font-bold flex items-center gap-2">
-              <Bot size={14} /> AI Operations Assistant
+              <Bot size={14} /> Operations Insights
             </h3>
             <button 
               onClick={handleGenerate}
@@ -66,11 +66,11 @@ export const AITab: React.FC = () => {
             {loading ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
                 <Loader2 size={40} className="animate-spin mb-4 text-purple-600" />
-                <p className="animate-pulse text-sm font-medium">Analyzing mass balance...</p>
+                <p className="animate-pulse text-sm font-medium">Reviewing operational signals...</p>
               </div>
             ) : (
               <div className="prose prose-sm max-w-none text-slate-600 prose-headings:text-slate-900 prose-strong:text-slate-800">
-                {insight ? <ReactMarkdown>{insight}</ReactMarkdown> : <p className="text-slate-400 italic">No insights generated yet.</p>}
+                {insight ? <ReactMarkdown>{insight}</ReactMarkdown> : <p className="text-slate-400 italic">No operational insights available yet.</p>}
               </div>
             )}
          </GlassCard>

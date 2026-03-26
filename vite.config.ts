@@ -11,8 +11,6 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'import.meta.env.VITE_AAD_CLIENT_ID': JSON.stringify(env.VITE_AAD_CLIENT_ID || ''),
         'import.meta.env.VITE_AAD_TENANT_ID': JSON.stringify(env.VITE_AAD_TENANT_ID || ''),
         'import.meta.env.VITE_AAD_ALLOWED_DOMAIN': JSON.stringify(env.VITE_AAD_ALLOWED_DOMAIN || ''),

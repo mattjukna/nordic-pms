@@ -1,16 +1,28 @@
 import { getAccessToken } from '../auth/useAccessToken';
+import { emitSessionEvent } from './sessionEvents';
+
+async function readResponseBody(res: Response) {
+  return res.text().catch(() => '');
+}
 
 export async function apiFetch(input: RequestInfo, init?: RequestInit) {
   const headers: Record<string,string> = { 'Content-Type': 'application/json', ...(init?.headers as Record<string,string> || {}) };
-  // Acquire token (let errors bubble up to caller)
-  const token = await getAccessToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const send = async (token: string) => fetch(input, { ...init, headers: { ...headers, Authorization: `Bearer ${token}` } });
 
-  const res = await fetch(input, { ...init, headers });
+  let token = await getAccessToken({ interactive: false });
+  let res = await send(token);
+  let bodyText = await readResponseBody(res);
 
-  const bodyText = await res.text().catch(() => '');
   if (res.status === 401 || res.status === 403) {
-    // Do not auto-logout here; throw rich error for UI to handle and debugging
+    emitSessionEvent({ level: 'warning', message: 'Session check failed. Retrying once before redirecting to sign-in.' });
+    token = await getAccessToken({ forceRefresh: true, interactive: false });
+    res = await send(token);
+    bodyText = await readResponseBody(res);
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    emitSessionEvent({ level: 'error', message: 'Session expired. Sign-in is required to continue.' });
+    void getAccessToken({ forceRefresh: true, interactive: true }).catch(() => undefined);
     throw new Error(`API ${res.status} ${res.statusText}: ${bodyText}`);
   }
   if (!res.ok) {

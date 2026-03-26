@@ -11,9 +11,14 @@ import { inferPackagingStringFromKg } from '../../utils/packagingNormalize';
 import { getPrimaryCompanyCode, parseCompanyCodes } from '../../utils/companyCodes';
 import { Package, Truck, ArrowUpRight, Box, Filter, Search, Calendar, ChevronDown, ChevronUp, FileText, Download, Scale, Layers, Tag, Calculator, CheckCircle2, Clock, Trash2, Check, Pencil, Plus, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
+import { validateDispatchForm, validateShipmentForm } from '../../utils/validation';
 // autoptable has no types exposed here
 // @ts-ignore
 import autoTable from 'jspdf-autotable';
+
+const DISPATCH_DRAFT_KEY = 'nordic-pms-draft-dispatch';
 
 export const InventoryTab: React.FC = () => {
   const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating } = useStore();
@@ -118,6 +123,64 @@ export const InventoryTab: React.FC = () => {
     if (!activeProduct) return null;
     return parsePackagingString(pkgString, activeProduct.defaultPalletWeight, activeProduct.defaultBagWeight);
   }, [pkgString, activeProduct]);
+  const shipmentParserPreview = useMemo(() => {
+    if (!editingDispatchId) return null;
+    const entry = dispatchEntries.find((item) => item.id === editingDispatchId);
+    const product = products.find((item) => item.id === entry?.productId);
+    if (!product || !shipmentPkgString) return null;
+    return parsePackagingString(shipmentPkgString, product.defaultPalletWeight, product.defaultBagWeight);
+  }, [editingDispatchId, dispatchEntries, products, shipmentPkgString]);
+  const dispatchErrors = useMemo(() => validateDispatchForm({
+    buyerId: selectedBuyerId,
+    productId: selectedProduct,
+    dispatchDate,
+    quantity,
+    pricePerKg,
+    parserPreview,
+  }), [selectedBuyerId, selectedProduct, dispatchDate, quantity, pricePerKg, parserPreview]);
+  const shipmentErrors = useMemo(() => validateShipmentForm({
+    shipmentDate,
+    shipmentQty,
+    shipmentPkgString,
+    parserPreview: shipmentParserPreview,
+  }), [shipmentDate, shipmentQty, shipmentPkgString, shipmentParserPreview]);
+  const hasDispatchChanges = Boolean(showDispatchForm && (editingDispatchId || selectedContractId || quantity || pkgString || pricePerKg || batchRef || shipmentQty || shipmentPkgString || shipmentNote));
+
+  useUnsavedChangesWarning(hasDispatchChanges);
+
+  useEffect(() => {
+    if (editingDispatchId) return;
+    const draft = loadDraft<any>(DISPATCH_DRAFT_KEY);
+    if (!draft) return;
+    if (draft.showDispatchForm) setShowDispatchForm(true);
+    if (draft.dispatchStatus) setDispatchStatus(draft.dispatchStatus);
+    if (draft.dispatchDate) setDispatchDate(draft.dispatchDate);
+    if (draft.selectedBuyerId) setSelectedBuyerId(draft.selectedBuyerId);
+    if (draft.selectedBuyerCompanyCode) setSelectedBuyerCompanyCode(draft.selectedBuyerCompanyCode);
+    if (draft.selectedProduct) setSelectedProduct(draft.selectedProduct);
+    if (draft.selectedContractId) setSelectedContractId(draft.selectedContractId);
+    if (draft.quantity) setQuantity(draft.quantity);
+    if (draft.pkgString) setPkgString(draft.pkgString);
+    if (draft.pricePerKg) setPricePerKg(draft.pricePerKg);
+    if (draft.batchRef) setBatchRef(draft.batchRef);
+  }, [editingDispatchId]);
+
+  useEffect(() => {
+    if (editingDispatchId) return;
+    saveDraft(DISPATCH_DRAFT_KEY, {
+      showDispatchForm,
+      dispatchStatus,
+      dispatchDate,
+      selectedBuyerId,
+      selectedBuyerCompanyCode,
+      selectedProduct,
+      selectedContractId,
+      quantity,
+      pkgString,
+      pricePerKg,
+      batchRef,
+    });
+  }, [showDispatchForm, dispatchStatus, dispatchDate, selectedBuyerId, selectedBuyerCompanyCode, selectedProduct, selectedContractId, quantity, pkgString, pricePerKg, batchRef, editingDispatchId]);
 
   // Update quantity when parser updates
   useEffect(() => {
@@ -354,7 +417,7 @@ export const InventoryTab: React.FC = () => {
   };
 
   const initiateDispatch = () => {
-    if (!quantity || !selectedBuyerId || !pricePerKg || !dispatchDate) return;
+    if (Object.keys(dispatchErrors).length > 0) return;
     
     const qty = parseFloat(quantity);
     const price = parseFloat(pricePerKg);
@@ -510,7 +573,7 @@ export const InventoryTab: React.FC = () => {
   };
 
   const handleAddShipment = async () => {
-    if (!editingDispatchId || !shipmentQty) return;
+    if (!editingDispatchId || Object.keys(shipmentErrors).length > 0) return;
     const qty = parseFloat(shipmentQty);
     const entry = dispatchEntries.find(e => e.id === editingDispatchId);
     if (!entry) return;
@@ -589,6 +652,7 @@ export const InventoryTab: React.FC = () => {
     setShipmentQty('');
     setShipmentPkgString('');
     setShipmentNote('');
+    clearDraft(DISPATCH_DRAFT_KEY);
   };
 
   const generateInvoice = (entry: typeof dispatchEntries[0]) => {
@@ -925,6 +989,16 @@ export const InventoryTab: React.FC = () => {
 
           {showDispatchForm && (
             <div className={`animate-slide-up bg-white border rounded-xl p-4 shadow-lg ring-4 z-10 shrink-0 ${dispatchStatus === 'confirmed' ? 'border-blue-200 ring-blue-50' : 'border-amber-200 ring-amber-50'}`}>
+              {(Object.keys(dispatchErrors).length > 0 || Object.keys(shipmentErrors).length > 0) && (
+                <div className="mb-4 rounded-lg border bg-slate-50 px-3 py-2 text-sm">
+                  {Object.values(dispatchErrors).map((message) => (
+                    <div key={message} className="text-red-600">• {message}</div>
+                  ))}
+                  {Object.values(shipmentErrors).map((message) => (
+                    <div key={message} className="text-amber-600">• {message}</div>
+                  ))}
+                </div>
+              )}
               
               {editingDispatchId && (
                  <div className="flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider mb-2">
@@ -1143,8 +1217,8 @@ export const InventoryTab: React.FC = () => {
                       />
                       <button 
                         onClick={handleAddShipment}
-                        disabled={editingOrderLimit > 0 && editingRemaining <= 0}
-                        className={`${editingOrderLimit > 0 && editingRemaining <= 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-4 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1`}
+                        disabled={(editingOrderLimit > 0 && editingRemaining <= 0) || Object.keys(shipmentErrors).length > 0}
+                        className={`${(editingOrderLimit > 0 && editingRemaining <= 0) || Object.keys(shipmentErrors).length > 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-4 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1`}
                       >
                         <Plus size={14} /> Add
                       </button>
@@ -1199,7 +1273,8 @@ export const InventoryTab: React.FC = () => {
               <div className="flex gap-3 mt-6">
                 <button 
                   onClick={initiateDispatch}
-                  className={`flex-1 text-white py-2 rounded-md text-sm font-bold shadow-md ${dispatchStatus === 'confirmed' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'}`}
+                  disabled={Object.keys(dispatchErrors).length > 0}
+                  className={`flex-1 text-white py-2 rounded-md text-sm font-bold shadow-md ${Object.keys(dispatchErrors).length > 0 ? 'bg-slate-300 cursor-not-allowed' : dispatchStatus === 'confirmed' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'}`}
                 >
                   {dispatchStatus === 'confirmed' ? 'Confirm Sale & Deduct Stock' : 'Save Plan'}
                 </button>

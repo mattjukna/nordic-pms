@@ -9,6 +9,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
 import { buildMonthlyWorkbook } from './services/reportExcel';
 import { getPrimaryCompanyCode, normalizeCompanyCodes } from './utils/companyCodes';
+import { validateDispatchPayload, validateIntakePayload, validateOutputPayload, validateShipmentPayload } from './utils/serverValidation';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -113,6 +114,14 @@ const toClientSupplier = (s: any) => ({
     proteinBonusPerPct: typeof s.proteinBonusPerPct === 'number' ? s.proteinBonusPerPct : 0,
 });
 
+const parseCorsOrigins = () => {
+    const raw = process.env.CORS_ALLOWED_ORIGINS || process.env.APP_ALLOWED_ORIGINS || 'http://localhost:3000;http://127.0.0.1:3000';
+    return raw
+        .split(/[;,]/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+};
+
 async function startServer() {
     // Load dotenv only when running locally / in development so production Node
     // does not require the `dotenv` package to be installed.
@@ -130,7 +139,16 @@ async function startServer() {
     const port = Number(process.env.PORT || 3000);
     const host = '0.0.0.0';
     let prismaAvailable = true;
-    app.use(cors());
+    const allowedOrigins = parseCorsOrigins();
+    app.use(cors({
+        origin(origin, callback) {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+                return;
+            }
+            callback(new Error('Origin not allowed by CORS'));
+        }
+    }));
     app.use(express.json());
 
     // Auth middleware for /api routes
@@ -572,7 +590,8 @@ async function startServer() {
     // Intake entries (handle tags)
     app.post('/api/intake-entries', async (req, res) => {
         const body = req.body;
-        if (!body.supplierId || !body.timestamp) return res.status(400).json({ error: 'Missing supplierId or timestamp' });
+        const validation = validateIntakePayload(body);
+        if (!validation.ok) return res.status(400).json({ error: 'Invalid intake payload', details: validation.errors });
         try {
                 // Calculate cost based on supplier pricing period or supplier defaults
                 const ts = new Date(body.timestamp);
@@ -627,6 +646,21 @@ async function startServer() {
         try {
             const data = { ...req.body };
             if (data.timestamp) data.timestamp = new Date(data.timestamp);
+            const existingEntry = await prisma.intakeEntry.findUnique({ where: { id } });
+            if (!existingEntry) return res.status(404).json({ error: 'Not found' });
+            const mergedValidation = validateIntakePayload({
+                supplierId: data.supplierId ?? existingEntry.supplierId,
+                supplierName: data.supplierName ?? existingEntry.supplierName,
+                routeGroup: data.routeGroup ?? existingEntry.routeGroup,
+                milkType: data.milkType ?? existingEntry.milkType,
+                quantityKg: data.quantityKg ?? existingEntry.quantityKg,
+                ph: data.ph ?? existingEntry.ph,
+                fatPct: data.fatPct ?? existingEntry.fatPct,
+                proteinPct: data.proteinPct ?? existingEntry.proteinPct,
+                tempCelsius: data.tempCelsius ?? existingEntry.tempCelsius,
+                timestamp: data.timestamp ? data.timestamp.getTime() : existingEntry.timestamp.getTime(),
+            });
+            if (!mergedValidation.ok) return res.status(400).json({ error: 'Invalid intake payload', details: mergedValidation.errors });
 
             // Recompute calculatedCost when intake is updated
             const ts = data.timestamp ? new Date(data.timestamp) : null;
@@ -672,7 +706,8 @@ async function startServer() {
     // Output entries (compute parsed fields)
     app.post('/api/output-entries', async (req, res) => {
         const body = req.body;
-        if (!body.productId || !body.timestamp) return res.status(400).json({ error: 'Missing productId or timestamp' });
+        const validation = validateOutputPayload(body);
+        if (!validation.ok) return res.status(400).json({ error: 'Invalid output payload', details: validation.errors });
         try {
             const product = await prisma.product.findUnique({ where: { id: body.productId } });
             const parsed = parsePackagingString(body.packagingString || '', product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
@@ -699,6 +734,13 @@ async function startServer() {
         try {
             const existing = await prisma.outputEntry.findUnique({ where: { id } });
             if (!existing) return res.status(404).json({ error: 'Not found' });
+            const validation = validateOutputPayload({
+                productId: existing.productId,
+                batchId: existing.batchId,
+                packagingString: req.body.packagingString ?? existing.packagingString,
+                timestamp: existing.timestamp.getTime(),
+            });
+            if (!validation.ok) return res.status(400).json({ error: 'Invalid output payload', details: validation.errors });
             const product = await prisma.product.findUnique({ where: { id: existing.productId } });
             const parsed = parsePackagingString(req.body.packagingString || existing.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
             if (anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
@@ -725,7 +767,8 @@ async function startServer() {
     // Dispatch entries
     app.post('/api/dispatch-entries', async (req, res) => {
         const b = req.body;
-        if (!b.productId || b.quantityKg == null) return res.status(400).json({ error: 'Missing productId or quantityKg' });
+        const validation = validateDispatchPayload(b);
+        if (!validation.ok) return res.status(400).json({ error: 'Invalid dispatch payload', details: validation.errors });
         try {
             const created = await prisma.dispatchEntry.create({ data: {
                 date: b.date ? new Date(b.date) : new Date(),
@@ -755,6 +798,8 @@ async function startServer() {
     app.put('/api/dispatch-entries/:id', async (req, res) => {
         try {
             const data = { ...req.body };
+            const existing = await prisma.dispatchEntry.findUnique({ where: { id: req.params.id } });
+            if (!existing) return res.status(404).json({ error: 'Not found' });
             if (data.date) data.date = new Date(data.date);
             if (Object.prototype.hasOwnProperty.call(data, 'buyer')) {
                 data.buyerName = data.buyer;
@@ -763,6 +808,15 @@ async function startServer() {
             if (Object.prototype.hasOwnProperty.call(data, 'buyerCompanyCode')) {
                 data.buyerCompanyCode = normalizeCompanyCodes(data.buyerCompanyCode) ?? null;
             }
+            const mergedDispatch = {
+                productId: data.productId ?? existing.productId,
+                buyerName: data.buyerName ?? existing.buyerName,
+                orderedQuantityKg: data.orderedQuantityKg ?? existing.orderedQuantityKg ?? existing.quantityKg,
+                salesPricePerKg: data.salesPricePerKg ?? existing.salesPricePerKg,
+                date: data.date ? data.date.getTime() : existing.date.getTime(),
+            };
+            const dispatchValidation = validateDispatchPayload(mergedDispatch);
+            if (!dispatchValidation.ok) return res.status(400).json({ error: 'Invalid dispatch payload', details: dispatchValidation.errors });
             // Prevent lowering orderedQuantityKg below already shipped total
             if (typeof data.orderedQuantityKg === 'number') {
                 const parent = await prisma.dispatchEntry.findUnique({ where: { id: req.params.id }, include: { shipments: true } });
@@ -791,7 +845,8 @@ async function startServer() {
     app.post('/api/dispatch-entries/:id/shipments', async (req, res) => {
         const dispatchId = req.params.id;
         const s = req.body;
-        if (!s.quantityKg) return res.status(400).json({ error: 'Missing quantityKg' });
+        const validation = validateShipmentPayload(s);
+        if (!validation.ok) return res.status(400).json({ error: 'Invalid shipment payload', details: validation.errors });
         try {
             // load parent dispatch to enforce ordered quantity limits
             const parent = await prisma.dispatchEntry.findUnique({ where: { id: dispatchId }, include: { shipments: true } });
@@ -867,6 +922,11 @@ async function startServer() {
         try {
             const existing = await prisma.dispatchShipment.findUnique({ where: { id: shipmentId } });
             if (!existing) return res.status(404).json({ error: 'Shipment not found' });
+            const shipmentValidation = validateShipmentPayload({
+                quantityKg: body.quantityKg ?? existing.quantityKg,
+                date: body.date ?? existing.date.getTime(),
+            });
+            if (!shipmentValidation.ok) return res.status(400).json({ error: 'Invalid shipment payload', details: shipmentValidation.errors });
             const dispatchEntry = await prisma.dispatchEntry.findUnique({ where: { id } });
             if (!dispatchEntry) return res.status(404).json({ error: 'Dispatch not found' });
 
