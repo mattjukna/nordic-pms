@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
@@ -163,6 +163,16 @@ export const SettingsTab: React.FC = () => {
     isDanger?: boolean;
   }>({ isOpen: false, title: '', message: '', action: () => {} });
 
+  const defaultMilkTypeOption = milkTypes[0] || '';
+
+  useEffect(() => {
+    if (!showSupplierForm) return;
+    if (milkTypes.length === 0) return;
+    if (!newSupplier.defaultMilkType || !milkTypes.includes(newSupplier.defaultMilkType)) {
+      setNewSupplier((prev) => ({ ...prev, defaultMilkType: defaultMilkTypeOption }));
+    }
+  }, [showSupplierForm, milkTypes, newSupplier.defaultMilkType, defaultMilkTypeOption]);
+
   // --- Logic for Products ---
   const confirmProductSubmit = () => {
     const productData = mapFormToProduct(newProduct);
@@ -286,7 +296,7 @@ export const SettingsTab: React.FC = () => {
       name: '', routeGroup: '', contractQuota: '', companyCode: '', phoneNumber: '', 
       country: 'Lithuania', addressLine1: '', addressLine2: '', createdOn: new Date().toISOString().split('T')[0],
       basePricePerKg: '0.34', normalMilkPricePerKg: '0.34', fatBonusPerPct: '0.003', proteinBonusPerPct: '0.004',
-      isEco: false, defaultMilkType: 'Skim milk'
+      isEco: false, defaultMilkType: defaultMilkTypeOption
     });
     setShowSupplierForm(false);
     setEditingSupplierId(null);
@@ -310,7 +320,7 @@ export const SettingsTab: React.FC = () => {
       fatBonusPerPct: s.fatBonusPerPct?.toString() || '0.003',
       proteinBonusPerPct: s.proteinBonusPerPct?.toString() || '0.004',
       isEco: s.isEco || false,
-      defaultMilkType: s.defaultMilkType || 'Skim milk'
+      defaultMilkType: (s.defaultMilkType && milkTypes.includes(s.defaultMilkType)) ? s.defaultMilkType : (defaultMilkTypeOption || s.defaultMilkType || '')
     });
     setShowSupplierForm(true);
     setExpandedSupplierId(null); // Close detail view when editing
@@ -613,11 +623,13 @@ export const SettingsTab: React.FC = () => {
                       className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                       value={newSupplier.defaultMilkType}
                       onChange={e => setNewSupplier({...newSupplier, defaultMilkType: e.target.value})}
+                      disabled={milkTypes.length === 0}
                     >
-                       <option value="Skim milk">Skim milk</option>
-                       <option value="Skim milk concentrate">Skim milk concentrate</option>
-                       <option value="Milk protein concentrate">Milk protein concentrate</option>
-                       <option value="Permeate concentrate">Permeate concentrate</option>
+                       {milkTypes.length === 0 ? (
+                         <option value="">No milk types available</option>
+                       ) : (
+                         milkTypes.map(type => <option key={type} value={type}>{type}</option>)
+                       )}
                     </select>
                  </div>
                  <div className="flex items-end pb-2">
