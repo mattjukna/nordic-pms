@@ -21,10 +21,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
-const DEFAULT_MASTER_FILE = path.resolve(projectRoot, '../entities_master.csv');
+const DEFAULT_MASTER_FILE = path.resolve(projectRoot, '../entities_master (1).csv');
 const DEFAULT_BUYERS_FILE = path.resolve(projectRoot, '../buyers_clean.csv');
 const DEFAULT_SUPPLIERS_FILE = path.resolve(projectRoot, '../suppliers_clean.csv');
-const DEFAULT_ROUTE_GROUP = 'Unassigned';
+const DEFAULT_ROUTE_GROUP = 'UNASSIGNED';
 const DEFAULT_WARNING_PRINT_LIMIT = 15;
 
 type Role = 'buyer' | 'supplier';
@@ -98,7 +98,7 @@ type PlannedRow = {
  * `buyers_clean.csv` and `suppliers_clean.csv` when those files exist.
  *
  * Actual columns inferred from the available CSV files:
- * - Name: `canonical_name` or overlay `name_clean` (fallbacks: `name`)
+ * - Name: `name`, `canonical_name`, or overlay `name_clean`
  * - Company code: overlay `source_code`, direct `company_code` / `companyCode`, otherwise
  *   role-specific `buyer_source_codes` / `supplier_source_codes`, then `all_source_codes`
  * - Phone: `phone`, `phoneNumber`, `phones`
@@ -106,8 +106,11 @@ type PlannedRow = {
  * - Address line 1: `address_line_1`, `addressLine1`, `canonical_address`, overlay `address_clean`
  * - Address line 2: `address_line_2`, `addressLine2`
  * - Created on: `created_on`, `createdOn`
- * - Supplier route group: `route_group`, `routeGroup` (defaults to `Unassigned` when missing)
+ * - Supplier route group: `supplier_routeGroup`, `route_group`, `routeGroup` (defaults to `UNASSIGNED` when missing)
  * - Supplier financial/milk fields:
+ *   `supplier_contractQuota`, `supplier_basePricePerKg`,
+ *   `supplier_normalMilkPricePerKg`, `supplier_fatBonusPerPct`,
+ *   `supplier_proteinBonusPerPct`, `supplier_isEco`, `supplier_defaultMilkType`,
  *   `contract_quota` / `contractQuota`,
  *   `base_price_per_kg` / `basePricePerKg`,
  *   `normal_milk_price_per_kg` / `normalMilkPricePerKg`,
@@ -427,8 +430,8 @@ function loadRoleFlags(row: CsvRow): { isBuyer: boolean; isSupplier: boolean } {
     .flatMap((value) => value.split(/\s+/g))
     .filter(Boolean);
 
-  const buyerFlag = parseBooleanString(row.is_buyer) ?? false;
-  const supplierFlag = parseBooleanString(row.is_supplier) ?? false;
+  const buyerFlag = parseBooleanString(row.roleBuyer) ?? parseBooleanString(row.is_buyer) ?? false;
+  const supplierFlag = parseBooleanString(row.roleSupplier) ?? parseBooleanString(row.is_supplier) ?? false;
 
   return {
     isBuyer: buyerFlag || sourceRoles.includes('buyer'),
@@ -632,14 +635,14 @@ function buildSupplierRecord(
   const addressLine1Field = parseStringField(sources, ['address_line_1', 'addressLine1', 'canonical_address', 'address_clean']);
   const addressLine2Field = parseStringField(sources, ['address_line_2', 'addressLine2']);
   const createdOnField = parseDateField(sources, ['created_on', 'createdOn'], report, rowNumber, entityUid, 'supplier');
-  const routeGroupField = parseStringField(sources, ['route_group', 'routeGroup']);
-  const contractQuotaField = parseNumberField(sources, ['contract_quota', 'contractQuota'], report, rowNumber, entityUid, 'supplier');
-  const basePriceField = parseNumberField(sources, ['base_price_per_kg', 'basePricePerKg'], report, rowNumber, entityUid, 'supplier');
-  const normalMilkPriceField = parseNumberField(sources, ['normal_milk_price_per_kg', 'normalMilkPricePerKg'], report, rowNumber, entityUid, 'supplier');
-  const fatBonusField = parseNumberField(sources, ['fat_bonus_per_pct', 'fatBonusPerPct'], report, rowNumber, entityUid, 'supplier');
-  const proteinBonusField = parseNumberField(sources, ['protein_bonus_per_pct', 'proteinBonusPerPct'], report, rowNumber, entityUid, 'supplier');
-  const isEcoField = parseBooleanField(sources, ['is_eco', 'isEco'], report, rowNumber, entityUid, 'supplier');
-  const defaultMilkTypeField = parseStringField(sources, ['default_milk_type', 'defaultMilkType']);
+  const routeGroupField = parseStringField(sources, ['supplier_routeGroup', 'route_group', 'routeGroup']);
+  const contractQuotaField = parseNumberField(sources, ['supplier_contractQuota', 'contract_quota', 'contractQuota'], report, rowNumber, entityUid, 'supplier');
+  const basePriceField = parseNumberField(sources, ['supplier_basePricePerKg', 'base_price_per_kg', 'basePricePerKg'], report, rowNumber, entityUid, 'supplier');
+  const normalMilkPriceField = parseNumberField(sources, ['supplier_normalMilkPricePerKg', 'normal_milk_price_per_kg', 'normalMilkPricePerKg'], report, rowNumber, entityUid, 'supplier');
+  const fatBonusField = parseNumberField(sources, ['supplier_fatBonusPerPct', 'fat_bonus_per_pct', 'fatBonusPerPct'], report, rowNumber, entityUid, 'supplier');
+  const proteinBonusField = parseNumberField(sources, ['supplier_proteinBonusPerPct', 'protein_bonus_per_pct', 'proteinBonusPerPct'], report, rowNumber, entityUid, 'supplier');
+  const isEcoField = parseBooleanField(sources, ['supplier_isEco', 'is_eco', 'isEco'], report, rowNumber, entityUid, 'supplier');
+  const defaultMilkTypeField = parseStringField(sources, ['supplier_defaultMilkType', 'default_milk_type', 'defaultMilkType']);
 
   let routeGroup = mergeString(existing?.routeGroup ?? null, routeGroupField, allowEmptyOverwrite);
   if (!routeGroup) {
@@ -974,8 +977,17 @@ async function main() {
 
   for (const [index, masterRow] of masterRows.entries()) {
     const rowNumber = index + 2;
-    const entityUid = normalizeWhitespace(masterRow.entity_uid) ?? `row-${rowNumber}`;
+    const entityUid = normalizeWhitespace(masterRow.entity_uid) ?? normalizeWhitespace(masterRow.entityKey) ?? `row-${rowNumber}`;
     report.totalRowsProcessed += 1;
+
+    const reviewStatus = normalizeWhitespace(masterRow.reviewStatus)?.toLowerCase();
+    if (reviewStatus === 'review') {
+      addWarning(report, {
+        rowNumber,
+        entityUid,
+        message: `reviewStatus=review${masterRow.reviewNotes ? ` — ${normalizeWhitespace(masterRow.reviewNotes)}` : ''}`,
+      });
+    }
 
     const nameForValidation = normalizeWhitespace(masterRow.canonical_name) ?? normalizeWhitespace(masterRow.name);
     const roles = loadRoleFlags(masterRow);
