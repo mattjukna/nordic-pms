@@ -11,7 +11,12 @@ import { InventoryTab } from './tabs/InventoryTab';
 import { SettingsTab } from './tabs/SettingsTab';
 
 const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) => {
-  const { activeTab, setActiveTab, isHydrating, hydrateError, userSettings, hydrateFromApi } = useStore();
+  const activeTab = useStore((state) => state.activeTab);
+  const setActiveTab = useStore((state) => state.setActiveTab);
+  const isHydrating = useStore((state) => state.isHydrating);
+  const hydrateError = useStore((state) => state.hydrateError);
+  const userSettings = useStore((state) => state.userSettings);
+  const hydrateFromApi = useStore((state) => state.hydrateFromApi);
 
   return (
     <div className={`${userSettings?.compactMode ? 'compact' : ''} w-full max-w-7xl mx-auto flex flex-col min-h-screen bg-slate-50`}>

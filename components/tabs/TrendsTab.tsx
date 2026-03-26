@@ -61,8 +61,14 @@ const EmptyState: React.FC<{ title: string; hint?: string }> = ({ title, hint })
 );
 
 export const TrendsTab: React.FC = () => {
-  const { intakeEntries, outputEntries, dispatchEntries, globalConfig, products, suppliers, milkTypes } = useStore();
-  const { userSettings } = useStore();
+  const intakeEntries = useStore((state) => state.intakeEntries);
+  const outputEntries = useStore((state) => state.outputEntries);
+  const dispatchEntries = useStore((state) => state.dispatchEntries);
+  const globalConfig = useStore((state) => state.globalConfig);
+  const products = useStore((state) => state.products);
+  const suppliers = useStore((state) => state.suppliers);
+  const milkTypes = useStore((state) => state.milkTypes);
+  const userSettings = useStore((state) => state.userSettings);
 
   const [activeView, setActiveView] = useState<ViewMode>("financial");
   const [timeRange, setTimeRange] = useState<TimeRange>((userSettings?.defaultAnalyticsRange as any) || "month");

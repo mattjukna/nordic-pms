@@ -14,7 +14,7 @@ const extractEmailFromAccount = (acct: any) => {
 };
 
 const App: React.FC = () => {
-  const store = useStore();
+  const hydrateFromApi = useStore((state) => state.hydrateFromApi);
   const { accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
   const hydratedRef = useRef(false);
@@ -63,9 +63,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && isDomainOk && !hydratedRef.current) {
       hydratedRef.current = true;
-      store.hydrateFromApi();
+      hydrateFromApi();
     }
-  }, [isAuthenticated, isDomainOk, store]);
+  }, [isAuthenticated, isDomainOk, hydrateFromApi]);
 
   if (cfgLoading) {
     return (

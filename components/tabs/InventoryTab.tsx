@@ -17,11 +17,6 @@ import autoTable from 'jspdf-autotable';
 
 export const InventoryTab: React.FC = () => {
   const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating } = useStore();
-
-  // Only show the loading placeholder while the store is hydrating.
-  // When hydration is finished but `products` is empty, allow the UI to render
-  // so the user can access the Database tab to add products.
-  if (isHydrating) return <div className="p-6 text-center">Loading products…</div>;
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState<boolean>(() => (userSettings?.defaultStockView === 'pallets'));
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);
@@ -62,12 +57,27 @@ export const InventoryTab: React.FC = () => {
   const [showFilter, setShowFilter] = useState(false);
   const [filters, setFilters] = useState({ search: '', dateStart: '', dateEnd: '', status: 'all' as 'all' | 'confirmed' | 'planned' });
 
-  // Init buyer selection
-  useMemo(() => {
-    if (buyers.length > 0 && !selectedBuyerId) {
-      setSelectedBuyerId(buyers[0].id); 
+  useEffect(() => {
+    if (buyers.length === 0) {
+      if (selectedBuyerId) setSelectedBuyerId('');
+      return;
+    }
+
+    if (!selectedBuyerId || !buyers.some((buyer) => buyer.id === selectedBuyerId)) {
+      setSelectedBuyerId(buyers[0].id);
     }
   }, [buyers, selectedBuyerId]);
+
+  useEffect(() => {
+    if (products.length === 0) {
+      if (selectedProduct) setSelectedProduct('');
+      return;
+    }
+
+    if (!selectedProduct || !products.some((product) => product.id === selectedProduct)) {
+      setSelectedProduct(products[0].id);
+    }
+  }, [products, selectedProduct]);
 
   // Derived: Current Buyer Object
   const currentBuyer = useMemo(() => buyers.find(b => b.id === selectedBuyerId), [buyers, selectedBuyerId]);
@@ -701,6 +711,11 @@ export const InventoryTab: React.FC = () => {
         defaultPallet={activeProduct?.defaultPalletWeight || 900}
         defaultBag={activeProduct?.defaultBagWeight || 850}
       />
+
+      {isHydrating ? (
+        <div className="p-6 text-center">Loading products…</div>
+      ) : (
+        <>
 
       {/* Investigate Modal */}
       {showInvestigateModal && investigateTarget && (() => {
@@ -1392,6 +1407,8 @@ export const InventoryTab: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+        </>
+      )}
+      </div>
   );
 };

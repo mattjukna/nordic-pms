@@ -110,14 +110,14 @@ export const LivePreviewTab: React.FC = () => {
         ...product,
         entries: productEntries,
         total: productTotal,
-        totalPallets,
-        totalBigBags,
-        totalTanks
+        totalPallets: productPallets,
+        totalBigBags: productBigBags,
+        totalTanks: productTanks
       };
     }).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
 
     return { totalOutput, totalPallets, totalBigBags, totalTanks, byProduct };
-  }, [outputEntries, startTime]);
+  }, [outputEntries, products, startTime]);
 
 
   const toggleCollapse = (id: string) => {

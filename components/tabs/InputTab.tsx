@@ -248,19 +248,51 @@ export const InputTab: React.FC = () => {
 
   // Set default supplier when list loads
   useEffect(() => {
-    if (suppliers.length > 0 && !selectedSupplierId) {
+    if (suppliers.length === 0) {
+      if (selectedSupplierId) setSelectedSupplierId('');
+      return;
+    }
+
+    if (!selectedSupplierId || !suppliers.some(s => s.id === selectedSupplierId)) {
       setSelectedSupplierId(suppliers[0].id);
     }
-  }, [suppliers]);
+  }, [suppliers, selectedSupplierId]);
+
+  useEffect(() => {
+    if (products.length === 0) {
+      if (selectedProductId) setSelectedProductId('');
+      return;
+    }
+
+    if (!selectedProductId || !products.some(product => product.id === selectedProductId)) {
+      setSelectedProductId(products[0].id);
+    }
+  }, [products, selectedProductId]);
+
+  useEffect(() => {
+    const supplier = suppliers.find(s => s.id === selectedSupplierId);
+    const preferredMilkType = supplier?.defaultMilkType;
+
+    if (preferredMilkType && milkTypes.includes(preferredMilkType)) {
+      if (milkType !== preferredMilkType) setMilkType(preferredMilkType);
+      return;
+    }
+
+    if (!milkType || (milkTypes.length > 0 && !milkTypes.includes(milkType))) {
+      setMilkType(milkTypes[0] || 'Skim milk');
+    }
+  }, [milkTypes, milkType, selectedSupplierId, suppliers]);
 
   // Auto-fill Supplier Details
   useEffect(() => {
     const supplier = suppliers.find(s => s.id === selectedSupplierId);
     if (supplier) {
-      if (supplier.defaultMilkType) setMilkType(supplier.defaultMilkType);
+      if (supplier.defaultMilkType && milkTypes.includes(supplier.defaultMilkType)) {
+        setMilkType(supplier.defaultMilkType);
+      }
       if (supplier.isEco !== undefined) setIsEcological(supplier.isEco);
     }
-  }, [selectedSupplierId, suppliers]);
+  }, [selectedSupplierId, suppliers, milkTypes]);
 
   // Filtering States
   const [showIntakeFilter, setShowIntakeFilter] = useState(false);
@@ -373,12 +405,12 @@ export const InputTab: React.FC = () => {
       isOpen: true,
       title: editingIntakeId ? "Confirm Update" : "Confirm New Intake",
       message: `Are you sure you want to ${editingIntakeId ? 'update' : 'add'} this intake entry for ${supplier.name} (${intakeKg}kg) on ${intakeDate}?`,
-      action: executeIntakeSubmit,
+      action: () => { void executeIntakeSubmit(); },
       isDanger: false
     });
   };
 
-  const executeIntakeSubmit = () => {
+  const executeIntakeSubmit = async () => {
     const supplier = suppliers.find(s => s.id === selectedSupplierId);
     if (!supplier || !intakeKg) return;
 
@@ -411,17 +443,21 @@ export const InputTab: React.FC = () => {
       timestamp: timestamp
     };
 
-    if (editingIntakeId) {
-      updateIntakeEntry(editingIntakeId, entryData);
-      setEditingIntakeId(null);
-    } else {
-      addIntakeEntry(entryData);
+    try {
+      if (editingIntakeId) {
+        await updateIntakeEntry(editingIntakeId, entryData);
+        setEditingIntakeId(null);
+      } else {
+        await addIntakeEntry(entryData);
+      }
+
+      // Reset Form
+      setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setNote(''); setTags([]); setIsEcological(false);
+      setMilkType(milkTypes[0] || 'Skim milk');
+      setIntakeDate(new Date().toISOString().split('T')[0]);
+    } catch (error) {
+      console.error('Failed to save intake entry', error);
     }
-    
-    // Reset Form
-    setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setNote(''); setTags([]); setIsEcological(false);
-    setMilkType(milkTypes[0] || 'Skim milk');
-    setIntakeDate(new Date().toISOString().split('T')[0]);
   };
 
   const confirmIntakeDelete = (id: string) => {
@@ -452,18 +488,22 @@ export const InputTab: React.FC = () => {
       isOpen: true,
       title: editingOutputId ? "Confirm Update" : "Confirm Production Log",
       message: `Are you sure you want to log ${parserPreview.totalWeight.toLocaleString()}kg of ${selectedProductId} (Batch: ${batchId})?`,
-      action: executeOutputSubmit,
+      action: () => { void executeOutputSubmit(); },
       isDanger: false
     });
   };
 
-  const executeOutputSubmit = () => {
-    if (editingOutputId) {
-      updateOutputEntry(editingOutputId, pkgString);
-    } else {
-      addOutputEntry({ productId: selectedProductId, batchId, packagingString: pkgString, destination: 'Warehouse' });
+  const executeOutputSubmit = async () => {
+    try {
+      if (editingOutputId) {
+        await updateOutputEntry(editingOutputId, pkgString);
+      } else {
+        await addOutputEntry({ productId: selectedProductId, batchId, packagingString: pkgString, destination: 'Warehouse' });
+      }
+      setPkgString('');
+    } catch (error) {
+      console.error('Failed to save production output', error);
     }
-    setPkgString('');
   };
 
   const confirmOutputDelete = (id: string) => {
