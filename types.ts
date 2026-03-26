@@ -58,6 +58,7 @@ export interface Buyer {
 export interface Product {
   id: string;
   name: string;
+  sortOrder?: number;
   details: string;
   defaultPalletWeight: number;
   defaultBagWeight: number;

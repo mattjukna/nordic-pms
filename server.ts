@@ -261,8 +261,8 @@ async function startServer() {
             const [suppliers, buyers, products, milkTypes, intakeEntries, outputEntries, dispatchEntries] = await Promise.all([
                 prisma.supplier.findMany(),
                 prisma.buyer.findMany({ include: { contracts: true } }),
-                prisma.product.findMany(),
-                prisma.milkType.findMany(),
+                prisma.product.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
+                prisma.milkType.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
                 prisma.intakeEntry.findMany({ include: { tags: true }, orderBy: { timestamp: 'desc' } }),
                 prisma.outputEntry.findMany({ orderBy: { timestamp: 'desc' } }),
                 prisma.dispatchEntry.findMany({ include: { shipments: true }, orderBy: { date: 'desc' } })
@@ -413,7 +413,8 @@ async function startServer() {
         const p = req.body;
         if (!p.id || !p.name) return res.status(400).json({ error: 'Missing product id or name' });
         try {
-            const created = await prisma.product.create({ data: p });
+            const maxSortOrder = await prisma.product.aggregate({ _max: { sortOrder: true } });
+            const created = await prisma.product.create({ data: { ...p, sortOrder: (maxSortOrder._max.sortOrder ?? -1) + 1 } });
             res.json(created);
         } catch (err: any) { res.status(500).json({ error: err.message }); }
     });
@@ -432,12 +433,24 @@ async function startServer() {
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
 
+    app.post('/api/products/reorder', async (req, res) => {
+        const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0) : [];
+        if (orderedIds.length === 0) return res.status(400).json({ error: 'Missing orderedIds' });
+        try {
+            await prisma.$transaction(orderedIds.map((id: string, index: number) => prisma.product.update({ where: { id }, data: { sortOrder: index } })));
+            res.json({ ok: true });
+        } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
     // Milk types
     app.post('/api/milk-types', async (req, res) => {
         const { name } = req.body;
         if (!name) return res.status(400).json({ error: 'Missing milk type name' });
         try {
-            const created = await prisma.milkType.upsert({ where: { name }, update: {}, create: { name } });
+            const existing = await prisma.milkType.findUnique({ where: { name } });
+            if (existing) return res.json(existing);
+            const maxSortOrder = await prisma.milkType.aggregate({ _max: { sortOrder: true } });
+            const created = await prisma.milkType.create({ data: { name, sortOrder: (maxSortOrder._max.sortOrder ?? -1) + 1 } });
             res.json(created);
         } catch (err: any) { res.status(500).json({ error: err.message }); }
     });
@@ -445,6 +458,15 @@ async function startServer() {
     app.delete('/api/milk-types/:name', async (req, res) => {
         try {
             await prisma.milkType.delete({ where: { name: req.params.name } });
+            res.json({ ok: true });
+        } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
+    app.post('/api/milk-types/reorder', async (req, res) => {
+        const orderedNames = Array.isArray(req.body?.orderedNames) ? req.body.orderedNames.filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0) : [];
+        if (orderedNames.length === 0) return res.status(400).json({ error: 'Missing orderedNames' });
+        try {
+            await prisma.$transaction(orderedNames.map((name: string, index: number) => prisma.milkType.update({ where: { name }, data: { sortOrder: index } })));
             res.json({ ok: true });
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });

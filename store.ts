@@ -73,9 +73,11 @@ interface AppState {
   addProduct: (product: Product) => Promise<void>;
   updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
   removeProduct: (id: string) => Promise<void>;
+  reorderProducts: (orderedIds: string[]) => Promise<void>;
 
   addMilkType: (type: string) => Promise<void>;
   removeMilkType: (type: string) => Promise<void>;
+  reorderMilkTypes: (orderedNames: string[]) => Promise<void>;
 
   addIntakeEntry: (entry: Omit<IntakeEntry, 'id' | 'calculatedCost'> & { tags?: string[] }) => Promise<void>;
   updateIntakeEntry: (id: string, updates: Partial<IntakeEntry> & { tags?: string[] }) => Promise<void>;
@@ -158,6 +160,30 @@ const parseDispatchEntry = (d: any): DispatchEntry => ({
   date: parseDate(d?.date),
   shipments: Array.isArray(d.shipments) ? d.shipments.map(parseDispatchShipment) : []
 });
+
+const reorderByIds = <T extends { id: string }>(items: T[], orderedIds: string[]) => {
+  const positionMap = new Map(orderedIds.map((id, index) => [id, index]));
+  return [...items].sort((a, b) => {
+    const aPos = positionMap.get(a.id);
+    const bPos = positionMap.get(b.id);
+    if (typeof aPos === 'number' && typeof bPos === 'number') return aPos - bPos;
+    if (typeof aPos === 'number') return -1;
+    if (typeof bPos === 'number') return 1;
+    return 0;
+  });
+};
+
+const reorderStrings = (items: string[], orderedNames: string[]) => {
+  const positionMap = new Map(orderedNames.map((name, index) => [name, index]));
+  return [...items].sort((a, b) => {
+    const aPos = positionMap.get(a);
+    const bPos = positionMap.get(b);
+    if (typeof aPos === 'number' && typeof bPos === 'number') return aPos - bPos;
+    if (typeof aPos === 'number') return -1;
+    if (typeof bPos === 'number') return 1;
+    return a.localeCompare(b);
+  });
+};
 
 
 async function api<T>(url: string, opts?: RequestInit): Promise<T> {
@@ -312,7 +338,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   addProduct: async (product) => {
     const created = await api<Product>('/api/products', { method: 'POST', body: JSON.stringify(product) });
-    set((state) => ({ products: [created, ...state.products] }));
+    set((state) => ({ products: [...state.products, created] }));
   },
 
   updateProduct: async (id, updates) => {
@@ -325,6 +351,11 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => ({ products: state.products.filter(p => p.id !== id) }));
   },
 
+  reorderProducts: async (orderedIds) => {
+    await api('/api/products/reorder', { method: 'POST', body: JSON.stringify({ orderedIds }) });
+    set((state) => ({ products: reorderByIds(state.products, orderedIds).map((product, index) => ({ ...product, sortOrder: index })) }));
+  },
+
   addMilkType: async (type) => {
     await api('/api/milk-types', { method: 'POST', body: JSON.stringify({ name: type }) });
     set((state) => ({ milkTypes: [...state.milkTypes, type] }));
@@ -333,6 +364,11 @@ export const useStore = create<AppState>((set, get) => ({
   removeMilkType: async (type) => {
     await api(`/api/milk-types/${encodeURIComponent(type)}`, { method: 'DELETE' });
     set((state) => ({ milkTypes: state.milkTypes.filter(t => t !== type) }));
+  },
+
+  reorderMilkTypes: async (orderedNames) => {
+    await api('/api/milk-types/reorder', { method: 'POST', body: JSON.stringify({ orderedNames }) });
+    set((state) => ({ milkTypes: reorderStrings(state.milkTypes, orderedNames) }));
   },
 
   addIntakeEntry: async (entry) => {

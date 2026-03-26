@@ -47,12 +47,14 @@ model SupplierPricingPeriod {
 }
 
 model MilkType {
-  name String @id
+  name      String @id
+  sortOrder Int    @default(0)
 }
 
 model Product {
   id                  String  @id
   name                String
+  sortOrder           Int     @default(0)
   details             String?
   defaultPalletWeight Float
   defaultBagWeight    Float

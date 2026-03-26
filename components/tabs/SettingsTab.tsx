@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
-import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calendar, Globe, ChevronDown, ChevronUp, Pencil, Building2, Coins, FileText, CheckCircle, RotateCcw, Package, Droplets } from 'lucide-react';
+import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calendar, Globe, ChevronDown, ChevronUp, Pencil, Building2, Coins, FileText, CheckCircle, RotateCcw, Package, Droplets, GripVertical } from 'lucide-react';
 import { Supplier, Buyer, BuyerContract, Product } from '../../types';
 import { normalizeCompanyCodes } from '../../utils/companyCodes';
 
@@ -72,12 +72,20 @@ const mapFormToProduct = (form: ProductFormState): Product => ({
   yieldFactor: parseProductNumber(form.yieldFactor)
 });
 
+const moveItem = <T,>(items: T[], fromIndex: number, toIndex: number) => {
+  if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return items;
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+};
+
 export const SettingsTab: React.FC = () => {
   const { 
     suppliers, addSupplier, updateSupplier, removeSupplier, 
     buyers, addBuyer, updateBuyer, removeBuyer,
-    products, addProduct, updateProduct, removeProduct,
-    milkTypes, addMilkType, removeMilkType,
+    products, addProduct, updateProduct, removeProduct, reorderProducts,
+    milkTypes, addMilkType, removeMilkType, reorderMilkTypes,
     isHydrating
   } = useStore();
 
@@ -142,6 +150,12 @@ export const SettingsTab: React.FC = () => {
 
   // Milk Type Form State
   const [newMilkType, setNewMilkType] = useState('');
+  const [draggedProductId, setDraggedProductId] = useState<string | null>(null);
+  const [dragOverProductId, setDragOverProductId] = useState<string | null>(null);
+  const [draggedMilkType, setDraggedMilkType] = useState<string | null>(null);
+  const [dragOverMilkType, setDragOverMilkType] = useState<string | null>(null);
+  const [isReorderingProducts, setIsReorderingProducts] = useState(false);
+  const [isReorderingMilkTypes, setIsReorderingMilkTypes] = useState(false);
 
   // Contract Form State (Inside Buyer Form)
   const [editingContractId, setEditingContractId] = useState<string | null>(null);
@@ -223,6 +237,50 @@ export const SettingsTab: React.FC = () => {
     if (newMilkType && !milkTypes.includes(newMilkType)) {
       addMilkType(newMilkType);
       setNewMilkType('');
+    }
+  };
+
+  const handleProductDrop = async (targetProductId: string) => {
+    if (!draggedProductId || draggedProductId === targetProductId || isReorderingProducts) {
+      setDragOverProductId(null);
+      return;
+    }
+
+    const orderedIds = moveItem(
+      products.map((product) => product.id),
+      products.findIndex((product) => product.id === draggedProductId),
+      products.findIndex((product) => product.id === targetProductId)
+    );
+
+    setIsReorderingProducts(true);
+    try {
+      await reorderProducts(orderedIds);
+    } finally {
+      setIsReorderingProducts(false);
+      setDraggedProductId(null);
+      setDragOverProductId(null);
+    }
+  };
+
+  const handleMilkTypeDrop = async (targetMilkType: string) => {
+    if (!draggedMilkType || draggedMilkType === targetMilkType || isReorderingMilkTypes) {
+      setDragOverMilkType(null);
+      return;
+    }
+
+    const orderedNames = moveItem(
+      milkTypes,
+      milkTypes.findIndex((milkType) => milkType === draggedMilkType),
+      milkTypes.findIndex((milkType) => milkType === targetMilkType)
+    );
+
+    setIsReorderingMilkTypes(true);
+    try {
+      await reorderMilkTypes(orderedNames);
+    } finally {
+      setIsReorderingMilkTypes(false);
+      setDraggedMilkType(null);
+      setDragOverMilkType(null);
     }
   };
 
@@ -816,6 +874,7 @@ export const SettingsTab: React.FC = () => {
               <Plus size={14} /> Add Product
             </button>
           </div>
+          <div className="text-[11px] text-slate-500">Drag rows to change the product order used across product selection fields in the app.</div>
         </div>
 
         {showProductForm && (
@@ -868,8 +927,22 @@ export const SettingsTab: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {products.map(p => (
-                <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-3 font-mono text-xs text-slate-600">{p.id}</td>
+                <tr
+                  key={p.id}
+                  draggable
+                  onDragStart={() => setDraggedProductId(p.id)}
+                  onDragEnd={() => { setDraggedProductId(null); setDragOverProductId(null); }}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverProductId(p.id); }}
+                  onDragEnter={(e) => { e.preventDefault(); setDragOverProductId(p.id); }}
+                  onDrop={(e) => { e.preventDefault(); void handleProductDrop(p.id); }}
+                  className={`hover:bg-slate-50 transition-colors ${dragOverProductId === p.id ? 'bg-amber-50 ring-1 ring-inset ring-amber-200' : ''} ${isReorderingProducts ? 'opacity-80' : ''}`}
+                >
+                  <td className="p-3 font-mono text-xs text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <GripVertical size={14} className="text-slate-300" />
+                      {p.id}
+                    </div>
+                  </td>
                   <td className="p-3 font-medium text-slate-800">
                     {p.name}
                     <div className="text-[10px] text-slate-400 font-normal">{p.details}</div>
@@ -893,6 +966,7 @@ export const SettingsTab: React.FC = () => {
           <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
             <Droplets size={16} /> Milk Types
           </h3>
+          <div className="text-[11px] text-slate-500">Drag chips to control the milk type order shown in supplier and intake forms.</div>
           
           <GlassCard className="p-3 bg-slate-50 border-slate-200">
              <div className="flex gap-2 mb-3">
@@ -909,7 +983,17 @@ export const SettingsTab: React.FC = () => {
              </div>
              <div className="flex flex-wrap gap-2">
                {milkTypes.map(type => (
-                 <div key={type} className="bg-white border border-slate-200 rounded-full px-3 py-1 text-xs text-slate-600 flex items-center gap-2 shadow-sm">
+                 <div
+                   key={type}
+                   draggable
+                   onDragStart={() => setDraggedMilkType(type)}
+                   onDragEnd={() => { setDraggedMilkType(null); setDragOverMilkType(null); }}
+                   onDragOver={(e) => { e.preventDefault(); setDragOverMilkType(type); }}
+                   onDragEnter={(e) => { e.preventDefault(); setDragOverMilkType(type); }}
+                   onDrop={(e) => { e.preventDefault(); void handleMilkTypeDrop(type); }}
+                   className={`bg-white border rounded-full px-3 py-1 text-xs text-slate-600 flex items-center gap-2 shadow-sm transition-colors ${dragOverMilkType === type ? 'border-blue-300 bg-blue-50' : 'border-slate-200'} ${isReorderingMilkTypes ? 'opacity-80' : ''}`}
+                 >
+                   <GripVertical size={12} className="text-slate-300" />
                    {type}
                    <button onClick={() => confirmMilkTypeDelete(type)} className="text-slate-300 hover:text-red-500"><X size={12}/></button>
                  </div>
