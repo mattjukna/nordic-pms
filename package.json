@@ -7,13 +7,14 @@
     "dev": "tsx server.ts",
     "import:companies": "tsx scripts/import-companies.ts",
     "build:client": "vite build",
-    "build:server": "prisma generate --schema nordic-backend/prisma/schema.prisma && tsup server.ts --format esm --platform node --target node22 --out-dir dist-server --clean --sourcemap --splitting=false --external vite --external lightningcss && npm run fix:esm",
+    "build:server": "npm run prisma:generate && tsup server.ts --format esm --platform node --target node22 --out-dir dist-server --clean --sourcemap --splitting=false --external vite --external lightningcss && npm run fix:esm",
     "build": "npm run build:client && npm run build:server",
     "start": "node dist-server/server.js",
-    "prisma:generate": "prisma generate --schema nordic-backend/prisma/schema.prisma",
-    "prisma:push": "prisma db push --schema nordic-backend/prisma/schema.prisma",
-    "prisma:migrate": "prisma migrate dev --schema nordic-backend/prisma/schema.prisma",
-    "prisma:studio": "prisma studio --schema nordic-backend/prisma/schema.prisma",
+    "prisma:generate": "prisma generate --schema ./nordic-backend/prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema ./nordic-backend/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema ./nordic-backend/prisma/schema.prisma",
+    "prisma:deploy": "prisma migrate deploy --schema ./nordic-backend/prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema ./nordic-backend/prisma/schema.prisma",
     "prisma:seed": "prisma db seed --schema nordic-backend/prisma/schema.prisma",
     "lint": "tsc --noEmit && eslint .",
     "format": "prettier --write .",
@@ -62,8 +63,5 @@
     "typescript-eslint": "^8.25.0",
     "typescript": "~5.8.2",
     "vite": "^7.3.1"
-  },
-  "prisma": {
-    "seed": "tsx nordic-backend/prisma/seed.ts"
   }
 }

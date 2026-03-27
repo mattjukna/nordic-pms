@@ -27,9 +27,10 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
+        working-directory: nordic-backend
         env:
           PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
-        run: npx prisma generate --schema nordic-backend/prisma/schema.prisma
+        run: npx prisma generate --schema prisma/schema.prisma
 
       - name: Build
         env:
@@ -89,16 +90,18 @@ jobs:
           name: node-app
 
       - name: Apply Prisma migrations to production
+        working-directory: nordic-backend
         env:
           DATABASE_URL: ${{ secrets['DATABASE_URL'] }}
           PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
-        run: npx prisma migrate deploy --schema nordic-backend/prisma/schema.prisma
+        run: npx prisma migrate deploy --schema prisma/schema.prisma
 
       - name: Regenerate Prisma client for deployed schema
+        working-directory: nordic-backend
         env:
           DATABASE_URL: ${{ secrets['DATABASE_URL'] }}
           PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
-        run: npx prisma generate --schema nordic-backend/prisma/schema.prisma
+        run: npx prisma generate --schema prisma/schema.prisma
       
       - name: Login to Azure
         uses: azure/login@v2
