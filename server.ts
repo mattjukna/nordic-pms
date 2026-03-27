@@ -114,12 +114,43 @@ const toClientSupplier = (s: any) => ({
     proteinBonusPerPct: typeof s.proteinBonusPerPct === 'number' ? s.proteinBonusPerPct : 0,
 });
 
+const DEFAULT_AZURE_FRONTEND_ORIGIN = 'https://nordic-pms-prod-2026-bxh5f7bcc6ccfgfg.polandcentral-01.azurewebsites.net';
+
+const normalizeOrigin = (value: string | null | undefined): string | null => {
+    if (!value) return null;
+    try {
+        return new URL(value).origin.toLowerCase();
+    } catch {
+        return value.trim().replace(/\/+$/, '').toLowerCase() || null;
+    }
+};
+
+const getRequestOrigin = (req: express.Request): string | null => {
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+    const hostHeader = String(req.headers.host || '').trim();
+    const protocol = forwardedProto || req.protocol || 'http';
+    const host = forwardedHost || hostHeader;
+    if (!host) return null;
+    return normalizeOrigin(`${protocol}://${host}`);
+};
+
 const parseCorsOrigins = () => {
     const raw = process.env.CORS_ALLOWED_ORIGINS || process.env.APP_ALLOWED_ORIGINS || 'http://localhost:3000;http://127.0.0.1:3000';
-    return raw
+    const configuredOrigins = raw
         .split(/[;,]/)
-        .map((value) => value.trim())
+        .map((value) => normalizeOrigin(value))
         .filter(Boolean);
+
+    const azureWebsiteOrigin = process.env.WEBSITE_HOSTNAME
+        ? normalizeOrigin(`https://${process.env.WEBSITE_HOSTNAME}`)
+        : null;
+
+    return Array.from(new Set([
+        ...configuredOrigins,
+        DEFAULT_AZURE_FRONTEND_ORIGIN,
+        azureWebsiteOrigin,
+    ].filter((value): value is string => Boolean(value))));
 };
 
 async function startServer() {
@@ -140,15 +171,41 @@ async function startServer() {
     const host = '0.0.0.0';
     let prismaAvailable = true;
     const allowedOrigins = parseCorsOrigins();
-    app.use(cors({
-        origin(origin, callback) {
-            if (!origin || allowedOrigins.includes(origin)) {
-                callback(null, true);
-                return;
-            }
-            callback(new Error('Origin not allowed by CORS'));
+    app.use(cors((req, callback) => {
+        const incomingOrigin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+        const requestOrigin = normalizeOrigin(incomingOrigin);
+        const serverOrigin = getRequestOrigin(req);
+        const sameOrigin = requestOrigin ? requestOrigin === serverOrigin : false;
+        const configuredOrigin = requestOrigin ? allowedOrigins.includes(requestOrigin) : false;
+        const branch = !requestOrigin
+            ? 'allow-no-origin'
+            : sameOrigin
+                ? 'allow-same-origin'
+                : configuredOrigin
+                    ? 'allow-configured-origin'
+                    : 'reject-unauthorized-origin';
+
+        console.log('[CORS]', {
+            incomingOrigin: incomingOrigin || null,
+            normalizedOrigin: requestOrigin,
+            allowedOrigins,
+            requestOriginHost: serverOrigin,
+            branch,
+        });
+
+        if (!requestOrigin || sameOrigin || configuredOrigin) {
+            callback(null, { origin: true, credentials: true });
+            return;
         }
+
+        callback(new Error('Origin not allowed by CORS'));
     }));
+    app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+        if (err?.message === 'Origin not allowed by CORS') {
+            return res.status(403).json({ error: 'Origin not allowed by CORS' });
+        }
+        return next(err);
+    });
     app.use(express.json());
 
     // Auth middleware for /api routes
