@@ -690,6 +690,30 @@ var classifyBootstrapError = (err) => {
     hint: "Check DATABASE_URL, firewall access, and database migration state."
   };
 };
+var DEFAULT_PRODUCT_PALLET_WEIGHT = 1e3;
+var DEFAULT_PRODUCT_BAG_WEIGHT = 850;
+var DEFAULT_PRODUCT_PROTEIN_TARGET = 0;
+var DEFAULT_PRODUCT_YIELD_FACTOR = 0;
+var toOptionalFiniteNumber = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+var normalizeProductPayload = (body, existing) => ({
+  id: typeof body?.id === "string" && body.id.trim().length > 0 ? body.id.trim() : existing?.id ?? "",
+  name: typeof body?.name === "string" && body.name.trim().length > 0 ? body.name.trim() : existing?.name ?? "",
+  details: typeof body?.details === "string" ? body.details.trim() : existing?.details ?? "",
+  defaultPalletWeight: toOptionalFiniteNumber(body?.defaultPalletWeight) ?? existing?.defaultPalletWeight ?? DEFAULT_PRODUCT_PALLET_WEIGHT,
+  defaultBagWeight: toOptionalFiniteNumber(body?.defaultBagWeight) ?? existing?.defaultBagWeight ?? DEFAULT_PRODUCT_BAG_WEIGHT,
+  proteinTargetPct: toOptionalFiniteNumber(body?.proteinTargetPct) ?? existing?.proteinTargetPct ?? DEFAULT_PRODUCT_PROTEIN_TARGET,
+  yieldFactor: toOptionalFiniteNumber(body?.yieldFactor) ?? existing?.yieldFactor ?? DEFAULT_PRODUCT_YIELD_FACTOR,
+  sortOrder: toOptionalFiniteNumber(body?.sortOrder) ?? existing?.sortOrder ?? 0
+});
 var toNullableString = (value) => typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 var resolveLegacySupplierIntakeCost = async (input) => {
   const year = input.timestamp.getFullYear();
@@ -1097,11 +1121,11 @@ async function startServer() {
     }
   });
   app.post("/api/products", async (req, res) => {
-    const p = req.body;
-    if (!p.id || !p.name) return res.status(400).json({ error: "Missing product id or name" });
+    const product = normalizeProductPayload(req.body);
+    if (!product.id || !product.name) return res.status(400).json({ error: "Missing product id or name" });
     try {
       const maxSortOrder = await prisma_default.product.aggregate({ _max: { sortOrder: true } });
-      const created = await prisma_default.product.create({ data: { ...p, sortOrder: (maxSortOrder._max.sortOrder ?? -1) + 1 } });
+      const created = await prisma_default.product.create({ data: { ...product, sortOrder: (maxSortOrder._max.sortOrder ?? -1) + 1 } });
       res.json(created);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -1109,7 +1133,27 @@ async function startServer() {
   });
   app.put("/api/products/:id", async (req, res) => {
     try {
-      const updated = await prisma_default.product.update({ where: { id: req.params.id }, data: req.body });
+      const currentId = req.params.id;
+      const existing = await prisma_default.product.findUnique({ where: { id: currentId } });
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      const normalized = normalizeProductPayload(req.body, existing);
+      if (!normalized.id || !normalized.name) return res.status(400).json({ error: "Missing product id or name" });
+      const { id: nextId, ...productData } = normalized;
+      let updated;
+      if (nextId === currentId) {
+        updated = await prisma_default.product.update({ where: { id: currentId }, data: productData });
+      } else {
+        const conflict = await prisma_default.product.findUnique({ where: { id: nextId } });
+        if (conflict) return res.status(409).json({ error: "Product ID already exists" });
+        updated = await prisma_default.$transaction(async (tx) => {
+          const created = await tx.product.create({ data: { id: nextId, ...productData } });
+          await tx.outputEntry.updateMany({ where: { productId: currentId }, data: { productId: nextId } });
+          await tx.dispatchEntry.updateMany({ where: { productId: currentId }, data: { productId: nextId } });
+          await tx.buyerContract.updateMany({ where: { productId: currentId }, data: { productId: nextId } });
+          await tx.product.delete({ where: { id: currentId } });
+          return created;
+        });
+      }
       res.json(updated);
     } catch (err) {
       res.status(400).json({ error: err.message });

@@ -5,7 +5,7 @@ import { getShippedKg, getShippedRevenue, isShippedStatus } from '../utils/dispa
 import { buildIntakeTags, getIntakeWarnings } from '../utils/intakeRules';
 import { calculateLabCoefficient, getEffectiveIntakeQuantityKg, resolveEffectiveQuantityKg } from '../utils/intakeCoefficient';
 import { resolveIntakeCost } from '../utils/intakePricing';
-import { validateDispatchForm, validateIntakeForm } from '../utils/validation';
+import { validateDispatchForm, validateIntakeForm, validateProductForm } from '../utils/validation';
 
 test('calculateLabCoefficient follows the raw milk formula', () => {
   const coefficient = calculateLabCoefficient(4.2, 3.4);
@@ -88,4 +88,30 @@ test('validation helpers reject incomplete intake and dispatch forms', () => {
 
   assert.ok(Object.keys(intakeErrors).length >= 6);
   assert.ok(Object.keys(dispatchErrors).length >= 5);
+});
+
+test('product validation allows blank optional fields but rejects invalid provided values', () => {
+  const relaxed = validateProductForm({
+    id: 'MPC90',
+    name: 'MPC 90',
+    defaultPalletWeight: '',
+    defaultBagWeight: '',
+    proteinTargetPct: '',
+    yieldFactor: '',
+  });
+
+  const invalidProvided = validateProductForm({
+    id: 'MPC90',
+    name: 'MPC 90',
+    defaultPalletWeight: '0',
+    defaultBagWeight: '-1',
+    proteinTargetPct: '120',
+    yieldFactor: '2',
+  });
+
+  assert.equal(Object.keys(relaxed).length, 0);
+  assert.ok(invalidProvided.defaultPalletWeight);
+  assert.ok(invalidProvided.defaultBagWeight);
+  assert.ok(invalidProvided.proteinTargetPct);
+  assert.ok(invalidProvided.yieldFactor);
 });

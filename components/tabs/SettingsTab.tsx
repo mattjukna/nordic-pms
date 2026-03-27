@@ -40,6 +40,11 @@ type ProductFormState = {
   yieldFactor: string;
 };
 
+const DEFAULT_PRODUCT_PALLET_WEIGHT = 1000;
+const DEFAULT_PRODUCT_BAG_WEIGHT = 850;
+const DEFAULT_PRODUCT_PROTEIN_TARGET = 0;
+const DEFAULT_PRODUCT_YIELD_FACTOR = 0;
+
 const EMPTY_PRODUCT_FORM: ProductFormState = {
   id: '',
   name: '',
@@ -50,11 +55,11 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   yieldFactor: ''
 };
 
-const parseProductNumber = (value: string) => {
+const parseProductNumber = (value: string, fallback: number) => {
   const trimmed = value.trim();
-  if (!trimmed) return 0;
+  if (!trimmed) return fallback;
   const parsed = parseFloat(trimmed);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
 
 const mapProductToForm = (product: Product): ProductFormState => ({
@@ -67,14 +72,14 @@ const mapProductToForm = (product: Product): ProductFormState => ({
   yieldFactor: product.yieldFactor?.toString() ?? ''
 });
 
-const mapFormToProduct = (form: ProductFormState): Product => ({
+const mapFormToProduct = (form: ProductFormState, existing?: Product | null): Product => ({
   id: form.id.trim(),
   name: form.name.trim(),
   details: form.details.trim(),
-  defaultPalletWeight: parseProductNumber(form.defaultPalletWeight),
-  defaultBagWeight: parseProductNumber(form.defaultBagWeight),
-  proteinTargetPct: parseProductNumber(form.proteinTargetPct),
-  yieldFactor: parseProductNumber(form.yieldFactor)
+  defaultPalletWeight: parseProductNumber(form.defaultPalletWeight, existing?.defaultPalletWeight ?? DEFAULT_PRODUCT_PALLET_WEIGHT),
+  defaultBagWeight: parseProductNumber(form.defaultBagWeight, existing?.defaultBagWeight ?? DEFAULT_PRODUCT_BAG_WEIGHT),
+  proteinTargetPct: parseProductNumber(form.proteinTargetPct, existing?.proteinTargetPct ?? DEFAULT_PRODUCT_PROTEIN_TARGET),
+  yieldFactor: parseProductNumber(form.yieldFactor, existing?.yieldFactor ?? DEFAULT_PRODUCT_YIELD_FACTOR)
 });
 
 const moveItem = <T,>(items: T[], fromIndex: number, toIndex: number) => {
@@ -234,7 +239,8 @@ export const SettingsTab: React.FC = () => {
 
   // --- Logic for Products ---
   const confirmProductSubmit = () => {
-    const productData = mapFormToProduct(newProduct);
+    const existingProduct = editingProductId ? products.find((product) => product.id === editingProductId) ?? null : null;
+    const productData = mapFormToProduct(newProduct, existingProduct);
     if (!productData.id || !productData.name || Object.keys(productErrors).length > 0) return;
     setConfirmModal({
       isOpen: true,
@@ -246,7 +252,8 @@ export const SettingsTab: React.FC = () => {
   };
 
   const executeProductSubmit = () => {
-    const productData = mapFormToProduct(newProduct);
+    const existingProduct = editingProductId ? products.find((product) => product.id === editingProductId) ?? null : null;
+    const productData = mapFormToProduct(newProduct, existingProduct);
     if (Object.keys(productErrors).length > 0) return;
     if (editingProductId) {
       updateProduct(editingProductId, productData);
@@ -889,7 +896,7 @@ export const SettingsTab: React.FC = () => {
              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
               <FormField label="Product ID" className="md:col-span-1">
-                <InputField placeholder="e.g. MPC85*" value={newProduct.id} onChange={e => setNewProduct({...newProduct, id: e.target.value})} disabled={!!editingProductId} />
+                <InputField placeholder="Required, editable later" value={newProduct.id} onChange={e => setNewProduct({...newProduct, id: e.target.value})} />
               </FormField>
               <FormField label="Product Name" className="md:col-span-1">
                 <InputField placeholder="Required*" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
@@ -897,17 +904,17 @@ export const SettingsTab: React.FC = () => {
               <FormField label="Details / Description" className="col-span-2">
                  <InputField placeholder="Optional product notes" value={newProduct.details} onChange={e => setNewProduct({...newProduct, details: e.target.value})} />
               </FormField>
-              <FormField label="Pallet Weight (kg)">
-                <InputField type="number" placeholder="e.g. 750" value={newProduct.defaultPalletWeight} onChange={e => setNewProduct({...newProduct, defaultPalletWeight: e.target.value})} />
+              <FormField label="Pallet Weight (kg, optional)">
+                <InputField type="number" placeholder={`Defaults to ${DEFAULT_PRODUCT_PALLET_WEIGHT}`} value={newProduct.defaultPalletWeight} onChange={e => setNewProduct({...newProduct, defaultPalletWeight: e.target.value})} />
               </FormField>
-              <FormField label="Bag Weight (kg)">
-                <InputField type="number" placeholder="e.g. 1000" value={newProduct.defaultBagWeight} onChange={e => setNewProduct({...newProduct, defaultBagWeight: e.target.value})} />
+              <FormField label="Bag Weight (kg, optional)">
+                <InputField type="number" placeholder={`Defaults to ${DEFAULT_PRODUCT_BAG_WEIGHT}`} value={newProduct.defaultBagWeight} onChange={e => setNewProduct({...newProduct, defaultBagWeight: e.target.value})} />
               </FormField>
-              <FormField label="Target Protein %">
-                <InputField type="number" placeholder="e.g. 85" value={newProduct.proteinTargetPct} onChange={e => setNewProduct({...newProduct, proteinTargetPct: e.target.value})} />
+              <FormField label="Target Protein % (optional)">
+                <InputField type="number" placeholder="Optional, can be updated later" value={newProduct.proteinTargetPct} onChange={e => setNewProduct({...newProduct, proteinTargetPct: e.target.value})} />
               </FormField>
-              <FormField label="Yield Factor">
-                <InputField type="number" step="0.001" placeholder="e.g. 0.125" value={newProduct.yieldFactor} onChange={e => setNewProduct({...newProduct, yieldFactor: e.target.value})} />
+              <FormField label="Yield Factor (optional)">
+                <InputField type="number" step="0.001" placeholder="Optional, can be updated later" value={newProduct.yieldFactor} onChange={e => setNewProduct({...newProduct, yieldFactor: e.target.value})} />
               </FormField>
             </div>
             <div className="flex gap-2">
@@ -952,8 +959,8 @@ export const SettingsTab: React.FC = () => {
                     <div className="text-[10px] text-slate-400 font-normal">{p.details}</div>
                   </td>
                   <td className="p-3 text-right text-xs text-slate-500">
-                    <div>Prot: {p.proteinTargetPct}%</div>
-                    <div>Yield: {p.yieldFactor}</div>
+                    <div>Prot: {p.proteinTargetPct > 0 ? `${p.proteinTargetPct}%` : '—'}</div>
+                    <div>Yield: {p.yieldFactor > 0 ? p.yieldFactor : '—'}</div>
                   </td>
                   <td className="p-3 text-center flex justify-end gap-1">
                     <button onClick={() => startEditProduct(p)} className="text-slate-300 hover:text-blue-500 p-1"><Pencil size={14}/></button>

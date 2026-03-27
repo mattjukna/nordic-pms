@@ -346,7 +346,26 @@ export const useStore = create<AppState>((set, get) => ({
 
   updateProduct: async (id, updates) => {
     const updated = await api<Product>(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
-    set((state) => ({ products: state.products.map(p => p.id === id ? { ...p, ...updated } : p) }));
+    set((state) => {
+      const nextProductId = updated.id;
+      const productIdChanged = nextProductId !== id;
+
+      return {
+        products: state.products.map((product) => product.id === id ? { ...product, ...updated } : product),
+        buyers: productIdChanged
+          ? state.buyers.map((buyer) => ({
+              ...buyer,
+              contracts: (buyer.contracts || []).map((contract) => contract.productId === id ? { ...contract, productId: nextProductId } : contract),
+            }))
+          : state.buyers,
+        outputEntries: productIdChanged
+          ? state.outputEntries.map((entry) => entry.productId === id ? { ...entry, productId: nextProductId } : entry)
+          : state.outputEntries,
+        dispatchEntries: productIdChanged
+          ? state.dispatchEntries.map((entry) => entry.productId === id ? { ...entry, productId: nextProductId } : entry)
+          : state.dispatchEntries,
+      };
+    });
   },
 
   removeProduct: async (id) => {

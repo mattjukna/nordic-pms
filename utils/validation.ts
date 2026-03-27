@@ -222,17 +222,25 @@ export function validateProductForm(input: {
   if (isBlank(input.id)) addError(errors, 'id', 'Enter the product ID.');
   if (isBlank(input.name)) addError(errors, 'name', 'Enter the product name.');
 
-  const palletWeight = parseNumericInput(input.defaultPalletWeight);
-  if (palletWeight === null || palletWeight <= 0) addError(errors, 'defaultPalletWeight', 'Pallet weight must be greater than zero.');
+  if (!isBlank(input.defaultPalletWeight)) {
+    const palletWeight = parseNumericInput(input.defaultPalletWeight);
+    if (palletWeight === null || palletWeight <= 0) addError(errors, 'defaultPalletWeight', 'Pallet weight must be greater than zero.');
+  }
 
-  const bagWeight = parseNumericInput(input.defaultBagWeight);
-  if (bagWeight === null || bagWeight <= 0) addError(errors, 'defaultBagWeight', 'Bag weight must be greater than zero.');
+  if (!isBlank(input.defaultBagWeight)) {
+    const bagWeight = parseNumericInput(input.defaultBagWeight);
+    if (bagWeight === null || bagWeight <= 0) addError(errors, 'defaultBagWeight', 'Bag weight must be greater than zero.');
+  }
 
-  const proteinTarget = parseNumericInput(input.proteinTargetPct);
-  if (proteinTarget === null || proteinTarget < 0 || proteinTarget > 100) addError(errors, 'proteinTargetPct', 'Protein target must be between 0 and 100.');
+  if (!isBlank(input.proteinTargetPct)) {
+    const proteinTarget = parseNumericInput(input.proteinTargetPct);
+    if (proteinTarget === null || proteinTarget < 0 || proteinTarget > 100) addError(errors, 'proteinTargetPct', 'Protein target must be between 0 and 100.');
+  }
 
-  const yieldFactor = parseNumericInput(input.yieldFactor);
-  if (yieldFactor === null || yieldFactor <= 0 || yieldFactor > 1) addError(errors, 'yieldFactor', 'Yield factor must be greater than 0 and no more than 1.');
+  if (!isBlank(input.yieldFactor)) {
+    const yieldFactor = parseNumericInput(input.yieldFactor);
+    if (yieldFactor === null || yieldFactor <= 0 || yieldFactor > 1) addError(errors, 'yieldFactor', 'Yield factor must be greater than 0 and no more than 1.');
+  }
 
   return errors;
 }
