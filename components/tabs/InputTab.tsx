@@ -6,10 +6,10 @@ import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { PackagingWizard } from '../ui/PackagingWizard';
 import ReportExportModal from '../ui/ReportExportModal';
 import { SmartSelect } from '../ui/SmartSelect';
-import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, LayoutGrid, Calculator, Droplets, Factory, Ban } from 'lucide-react';
+import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, Calculator, Droplets, Factory, Ban } from 'lucide-react';
 import { parsePackagingString } from '../../utils/parser';
 import { anyFractional } from '../../utils/wholeUnits';
-import { buildIntakeTags, getIntakeWarnings } from '../../utils/intakeRules';
+import { buildIntakeTags } from '../../utils/intakeRules';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
 import { validateIntakeForm, validateOutputForm } from '../../utils/validation';
@@ -94,6 +94,9 @@ const FieldHint: React.FC<{ message?: string; tone?: 'error' | 'warning' | 'mute
     </div>
   );
 };
+
+const INTAKE_ERROR_CLASS = 'border-red-300 bg-red-50/40 focus:border-red-400 focus:ring-red-500/10';
+const INTAKE_WARNING_CLASS = 'border-amber-300 bg-amber-50/40 focus:border-amber-400 focus:ring-amber-500/10';
 
 // --- Filter Component with Range ---
 interface FilterState {
@@ -371,11 +374,13 @@ export const InputTab: React.FC = () => {
     packagingString: pkgString,
     parserPreview,
   }), [selectedProductId, batchId, pkgString, parserPreview]);
-  const intakeWarnings = useMemo(() => {
+  const intakeWarningState = useMemo(() => {
     const nextTemp = Number(temp);
     const nextPh = Number(ph);
-    if (!Number.isFinite(nextTemp) || !Number.isFinite(nextPh)) return [];
-    return getIntakeWarnings({ tempCelsius: nextTemp, ph: nextPh });
+    return {
+      temp: Number.isFinite(nextTemp) && nextTemp > 8,
+      ph: Number.isFinite(nextPh) && (nextPh > 6.74 || nextPh < 6.55),
+    };
   }, [temp, ph]);
   const hasIntakeChanges = Boolean(intakeKg || fat || protein || ph || temp || isEcological || note || tags.length || editingIntakeId);
   const hasOutputChanges = Boolean(pkgString || editingOutputId || (batchId && batchId !== defaultBatchId));
@@ -672,16 +677,6 @@ export const InputTab: React.FC = () => {
         
         {/* Entry Form */}
         <GlassCard className={`p-4 md:p-5 transition-all duration-300 ${editingIntakeId ? 'bg-amber-50/50 border-amber-200 shadow-md ring-2 ring-amber-100' : 'bg-slate-50/50'}`}>
-          {(Object.keys(intakeErrors).length > 0 || intakeWarnings.length > 0) && (
-            <div className="mb-4 rounded-lg border px-3 py-2 text-sm bg-white">
-              {Object.values(intakeErrors).map((message) => (
-                <div key={message} className="text-red-600">• {message}</div>
-              ))}
-              {intakeWarnings.map((message) => (
-                <div key={message} className="text-amber-600">• {message}</div>
-              ))}
-            </div>
-          )}
           <div className="grid grid-cols-12 gap-3 md:gap-4 items-end">
              {/* ... Form Fields ... */}
              {/* Note: Kept existing logic mostly same, just ensuring PackagingWizard usage below */}
@@ -698,16 +693,15 @@ export const InputTab: React.FC = () => {
                 value={selectedSupplierId}
                 onChange={setSelectedSupplierId}
                 filters={supplierFilters}
+                triggerClassName={intakeErrors.supplierId ? INTAKE_ERROR_CLASS : ''}
               />
-                <FieldHint message={intakeErrors.supplierId} />
             </div>
             
             <div className="col-span-12 md:col-span-4">
                <label className="text-xs font-semibold text-slate-600 block mb-1.5">Milk Type</label>
-               <SelectField value={milkType} onChange={e => setMilkType(e.target.value)}>
+               <SelectField value={milkType} onChange={e => setMilkType(e.target.value)} className={intakeErrors.milkType ? INTAKE_ERROR_CLASS : ''}>
                   {milkTypes.map(t => <option key={t} value={t}>{t}</option>)}
                </SelectField>
-              <FieldHint message={intakeErrors.milkType} />
             </div>
 
             <div className="col-span-12 md:col-span-4">
@@ -716,8 +710,8 @@ export const InputTab: React.FC = () => {
                 type="date"
                 value={intakeDate}
                 onChange={(e) => setIntakeDate(e.target.value)}
+                className={intakeErrors.intakeDate ? INTAKE_ERROR_CLASS : ''}
               />
-              <FieldHint message={intakeErrors.intakeDate} />
             </div>
 
             <div className="col-span-4 md:col-span-3">
@@ -727,8 +721,8 @@ export const InputTab: React.FC = () => {
                 value={intakeKg}
                 onChange={(e) => setIntakeKg(e.target.value)}
                 placeholder="0"
+                className={intakeErrors.intakeKg ? INTAKE_ERROR_CLASS : ''}
               />
-              <FieldHint message={intakeErrors.intakeKg} />
             </div>
 
             <div className="col-span-4 md:col-span-2">
@@ -738,8 +732,8 @@ export const InputTab: React.FC = () => {
                 value={fat}
                 onChange={(e) => setFat(e.target.value)}
                 placeholder="0.00"
+                className={intakeErrors.fat ? INTAKE_ERROR_CLASS : ''}
               />
-              <FieldHint message={intakeErrors.fat} />
             </div>
             <div className="col-span-4 md:col-span-2">
               <label className="text-xs font-semibold text-slate-600 block mb-1.5">Prot %</label>
@@ -748,8 +742,8 @@ export const InputTab: React.FC = () => {
                 value={protein}
                 onChange={(e) => setProtein(e.target.value)}
                 placeholder="0.00"
+                className={intakeErrors.protein ? INTAKE_ERROR_CLASS : ''}
               />
-              <FieldHint message={intakeErrors.protein} />
             </div>
             <div className="col-span-4 md:col-span-2">
               <label className="text-xs font-semibold text-slate-600 block mb-1.5">pH</label>
@@ -759,8 +753,8 @@ export const InputTab: React.FC = () => {
                 value={ph}
                 onChange={(e) => setPh(e.target.value)}
                 placeholder="6.65"
+                className={intakeErrors.ph ? INTAKE_ERROR_CLASS : intakeWarningState.ph ? INTAKE_WARNING_CLASS : ''}
               />
-              <FieldHint message={intakeErrors.ph} />
             </div>
             <div className="col-span-4 md:col-span-2">
                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Temp °C</label>
@@ -769,8 +763,8 @@ export const InputTab: React.FC = () => {
                     value={temp}
                     onChange={(e) => setTemp(e.target.value)}
                     placeholder="4.0"
+                    className={intakeErrors.temp ? INTAKE_ERROR_CLASS : intakeWarningState.temp ? INTAKE_WARNING_CLASS : ''}
                   />
-                  <FieldHint message={intakeErrors.temp} />
             </div>
 
             {/* Ecological Toggle */}

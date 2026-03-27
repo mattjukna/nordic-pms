@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Check, X, Filter } from 'lucide-react';
+import { Search, ChevronDown, Check } from 'lucide-react';
 
 interface SmartSelectOption {
   id: string;
@@ -23,6 +23,7 @@ interface SmartSelectProps {
   placeholder?: string;
   filters?: FilterOption[];
   className?: string;
+  triggerClassName?: string;
   disabled?: boolean;
 }
 
@@ -34,6 +35,7 @@ export const SmartSelect: React.FC<SmartSelectProps> = ({
   placeholder = "Select...",
   filters = [],
   className = "",
+  triggerClassName = "",
   disabled = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -90,6 +92,7 @@ export const SmartSelect: React.FC<SmartSelectProps> = ({
           w-full bg-white border rounded-md px-3 py-2.5 md:py-2 text-sm flex items-center justify-between cursor-pointer transition-all
           ${isOpen ? 'ring-2 ring-blue-500/20 border-blue-500' : 'border-slate-300 hover:border-slate-400'}
           ${disabled ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}
+          ${triggerClassName}
         `}
       >
         <div className="flex-1 truncate">

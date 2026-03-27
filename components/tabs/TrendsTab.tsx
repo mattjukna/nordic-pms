@@ -87,6 +87,10 @@ export const TrendsTab: React.FC = () => {
   const [milkTypeFilter, setMilkTypeFilter] = useState<string>("__all__");
   const [supplierFilter, setSupplierFilter] = useState<string>("__all__");
 
+  const productNameById = useMemo(() => {
+    return new Map(products.map((product) => [product.id, product.name]));
+  }, [products]);
+
   // ---------- FILTERS (date & quick ranges) ----------
   const { filteredIntake, filteredOutput, filteredDispatch, dateLabel } = useMemo(() => {
     const now = new Date();
@@ -201,15 +205,19 @@ export const TrendsTab: React.FC = () => {
   const productMixData = useMemo(() => {
     const totals: Record<string, number> = {};
     filteredOutput.forEach(e => { totals[e.productId] = (totals[e.productId] || 0) + (e.parsed?.totalWeight || 0); });
-    const list = Object.entries(totals).map(([name, value]) => ({ name, value }));
+    const list = Object.entries(totals).map(([productId, value]) => ({
+      id: productId,
+      name: productNameById.get(productId) || productId,
+      value,
+    }));
     const sorted = list.sort((a,b)=>b.value-a.value);
     const TOP_N = 6;
     if (sorted.length <= TOP_N) return sorted;
     const top = sorted.slice(0, TOP_N);
     const otherSum = sorted.slice(TOP_N).reduce((s,it)=>s+it.value,0);
-    top.push({ name: "Other", value: otherSum });
+    top.push({ id: 'other', name: "Other", value: otherSum });
     return top;
-  }, [filteredOutput]);
+  }, [filteredOutput, productNameById]);
 
   const milkTypeMix = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -646,7 +654,7 @@ export const TrendsTab: React.FC = () => {
                           <div className="overflow-x-auto py-1 -mx-2 px-2">
                             <div className="whitespace-nowrap text-xs max-w-full">
                               {productMixData.map((p,i)=>(
-                                <span key={p.name} className="inline-block align-middle mr-4 px-2 py-1">
+                                <span key={p.id} className="inline-block align-middle mr-4 px-2 py-1">
                                   <span className="inline-block w-3 h-3 mr-2 align-middle" style={{ background: COLORS[i % COLORS.length] }} />
                                   <span className="font-medium">{p.name}</span>
                                   <span className="text-slate-500 ml-1">{Math.round(p.value).toLocaleString()} kg</span>
