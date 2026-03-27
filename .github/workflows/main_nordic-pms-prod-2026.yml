@@ -73,10 +73,32 @@ jobs:
       contents: read #This is required for actions/checkout
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js version
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22.x'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: node-app
+
+      - name: Apply Prisma migrations to production
+        env:
+          DATABASE_URL: ${{ secrets['DATABASE_URL'] }}
+          PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
+        run: npx prisma migrate deploy --schema nordic-backend/prisma/schema.prisma
+
+      - name: Regenerate Prisma client for deployed schema
+        env:
+          DATABASE_URL: ${{ secrets['DATABASE_URL'] }}
+          PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
+        run: npx prisma generate --schema nordic-backend/prisma/schema.prisma
       
       - name: Login to Azure
         uses: azure/login@v2
@@ -90,6 +112,5 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'nordic-pms-prod-2026'
-          resource-group: 'rg-nordic-pms-prod'
           package: release.zip
           

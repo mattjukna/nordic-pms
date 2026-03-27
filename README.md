@@ -68,3 +68,49 @@ The importer reads `entities_master.csv` and, when present, supplements it with 
 - Format check: `npm run format:check`
 - Tests: `npm run test`
 - Pilot hardening notes: [PILOT_HARDENING.md](PILOT_HARDENING.md)
+
+## Production deployment
+
+Schema-changing releases must apply Prisma migrations before the Azure App Service starts serving code that depends on new columns.
+
+Future deployment order:
+
+1. Pull the release commit.
+2. Install dependencies with `npm ci`.
+3. Run `npx prisma migrate deploy --schema nordic-backend/prisma/schema.prisma` against the production database.
+4. Run `npx prisma generate --schema nordic-backend/prisma/schema.prisma`.
+5. Build with `npm run build`.
+6. Deploy the build artifact to Azure App Service.
+7. Restart the App Service.
+8. Verify `GET /config`, `GET /api/health`, and `GET /api/bootstrap`.
+
+### Schema-changing release checklist
+
+1. Confirm the migration file exists under [nordic-backend/prisma/migrations](nordic-backend/prisma/migrations).
+2. Run `npx prisma migrate deploy --schema nordic-backend/prisma/schema.prisma` against production before deploying the app.
+3. Verify the expected columns exist before restart. Example SQL:
+
+```sql
+SELECT COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'dbo'
+   AND TABLE_NAME = 'IntakeEntry'
+   AND COLUMN_NAME IN (
+      'effectiveQuantityKg',
+      'labCoefficient',
+      'pricingMode',
+      'unitPricePerKg',
+      'unitPriceBasis',
+      'invoiceNumber'
+   );
+```
+
+4. Restart the Azure App Service after migration and deployment complete.
+5. Verify `GET /api/bootstrap` returns `200` before declaring the release healthy.
+
+### Rollback notes for additive schema releases
+
+1. Do not drop newly added columns as part of rollback.
+2. If the app deployment fails after a successful additive migration, roll back the application package only.
+3. Keep the migrated schema in place and redeploy the previous app version if needed.
+4. Re-check `GET /api/bootstrap` after rollback to confirm the older app still tolerates the additive columns.

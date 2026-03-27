@@ -19,3 +19,20 @@ Usage notes:
 	DATABASE_URL="sqlserver://<user>:<password>@<your-server-name>.database.windows.net:1433;database=<database-name>;encrypt=true;trustServerCertificate=false"
 
 - Do not commit your `.env` file to the repository. This document intentionally contains placeholders only.
+
+## Production schema release checklist
+
+For any release that adds or changes Prisma-managed schema, apply the database migration before the Azure App Service starts the new app build.
+
+Required order:
+
+1. `npx prisma migrate deploy --schema nordic-backend/prisma/schema.prisma`
+2. Verify the expected columns or tables exist in Azure SQL.
+3. `npx prisma generate --schema nordic-backend/prisma/schema.prisma`
+4. Build and deploy the app package.
+5. Restart the Azure App Service.
+6. Verify `GET /api/bootstrap` succeeds.
+
+Rollback note:
+
+1. For additive schema migrations, roll back the application build if necessary, but do not remove columns that were already added successfully.
