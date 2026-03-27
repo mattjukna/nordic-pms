@@ -3,7 +3,16 @@ import { create } from 'zustand';
 import { apiFetch } from './services/apiFetch';
 import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract } from './types';
 import { DEFAULT_CONFIG } from './constants';
-import { calculateMilkCost } from './utils/milkCost';
+import { getEffectiveIntakeQuantityKg } from './utils/intakeCoefficient';
+
+type IntakeEntryPayload = Omit<IntakeEntry, 'id' | 'calculatedCost' | 'effectiveQuantityKg' | 'labCoefficient'> & {
+  tags?: string[];
+  applyLabCoefficient?: boolean;
+  manualLabCoefficient?: number | null;
+  invoiceTotalEur?: number | null;
+};
+
+type IntakeEntryUpdatePayload = Partial<IntakeEntryPayload> & { tags?: string[] };
 
 interface AppState {
   activeTab: 'input' | 'preview' | 'trends' | 'ai' | 'inventory' | 'settings';
@@ -80,8 +89,8 @@ interface AppState {
   removeMilkType: (type: string) => Promise<void>;
   reorderMilkTypes: (orderedNames: string[]) => Promise<void>;
 
-  addIntakeEntry: (entry: Omit<IntakeEntry, 'id' | 'calculatedCost'> & { tags?: string[] }) => Promise<void>;
-  updateIntakeEntry: (id: string, updates: Partial<IntakeEntry> & { tags?: string[] }) => Promise<void>;
+  addIntakeEntry: (entry: IntakeEntryPayload) => Promise<void>;
+  updateIntakeEntry: (id: string, updates: IntakeEntryUpdatePayload) => Promise<void>;
   toggleIntakeDiscard: (id: string) => void;
   dismissTempAlert: (id: string) => void;
   removeIntakeEntry: (id: string) => Promise<void>;
@@ -129,6 +138,12 @@ const parseBuyer = (b: any): Buyer => ({
 const parseIntakeEntry = (i: any): IntakeEntry => ({
   ...i,
   timestamp: parseDate(i?.timestamp),
+  effectiveQuantityKg: Number.isFinite(Number(i?.effectiveQuantityKg)) ? Number(i.effectiveQuantityKg) : (Number.isFinite(Number(i?.quantityKg)) ? Number(i.quantityKg) : 0),
+  labCoefficient: Number.isFinite(Number(i?.labCoefficient)) ? Number(i.labCoefficient) : 1,
+  pricingMode: i?.pricingMode ?? null,
+  unitPricePerKg: Number.isFinite(Number(i?.unitPricePerKg)) ? Number(i.unitPricePerKg) : null,
+  unitPriceBasis: i?.unitPriceBasis ?? null,
+  invoiceNumber: i?.invoiceNumber ?? null,
   tags: Array.isArray(i.tags) ? i.tags : []
 });
 
@@ -360,20 +375,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addIntakeEntry: async (entry) => {
-    const state = get();
-    const supplier = state.suppliers.find(s => s.id === entry.supplierId);
-    const calculatedCost = calculateMilkCost(entry.quantityKg, entry.fatPct, entry.proteinPct, supplier, state.globalConfig);
-    const payload = { ...entry, calculatedCost, tags: entry.tags || [] };
+    const payload = { ...entry, tags: entry.tags || [] };
     const created = await api<IntakeEntry>('/api/intake-entries', { method: 'POST', body: JSON.stringify(payload) });
     set((s) => ({ intakeEntries: [parseIntakeEntry(created), ...s.intakeEntries] }));
   },
 
   updateIntakeEntry: async (id, updates) => {
-    const state = get();
-    const existing = state.intakeEntries.find(i => i.id === id);
-    const supplier = state.suppliers.find(s => s.id === (updates.supplierId || existing?.supplierId));
-    const calculatedCost = calculateMilkCost((updates.quantityKg ?? existing?.quantityKg) || 0, (updates.fatPct ?? existing?.fatPct) || 0, (updates.proteinPct ?? existing?.proteinPct) || 0, supplier, state.globalConfig);
-    const payload = { ...updates, calculatedCost, tags: (updates as any).tags ?? undefined };
+    const payload = { ...updates, tags: (updates as any).tags ?? undefined };
     const updated = await api<IntakeEntry>(`/api/intake-entries/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
     set((s) => ({ intakeEntries: s.intakeEntries.map(i => i.id === id ? { ...i, ...parseIntakeEntry(updated) } : i), editingIntakeId: null }));
   },
@@ -453,6 +461,7 @@ export const useStore = create<AppState>((set, get) => ({
   generateAIInsights: async () => {
     const state = get();
     const totalIntake = state.intakeEntries.reduce((acc, curr) => acc + curr.quantityKg, 0);
+    const totalEffectiveIntake = state.intakeEntries.reduce((acc, curr) => acc + getEffectiveIntakeQuantityKg(curr), 0);
     const mpc85Produced = state.outputEntries
       .filter(e => e.productId === 'MPC85')
       .reduce((acc, curr) => acc + (curr.parsed?.totalWeight || 0), 0);
@@ -475,8 +484,8 @@ export const useStore = create<AppState>((set, get) => ({
     return new Promise((resolve) => {
       setTimeout(() => {
         let text = `### AI Operational & Financial Analysis\n\n`;
-        text += `**Mass Balance**: Intake is **${totalIntake.toLocaleString()}kg**. `;
-        if (totalIntake > 0) text += `Efficiency looks stable.\n\n`;
+        text += `**Mass Balance**: Physical intake is **${totalIntake.toLocaleString()}kg** and yield-basis intake is **${Math.round(totalEffectiveIntake).toLocaleString()}kg**. `;
+        if (totalEffectiveIntake > 0) text += `Efficiency looks stable.\n\n`;
         text += `**Financial Snapshot**: \n`;
         text += `- Confirmed Revenue: **€${totalRevenue.toLocaleString()}**\n`;
         text += `- Raw Material Cost: **€${totalMilkCost.toLocaleString()}**\n`;

@@ -107,11 +107,17 @@ model IntakeEntry {
   routeGroup           String
   milkType             String
   quantityKg           Float
+  effectiveQuantityKg  Float?
+  labCoefficient       Float?
   ph                   Float
   fatPct               Float
   proteinPct           Float
   tempCelsius          Float
   isEcological         Boolean  @default(false)
+  pricingMode          String?
+  unitPricePerKg       Float?
+  unitPriceBasis       String?
+  invoiceNumber        String?
   note                 String?
   timestamp            DateTime
   calculatedCost       Float

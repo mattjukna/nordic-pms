@@ -2,6 +2,8 @@
 export type PackagingString = string;
 
 export type MassUnit = 'kg' | 'pallets' | 'bigbags';
+export type IntakePricingMode = 'invoice_total' | 'unit_price';
+export type IntakeUnitPriceBasis = 'received_kg' | 'effective_kg';
 
 export interface GlobalConfig {
   processingCostPerTon: number; // e.g., 45 EUR/ton
@@ -22,11 +24,11 @@ export interface Supplier {
   addressLine2: string;
   createdOn: number | null;
   
-  // Financial Fields
-  basePricePerKg: number; // Base price per kg of raw milk (e.g. 0.32)
+  // Financial Fields kept for legacy supplier pricing compatibility.
+  basePricePerKg?: number; // Base price per kg of raw milk (e.g. 0.32)
   normalMilkPricePerKg?: number; // Optional normal milk price per kg
-  fatBonusPerPct: number; // Bonus per 0.1% fat (e.g. 0.003)
-  proteinBonusPerPct: number; // Bonus per 0.1% protein (e.g. 0.004)
+  fatBonusPerPct?: number; // Bonus per 0.1% fat (e.g. 0.003)
+  proteinBonusPerPct?: number; // Bonus per 0.1% protein (e.g. 0.004)
   // Milk Characteristics
   isEco: boolean;
   defaultMilkType: string;
@@ -73,6 +75,8 @@ export interface IntakeEntry {
   routeGroup: string;
   milkType: string; // e.g., "Skim milk", "Skim milk concentrate"
   quantityKg: number;
+  effectiveQuantityKg?: number;
+  labCoefficient?: number;
   ph: number; // New field for acidity
   fatPct: number;
   proteinPct: number;
@@ -84,6 +88,10 @@ export interface IntakeEntry {
   
   // Financials
   calculatedCost: number; // Total cost of this load in EUR
+  pricingMode?: IntakePricingMode | null;
+  unitPricePerKg?: number | null;
+  unitPriceBasis?: IntakeUnitPriceBasis | null;
+  invoiceNumber?: string | null;
   isTempAlertDismissed?: boolean; // New field to track if alert was dismissed
   isDiscarded?: boolean; // New field to track if milk was thrown out
 }

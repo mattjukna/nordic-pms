@@ -4,6 +4,7 @@ type ValidationResult<T> =
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const isNullableFiniteNumber = (value: unknown) => value == null || isFiniteNumber(value);
 
 function fail<T>(...errors: string[]): ValidationResult<T> {
   return { ok: false, errors };
@@ -26,6 +27,31 @@ export function validateIntakePayload(body: any): ValidationResult<any> {
   if (!isFiniteNumber(body?.ph) || body.ph < 0 || body.ph > 14) errors.push('ph must be between 0 and 14.');
   if (!isFiniteNumber(body?.tempCelsius) || body.tempCelsius < -10 || body.tempCelsius > 60) errors.push('tempCelsius must be between -10 and 60.');
   if (!isFiniteNumber(body?.timestamp)) errors.push('timestamp must be a valid epoch millisecond value.');
+
+  if (body?.pricingMode != null && body.pricingMode !== 'invoice_total' && body.pricingMode !== 'unit_price') {
+    errors.push('pricingMode must be invoice_total or unit_price.');
+  }
+
+  if (body?.unitPriceBasis != null && body.unitPriceBasis !== 'received_kg' && body.unitPriceBasis !== 'effective_kg') {
+    errors.push('unitPriceBasis must be received_kg or effective_kg.');
+  }
+
+  if (body?.pricingMode === 'invoice_total') {
+    if (!isFiniteNumber(body?.invoiceTotalEur) || body.invoiceTotalEur <= 0) errors.push('invoiceTotalEur must be greater than zero for invoice_total pricing.');
+  }
+
+  if (body?.pricingMode === 'unit_price') {
+    if (!isFiniteNumber(body?.unitPricePerKg) || body.unitPricePerKg < 0) errors.push('unitPricePerKg must be zero or higher for unit_price pricing.');
+    if (body?.unitPriceBasis !== 'received_kg' && body?.unitPriceBasis !== 'effective_kg') errors.push('unitPriceBasis is required for unit_price pricing.');
+  }
+
+  if (body?.applyLabCoefficient != null && typeof body.applyLabCoefficient !== 'boolean') {
+    errors.push('applyLabCoefficient must be boolean when provided.');
+  }
+
+  if (!isNullableFiniteNumber(body?.manualLabCoefficient) || (isFiniteNumber(body?.manualLabCoefficient) && body.manualLabCoefficient <= 0)) {
+    errors.push('manualLabCoefficient must be greater than zero when provided.');
+  }
 
   return errors.length > 0 ? fail(...errors) : succeed(body);
 }

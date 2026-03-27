@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { Scale, Truck, ChevronDown, ChevronRight, AlertCircle, Leaf, Package, Calendar, Filter, Factory, Droplets, Ban } from 'lucide-react';
+import { getEffectiveIntakeQuantityKg } from '../../utils/intakeCoefficient';
 
 type TimeRange = 'day' | 'week' | 'month' | 'quarter' | 'year';
 type ViewMode = 'intake' | 'production';
@@ -85,6 +86,7 @@ export const LivePreviewTab: React.FC = () => {
     }
 
     const totalIntake = entries.filter(e => !e.isDiscarded).reduce((sum, e) => sum + e.quantityKg, 0);
+    const totalEffectiveIntake = entries.filter(e => !e.isDiscarded).reduce((sum, e) => sum + getEffectiveIntakeQuantityKg(e), 0);
     const totalDiscarded = entries.filter(e => e.isDiscarded).reduce((sum, e) => sum + e.quantityKg, 0);
     
     // Group by Supplier for the list
@@ -128,7 +130,7 @@ export const LivePreviewTab: React.FC = () => {
     // Sort: If 'all', sort by total intake descending. If filtered, just show that one.
     bySupplier.sort((a, b) => b.total - a.total);
 
-    return { totalIntake, totalDiscarded, bySupplier };
+    return { totalIntake, totalEffectiveIntake, totalDiscarded, bySupplier };
   }, [intakeEntries, suppliers, startTime, endTime, selectedSupplierId]);
 
   // --- Data Processing: Production ---
@@ -405,10 +407,16 @@ export const LivePreviewTab: React.FC = () => {
                                      <span>F: {entry.fatPct}%</span>
                                      <span>P: {entry.proteinPct}%</span>
                                      <span>{entry.milkType}</span>
+                                     {(entry.labCoefficient ?? 1) !== 1 && <span>x{(entry.labCoefficient ?? 1).toFixed(3)}</span>}
                                   </div>
                                </div>
-                               <div className={`font-mono font-bold text-sm ${entry.isDiscarded ? 'text-red-600 line-through' : 'text-slate-800'}`}>
-                                 {entry.quantityKg.toLocaleString()} kg
+                               <div className="text-right">
+                                 <div className={`font-mono font-bold text-sm ${entry.isDiscarded ? 'text-red-600 line-through' : 'text-slate-800'}`}>
+                                   {entry.quantityKg.toLocaleString()} kg
+                                 </div>
+                                 {(entry.labCoefficient ?? 1) !== 1 && (
+                                   <div className="text-[10px] text-slate-500">{getEffectiveIntakeQuantityKg(entry).toLocaleString(undefined, { maximumFractionDigits: 1 })} eff kg</div>
+                                 )}
                                </div>
                             </div>
                           ))}
@@ -464,8 +472,8 @@ export const LivePreviewTab: React.FC = () => {
                 <div>
                   <div className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">Yield Efficiency</div>
                   <div className="text-3xl font-mono font-bold text-slate-900">
-                    {intakeData.totalIntake > 0 
-                      ? ((productionData.totalOutput / intakeData.totalIntake) * 100).toFixed(1) 
+                    {intakeData.totalEffectiveIntake > 0 
+                      ? ((productionData.totalOutput / intakeData.totalEffectiveIntake) * 100).toFixed(1) 
                       : '0.0'} 
                     <span className="text-sm font-normal text-slate-500">%</span>
                   </div>

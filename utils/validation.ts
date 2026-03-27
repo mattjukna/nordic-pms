@@ -1,4 +1,4 @@
-import type { ParsedOutput, Product, Supplier, Buyer } from '../types';
+import type { ParsedOutput, Supplier, Buyer, IntakePricingMode, IntakeUnitPriceBasis } from '../types';
 
 export type ValidationErrors = Record<string, string>;
 
@@ -39,6 +39,10 @@ export function validateIntakeForm(input: {
   protein: string;
   ph: string;
   temp: string;
+  pricingMode: IntakePricingMode;
+  invoiceTotalEur: string;
+  unitPricePerKg: string;
+  unitPriceBasis: IntakeUnitPriceBasis | '';
 }): ValidationErrors {
   const errors: ValidationErrors = {};
 
@@ -65,6 +69,18 @@ export function validateIntakeForm(input: {
   const temp = parseNumericInput(input.temp);
   if (temp === null) addError(errors, 'temp', 'Enter the delivery temperature.');
   else if (temp < -10 || temp > 60) addError(errors, 'temp', 'Temperature must be between -10°C and 60°C.');
+
+  if (input.pricingMode === 'invoice_total') {
+    const invoiceTotal = parseNumericInput(input.invoiceTotalEur);
+    if (invoiceTotal === null) addError(errors, 'invoiceTotalEur', 'Enter the invoice total.');
+    else if (invoiceTotal <= 0) addError(errors, 'invoiceTotalEur', 'Invoice total must be greater than zero.');
+  } else {
+    const unitPrice = parseNumericInput(input.unitPricePerKg);
+    if (unitPrice === null) addError(errors, 'unitPricePerKg', 'Enter the unit price.');
+    else if (unitPrice < 0) addError(errors, 'unitPricePerKg', 'Unit price cannot be negative.');
+
+    if (!input.unitPriceBasis) addError(errors, 'unitPriceBasis', 'Select the pricing basis.');
+  }
 
   return errors;
 }
@@ -146,10 +162,6 @@ export function validateSupplierForm(input: {
   addressLine1: string;
   createdOn: string;
   contractQuota: string;
-  basePricePerKg: string;
-  normalMilkPricePerKg: string;
-  fatBonusPerPct: string;
-  proteinBonusPerPct: string;
 }): ValidationErrors {
   const errors: ValidationErrors = {};
 
@@ -163,10 +175,6 @@ export function validateSupplierForm(input: {
 
   const numericChecks: Array<[keyof ValidationErrors, string, string, boolean]> = [
     ['contractQuota', input.contractQuota, 'Quota cannot be negative.', true],
-    ['basePricePerKg', input.basePricePerKg, 'Base price cannot be negative.', true],
-    ['normalMilkPricePerKg', input.normalMilkPricePerKg, 'Normal milk price cannot be negative.', true],
-    ['fatBonusPerPct', input.fatBonusPerPct, 'Fat bonus cannot be negative.', true],
-    ['proteinBonusPerPct', input.proteinBonusPerPct, 'Protein bonus cannot be negative.', true],
   ];
 
   for (const [key, raw, negativeMessage] of numericChecks) {

@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
-import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calendar, Globe, ChevronDown, ChevronUp, Pencil, Building2, Coins, FileText, CheckCircle, RotateCcw, Package, Droplets, GripVertical } from 'lucide-react';
+import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calendar, Globe, ChevronDown, ChevronUp, Pencil, Building2, FileText, CheckCircle, RotateCcw, Package, Droplets, GripVertical } from 'lucide-react';
 import { Supplier, Buyer, BuyerContract, Product } from '../../types';
 import { normalizeCompanyCodes } from '../../utils/companyCodes';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
@@ -125,10 +125,6 @@ export const SettingsTab: React.FC = () => {
     addressLine1: '',
     addressLine2: '',
     createdOn: new Date().toISOString().split('T')[0],
-    basePricePerKg: '0.34',
-    normalMilkPricePerKg: '0.34',
-    fatBonusPerPct: '0.003',
-    proteinBonusPerPct: '0.004',
     isEco: false,
     defaultMilkType: ''
   });
@@ -373,10 +369,6 @@ export const SettingsTab: React.FC = () => {
       addressLine1: newSupplier.addressLine1,
       addressLine2: newSupplier.addressLine2,
       createdOn: new Date(newSupplier.createdOn).getTime(),
-      basePricePerKg: parseFloat(newSupplier.basePricePerKg) || 0,
-      normalMilkPricePerKg: parseFloat(newSupplier.normalMilkPricePerKg) || parseFloat(newSupplier.basePricePerKg) || 0,
-      fatBonusPerPct: parseFloat(newSupplier.fatBonusPerPct) || 0,
-      proteinBonusPerPct: parseFloat(newSupplier.proteinBonusPerPct) || 0,
       isEco: newSupplier.isEco,
       defaultMilkType: newSupplier.defaultMilkType
     };
@@ -404,7 +396,6 @@ export const SettingsTab: React.FC = () => {
     setNewSupplier({
       name: '', routeGroup: '', contractQuota: '', companyCode: '', phoneNumber: '', 
       country: 'Lithuania', addressLine1: '', addressLine2: '', createdOn: new Date().toISOString().split('T')[0],
-      basePricePerKg: '0.34', normalMilkPricePerKg: '0.34', fatBonusPerPct: '0.003', proteinBonusPerPct: '0.004',
       isEco: false, defaultMilkType: defaultMilkTypeOption
     });
     setShowSupplierForm(false);
@@ -425,10 +416,6 @@ export const SettingsTab: React.FC = () => {
       addressLine1: s.addressLine1,
       addressLine2: s.addressLine2,
       createdOn: new Date(s.createdOn).toISOString().split('T')[0],
-      basePricePerKg: s.basePricePerKg?.toString() || '0.34',
-      normalMilkPricePerKg: (s as any).normalMilkPricePerKg?.toString() || s.basePricePerKg?.toString() || '0.34',
-      fatBonusPerPct: s.fatBonusPerPct?.toString() || '0.003',
-      proteinBonusPerPct: s.proteinBonusPerPct?.toString() || '0.004',
       isEco: s.isEco || false,
       defaultMilkType: (s.defaultMilkType && milkTypes.includes(s.defaultMilkType)) ? s.defaultMilkType : (defaultMilkTypeOption || s.defaultMilkType || '')
     });
@@ -760,31 +747,6 @@ export const SettingsTab: React.FC = () => {
                     </label>
                  </div>
               </div>
-
-              {/* Pricing Section */}
-              <div className="col-span-2 border-t border-blue-200 mt-2 pt-2">
-                <label className="text-xs text-blue-700 font-bold uppercase tracking-wider flex items-center gap-1 mb-2">
-                  <Coins size={12}/> Financial Terms
-                </label>
-                <div className="grid grid-cols-4 gap-3">
-                  <div>
-                    <span className="text-[10px] text-slate-500">Base Price (€/kg)</span>
-                    <InputField type="number" step="0.01" value={newSupplier.basePricePerKg} onChange={e => setNewSupplier({...newSupplier, basePricePerKg: e.target.value})} />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500">Normal Milk Price (€/kg)</span>
-                    <InputField type="number" step="0.01" value={newSupplier.normalMilkPricePerKg} onChange={e => setNewSupplier({...newSupplier, normalMilkPricePerKg: e.target.value})} />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500">Fat Bonus (€/0.1%)</span>
-                    <InputField type="number" step="0.001" value={newSupplier.fatBonusPerPct} onChange={e => setNewSupplier({...newSupplier, fatBonusPerPct: e.target.value})} />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500">Prot Bonus (€/0.1%)</span>
-                    <InputField type="number" step="0.001" value={newSupplier.proteinBonusPerPct} onChange={e => setNewSupplier({...newSupplier, proteinBonusPerPct: e.target.value})} />
-                  </div>
-                </div>
-              </div>
             </div>
             <div className="flex gap-2">
               <button disabled={Object.keys(supplierErrors).length > 0} onClick={confirmSupplierSubmit} className={`text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2 ${Object.keys(supplierErrors).length > 0 ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600'}`}>
@@ -856,27 +818,6 @@ export const SettingsTab: React.FC = () => {
                                   <div className="text-slate-600">{s.phoneNumber || 'N/A'}</div>
                                </div>
                                
-                               <div className="bg-white rounded-md p-2 border border-slate-200 mt-2">
-                                <h6 className="text-[10px] font-bold uppercase text-slate-400 mb-1">Financial Terms</h6>
-                                <div className="grid grid-cols-4 gap-2 text-xs">
-                                  <div>
-                                    <span className="block text-[10px] text-slate-400">Base</span>
-                                    €{s.basePricePerKg?.toFixed(2)}
-                                  </div>
-                                  <div>
-                                    <span className="block text-[10px] text-slate-400">Normal</span>
-                                    €{(s as any).normalMilkPricePerKg ? (s as any).normalMilkPricePerKg.toFixed(2) : (s.basePricePerKg?.toFixed(2) ?? '0.00')}
-                                  </div>
-                                  <div>
-                                    <span className="block text-[10px] text-slate-400">Fat+</span>
-                                    €{s.fatBonusPerPct}
-                                  </div>
-                                  <div>
-                                    <span className="block text-[10px] text-slate-400">Prot+</span>
-                                    €{s.proteinBonusPerPct}
-                                  </div>
-                                </div>
-                               </div>
                             </div>
 
                             <div className="space-y-2">

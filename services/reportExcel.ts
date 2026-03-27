@@ -71,11 +71,15 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
       { header: 'Date', key: 'date', width: 14 },
       { header: 'Supplier', key: 'supplier', width: 30 },
       { header: 'Milk Type', key: 'milkType', width: 16 },
-      { header: 'Kg', key: 'kg', width: 12 },
+      { header: 'Received Kg', key: 'kg', width: 12 },
+      { header: 'Lab Coefficient', key: 'labCoefficient', width: 14 },
+      { header: 'Effective Kg', key: 'effectiveKg', width: 12 },
       { header: 'Fat %', key: 'fat', width: 10 },
       { header: 'Protein %', key: 'protein', width: 10 },
       { header: 'pH', key: 'ph', width: 8 },
       { header: 'Temp °C', key: 'temp', width: 10 },
+      { header: 'Invoice #', key: 'invoiceNumber', width: 18 },
+      { header: 'Total Cost €', key: 'totalCost', width: 14 },
       { header: 'Eco', key: 'eco', width: 8 },
       { header: 'Tags', key: 'tags', width: 30 },
       { header: 'Note', key: 'note', width: 40 },
@@ -87,10 +91,14 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
         supplier: r.supplierName || (r.supplier?.name || ''),
         milkType: r.milkType,
         kg: r.quantityKg,
+        labCoefficient: r.labCoefficient ?? 1,
+        effectiveKg: r.effectiveQuantityKg ?? r.quantityKg,
         fat: r.fatPct,
         protein: r.proteinPct,
         ph: r.ph,
         temp: r.tempCelsius,
+        invoiceNumber: r.invoiceNumber || '',
+        totalCost: r.calculatedCost ?? 0,
         eco: r.isEcological ? 'Yes' : 'No',
         tags: Array.isArray(r.tags) ? r.tags.map((t:any)=>t.tag).join(', ') : '',
         note: r.note || ''
@@ -98,8 +106,11 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
     }
     // number formats
     sheet.getColumn('kg').numFmt = '#,##0';
+    sheet.getColumn('labCoefficient').numFmt = '0.000';
+    sheet.getColumn('effectiveKg').numFmt = '#,##0.00';
     sheet.getColumn('fat').numFmt = '0.00';
     sheet.getColumn('protein').numFmt = '0.00';
+    sheet.getColumn('totalCost').numFmt = '€#,##0.00';
   }
 
   if (report === 'full' || report === 'production') {

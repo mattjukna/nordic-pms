@@ -9,6 +9,8 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
 import { buildMonthlyWorkbook } from './services/reportExcel';
 import { getPrimaryCompanyCode, normalizeCompanyCodes } from './utils/companyCodes';
+import { resolveEffectiveQuantityKg } from './utils/intakeCoefficient';
+import { resolveIntakeCost } from './utils/intakePricing';
 import { validateDispatchPayload, validateIntakePayload, validateOutputPayload, validateShipmentPayload } from './utils/serverValidation';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,11 +59,17 @@ const toClientIntake = (i: any) => ({
     routeGroup: i.routeGroup,
     milkType: i.milkType,
     quantityKg: i.quantityKg,
+    effectiveQuantityKg: typeof i.effectiveQuantityKg === 'number' ? i.effectiveQuantityKg : i.quantityKg,
+    labCoefficient: typeof i.labCoefficient === 'number' ? i.labCoefficient : 1,
     ph: i.ph,
     fatPct: i.fatPct,
     proteinPct: i.proteinPct,
     tempCelsius: i.tempCelsius,
     isEcological: Boolean(i.isEcological),
+    pricingMode: i.pricingMode ?? null,
+    unitPricePerKg: typeof i.unitPricePerKg === 'number' ? i.unitPricePerKg : null,
+    unitPriceBasis: i.unitPriceBasis ?? null,
+    invoiceNumber: i.invoiceNumber ?? null,
     note: i.note ?? '',
     timestamp: mapDate(i.timestamp),
     calculatedCost: typeof i.calculatedCost === 'number' ? i.calculatedCost : 0,
@@ -113,6 +121,113 @@ const toClientSupplier = (s: any) => ({
     fatBonusPerPct: typeof s.fatBonusPerPct === 'number' ? s.fatBonusPerPct : 0,
     proteinBonusPerPct: typeof s.proteinBonusPerPct === 'number' ? s.proteinBonusPerPct : 0,
 });
+
+const toNullableString = (value: unknown) => typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+
+const resolveLegacySupplierIntakeCost = async (input: {
+    supplierId: string;
+    timestamp: Date;
+    quantityKg: number;
+    fatPct: number;
+    proteinPct: number;
+}) => {
+    const year = input.timestamp.getFullYear();
+    const month = input.timestamp.getMonth();
+    const periodStart = new Date(year, month, 1);
+
+    const supplier = await prisma.supplier.findUnique({ where: { id: input.supplierId } });
+    const pricing = await prisma.supplierPricingPeriod.findFirst({ where: { supplierId: input.supplierId, periodStart } });
+
+    const basePrice = pricing?.normalMilkPricePerKg ?? pricing?.basePricePerKg ?? supplier?.normalMilkPricePerKg ?? supplier?.basePricePerKg ?? 0;
+    const fatBonus = pricing?.fatBonusPerPct ?? supplier?.fatBonusPerPct ?? 0;
+    const proteinBonus = pricing?.proteinBonusPerPct ?? supplier?.proteinBonusPerPct ?? 0;
+    const unitAdjust = ((input.fatPct - 4.0) * 10 * fatBonus) + ((input.proteinPct - 3.2) * 10 * proteinBonus);
+    const unitPrice = basePrice + unitAdjust;
+    return Math.max(0, (input.quantityKg || 0) * unitPrice);
+};
+
+const resolvePersistedIntakeValues = async (input: {
+    body: any;
+    existing?: any | null;
+}) => {
+    const body = input.body || {};
+    const existing = input.existing || null;
+    const quantityKg = Number(body.quantityKg ?? existing?.quantityKg ?? 0);
+    const fatPct = Number(body.fatPct ?? existing?.fatPct ?? 0);
+    const proteinPct = Number(body.proteinPct ?? existing?.proteinPct ?? 0);
+    const ph = Number(body.ph ?? existing?.ph ?? 0);
+    const tempCelsius = Number(body.tempCelsius ?? existing?.tempCelsius ?? 0);
+    const timestamp = body.timestamp ? new Date(body.timestamp) : new Date(existing?.timestamp);
+    const pricingMode = body.pricingMode ?? existing?.pricingMode ?? null;
+    const shouldApplyCoefficient = typeof body.applyLabCoefficient === 'boolean'
+        ? body.applyLabCoefficient
+        : (existing?.labCoefficient != null
+            ? Number(existing.labCoefficient) !== 1 || Number(existing?.effectiveQuantityKg ?? existing?.quantityKg ?? 0) !== Number(existing?.quantityKg ?? 0)
+            : false);
+
+    const effective = resolveEffectiveQuantityKg({
+        quantityKg,
+        applyCoefficient: shouldApplyCoefficient,
+        fatPct,
+        proteinPct,
+        manualCoefficient: body.manualLabCoefficient ?? null,
+    });
+
+    if (!(effective.labCoefficient > 0) || !(effective.effectiveQuantityKg > 0)) {
+        throw new Error('Resolved intake coefficient or effective quantity is invalid.');
+    }
+
+    let calculatedCost: number;
+    let unitPricePerKg: number | null = null;
+    let unitPriceBasis: string | null = null;
+
+    if (pricingMode === 'invoice_total' || pricingMode === 'unit_price') {
+        unitPricePerKg = pricingMode === 'unit_price' ? Number(body.unitPricePerKg ?? existing?.unitPricePerKg ?? 0) : null;
+        unitPriceBasis = pricingMode === 'unit_price' ? (body.unitPriceBasis ?? existing?.unitPriceBasis ?? null) : null;
+        const pricing = resolveIntakeCost({
+            pricingMode,
+            invoiceTotalEur: pricingMode === 'invoice_total' ? Number(body.invoiceTotalEur ?? existing?.calculatedCost ?? 0) : null,
+            unitPricePerKg,
+            unitPriceBasis: unitPriceBasis as any,
+            quantityKg,
+            effectiveQuantityKg: effective.effectiveQuantityKg,
+        });
+        calculatedCost = pricing.calculatedCost;
+    } else {
+        // Temporary compatibility fallback for legacy clients deployed before the new intake pricing UI.
+        calculatedCost = await resolveLegacySupplierIntakeCost({
+            supplierId: body.supplierId ?? existing?.supplierId,
+            timestamp,
+            quantityKg,
+            fatPct,
+            proteinPct,
+        });
+    }
+
+    return {
+        supplierId: body.supplierId ?? existing?.supplierId,
+        supplierName: body.supplierName ?? existing?.supplierName,
+        routeGroup: body.routeGroup ?? existing?.routeGroup,
+        milkType: body.milkType ?? existing?.milkType,
+        quantityKg,
+        effectiveQuantityKg: effective.effectiveQuantityKg,
+        labCoefficient: effective.labCoefficient,
+        ph,
+        fatPct,
+        proteinPct,
+        tempCelsius,
+        isEcological: body.isEcological ?? existing?.isEcological ?? false,
+        pricingMode,
+        unitPricePerKg: pricingMode === 'unit_price' ? unitPricePerKg : null,
+        unitPriceBasis: pricingMode === 'unit_price' ? unitPriceBasis : null,
+        invoiceNumber: toNullableString(body.invoiceNumber ?? existing?.invoiceNumber ?? null),
+        note: body.note ?? existing?.note ?? null,
+        timestamp,
+        calculatedCost,
+        isTempAlertDismissed: body.isTempAlertDismissed ?? existing?.isTempAlertDismissed ?? false,
+        isDiscarded: body.isDiscarded ?? existing?.isDiscarded ?? false,
+    };
+};
 
 const DEFAULT_AZURE_FRONTEND_ORIGIN = 'https://nordic-pms-prod-2026-bxh5f7bcc6ccfgfg.polandcentral-01.azurewebsites.net';
 
@@ -650,40 +765,8 @@ async function startServer() {
         const validation = validateIntakePayload(body);
         if (!validation.ok) return res.status(400).json({ error: 'Invalid intake payload', details: validation.errors });
         try {
-                // Calculate cost based on supplier pricing period or supplier defaults
-                const ts = new Date(body.timestamp);
-                const year = ts.getFullYear();
-                const month = ts.getMonth();
-                const periodStart = new Date(year, month, 1);
-
-                const supplier = await prisma.supplier.findUnique({ where: { id: body.supplierId } });
-                const pricing = await prisma.supplierPricingPeriod.findFirst({ where: { supplierId: body.supplierId, periodStart } });
-
-                const basePrice = pricing?.normalMilkPricePerKg ?? pricing?.basePricePerKg ?? supplier?.normalMilkPricePerKg ?? supplier?.basePricePerKg ?? 0;
-                const fatBonus = pricing?.fatBonusPerPct ?? supplier?.fatBonusPerPct ?? 0;
-                const proteinBonus = pricing?.proteinBonusPerPct ?? supplier?.proteinBonusPerPct ?? 0;
-
-                const unitAdjust = ((body.fatPct - 4.0) * 10 * fatBonus) + ((body.proteinPct - 3.2) * 10 * proteinBonus);
-                const unitPrice = basePrice + unitAdjust;
-                const calculatedCost = (body.quantityKg || 0) * unitPrice;
-
-                const created = await prisma.intakeEntry.create({ data: {
-                    supplierId: body.supplierId,
-                    supplierName: body.supplierName,
-                    routeGroup: body.routeGroup,
-                    milkType: body.milkType,
-                    quantityKg: body.quantityKg,
-                    ph: body.ph,
-                    fatPct: body.fatPct,
-                    proteinPct: body.proteinPct,
-                    tempCelsius: body.tempCelsius,
-                    isEcological: body.isEcological ?? false,
-                    note: body.note ?? null,
-                    timestamp: ts,
-                    calculatedCost,
-                    isTempAlertDismissed: body.isTempAlertDismissed ?? false,
-                    isDiscarded: body.isDiscarded ?? false
-                }});
+            const intakeData = await resolvePersistedIntakeValues({ body });
+            const created = await prisma.intakeEntry.create({ data: intakeData });
 
             // Tags
             if (Array.isArray(body.tags)) {
@@ -716,27 +799,19 @@ async function startServer() {
                 proteinPct: data.proteinPct ?? existingEntry.proteinPct,
                 tempCelsius: data.tempCelsius ?? existingEntry.tempCelsius,
                 timestamp: data.timestamp ? data.timestamp.getTime() : existingEntry.timestamp.getTime(),
+                pricingMode: req.body.pricingMode ?? existingEntry.pricingMode ?? null,
+                invoiceTotalEur: req.body.invoiceTotalEur ?? (existingEntry.pricingMode === 'invoice_total' ? existingEntry.calculatedCost : null),
+                unitPricePerKg: req.body.unitPricePerKg ?? existingEntry.unitPricePerKg ?? null,
+                unitPriceBasis: req.body.unitPriceBasis ?? existingEntry.unitPriceBasis ?? null,
+                applyLabCoefficient: typeof req.body.applyLabCoefficient === 'boolean'
+                    ? req.body.applyLabCoefficient
+                    : ((existingEntry.labCoefficient ?? 1) !== 1),
+                manualLabCoefficient: req.body.manualLabCoefficient ?? null,
             });
             if (!mergedValidation.ok) return res.status(400).json({ error: 'Invalid intake payload', details: mergedValidation.errors });
 
-            // Recompute calculatedCost when intake is updated
-            const ts = data.timestamp ? new Date(data.timestamp) : null;
-            if (data.supplierId && ts) {
-                const year = ts.getFullYear();
-                const month = ts.getMonth();
-                const periodStart = new Date(year, month, 1);
-                const supplier = await prisma.supplier.findUnique({ where: { id: data.supplierId } });
-                const pricing = await prisma.supplierPricingPeriod.findFirst({ where: { supplierId: data.supplierId, periodStart } });
-                const basePrice = pricing?.normalMilkPricePerKg ?? pricing?.basePricePerKg ?? supplier?.normalMilkPricePerKg ?? supplier?.basePricePerKg ?? 0;
-                const fatBonus = pricing?.fatBonusPerPct ?? supplier?.fatBonusPerPct ?? 0;
-                const proteinBonus = pricing?.proteinBonusPerPct ?? supplier?.proteinBonusPerPct ?? 0;
-                const fatPct = data.fatPct ?? 4.0;
-                const proteinPct = data.proteinPct ?? 3.2;
-                const unitAdjust = ((fatPct - 4.0) * 10 * fatBonus) + ((proteinPct - 3.2) * 10 * proteinBonus);
-                const unitPrice = basePrice + unitAdjust;
-                data.calculatedCost = (data.quantityKg ?? 0) * unitPrice;
-            }
-            const updated = await prisma.intakeEntry.update({ where: { id }, data });
+            const persisted = await resolvePersistedIntakeValues({ body: req.body, existing: existingEntry });
+            const updated = await prisma.intakeEntry.update({ where: { id }, data: persisted });
 
             // Replace tags if provided
             if (Array.isArray(req.body.tags)) {

@@ -31,6 +31,7 @@ import ReportExportModal from "../ui/ReportExportModal";
 import type { IntakeEntry, OutputEntry, DispatchEntry } from "../../types";
 import { isShippedStatus, getShippedKg, getShippedRevenue, getShipmentsByDate } from "../../utils/dispatchMath";
 import { formatDate } from '../../utils/date';
+import { getEffectiveIntakeQuantityKg } from '../../utils/intakeCoefficient';
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
 
@@ -158,15 +159,16 @@ export const TrendsTab: React.FC = () => {
   // ---------- Production KPIs ----------
   const productionKPIs = useMemo(() => {
     const totalIntake = nonDiscardedFilteredIntake.reduce((s, e) => s + (e.quantityKg || 0), 0);
+    const totalEffectiveIntake = nonDiscardedFilteredIntake.reduce((s, e) => s + getEffectiveIntakeQuantityKg(e), 0);
     const discardedKg = filteredIntake.filter(e => e.isDiscarded === true).reduce((s, e) => s + (e.quantityKg || 0), 0);
     const totalOutput = filteredOutput.reduce((s, e) => s + (e.parsed?.totalWeight || 0), 0);
-    const currentYield = totalIntake > 0 ? (totalOutput / totalIntake) * 100 : 0;
-    const theoreticalOutput = totalIntake * TARGET_YIELD_FACTOR;
+    const currentYield = totalEffectiveIntake > 0 ? (totalOutput / totalEffectiveIntake) * 100 : 0;
+    const theoreticalOutput = totalEffectiveIntake * TARGET_YIELD_FACTOR;
     const varianceKg = totalOutput - theoreticalOutput;
     const productTotals: Record<string, number> = {};
     filteredOutput.forEach(e => { productTotals[e.productId] = (productTotals[e.productId] || 0) + (e.parsed?.totalWeight || 0); });
     const top = Object.entries(productTotals).sort((a,b) => b[1]-a[1])[0];
-    return { totalIntake, totalOutput, discardedKg, discardedPct: (totalIntake+discardedKg)>0 ? (discardedKg/(totalIntake+discardedKg))*100 : 0, currentYield, varianceKg, topProductName: top?.[0]||'N/A' };
+    return { totalIntake, totalEffectiveIntake, totalOutput, discardedKg, discardedPct: (totalIntake+discardedKg)>0 ? (discardedKg/(totalIntake+discardedKg))*100 : 0, currentYield, varianceKg, topProductName: top?.[0]||'N/A' };
   }, [nonDiscardedFilteredIntake, filteredIntake, filteredOutput]);
 
   // ---------- Quality KPIs ----------
@@ -194,11 +196,11 @@ export const TrendsTab: React.FC = () => {
   }, [nonDiscardedFilteredIntake, filteredIntake, filteredDispatch]);
 
   const dailyProductionData = useMemo(() => {
-    const map: Record<string, { date: string; intake: number; discarded: number; output: number; yield: number }> = {};
-    nonDiscardedFilteredIntake.forEach(e=>{ const d=toISODate(e.timestamp); if(!map[d]) map[d] = {date:d,intake:0,discarded:0,output:0,yield:0}; map[d].intake += e.quantityKg||0; });
-    filteredIntake.filter(e=>e.isDiscarded===true).forEach(e=>{ const d=toISODate(e.timestamp); if(!map[d]) map[d] = {date:d,intake:0,discarded:0,output:0,yield:0}; map[d].discarded += e.quantityKg||0; });
-    filteredOutput.forEach(e=>{ const d=toISODate(e.timestamp); if(!map[d]) map[d] = {date:d,intake:0,discarded:0,output:0,yield:0}; map[d].output += e.parsed?.totalWeight||0; });
-    return Object.values(map).map(row=>({ ...row, yield: row.intake>0 ? (row.output/row.intake)*100 : 0 })).sort((a,b)=> a.date < b.date ? -1 : 1);
+    const map: Record<string, { date: string; intake: number; effectiveIntake: number; discarded: number; output: number; yield: number }> = {};
+    nonDiscardedFilteredIntake.forEach(e=>{ const d=toISODate(e.timestamp); if(!map[d]) map[d] = {date:d,intake:0,effectiveIntake:0,discarded:0,output:0,yield:0}; map[d].intake += e.quantityKg||0; map[d].effectiveIntake += getEffectiveIntakeQuantityKg(e); });
+    filteredIntake.filter(e=>e.isDiscarded===true).forEach(e=>{ const d=toISODate(e.timestamp); if(!map[d]) map[d] = {date:d,intake:0,effectiveIntake:0,discarded:0,output:0,yield:0}; map[d].discarded += e.quantityKg||0; });
+    filteredOutput.forEach(e=>{ const d=toISODate(e.timestamp); if(!map[d]) map[d] = {date:d,intake:0,effectiveIntake:0,discarded:0,output:0,yield:0}; map[d].output += e.parsed?.totalWeight||0; });
+    return Object.values(map).map(row=>({ ...row, yield: row.effectiveIntake>0 ? (row.output/row.effectiveIntake)*100 : 0 })).sort((a,b)=> a.date < b.date ? -1 : 1);
   }, [nonDiscardedFilteredIntake, filteredIntake, filteredOutput]);
 
   // Product mix (top N + Other)

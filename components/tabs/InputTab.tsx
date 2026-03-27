@@ -10,9 +10,12 @@ import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, Ch
 import { parsePackagingString } from '../../utils/parser';
 import { anyFractional } from '../../utils/wholeUnits';
 import { buildIntakeTags } from '../../utils/intakeRules';
+import { getEffectiveIntakeQuantityKg, isRawMilkType, resolveEffectiveQuantityKg } from '../../utils/intakeCoefficient';
+import { resolveIntakeCost } from '../../utils/intakePricing';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
 import { validateIntakeForm, validateOutputForm } from '../../utils/validation';
+import type { IntakePricingMode, IntakeUnitPriceBasis } from '../../types';
 
 // --- Smart Note Input Component ---
 const SUGGESTED_TAGS = ['#HighTemp', '#HighAcid', '#LowProtein', '#DamagedPackaging', '#LateArrival'];
@@ -224,6 +227,12 @@ export const InputTab: React.FC = () => {
   const [protein, setProtein] = useState('');
   const [ph, setPh] = useState('');
   const [temp, setTemp] = useState('');
+  const [applyLabCoefficient, setApplyLabCoefficient] = useState(() => isRawMilkType(milkTypes[0] || ''));
+  const [pricingMode, setPricingMode] = useState<IntakePricingMode>('invoice_total');
+  const [invoiceTotalEur, setInvoiceTotalEur] = useState('');
+  const [unitPricePerKg, setUnitPricePerKg] = useState('');
+  const [unitPriceBasis, setUnitPriceBasis] = useState<IntakeUnitPriceBasis>('received_kg');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [isEcological, setIsEcological] = useState(false);
   const [note, setNote] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -313,6 +322,11 @@ export const InputTab: React.FC = () => {
     }
   }, [selectedSupplierId, suppliers, milkTypes]);
 
+  useEffect(() => {
+    if (editingIntakeId) return;
+    setApplyLabCoefficient(isRawMilkType(milkType));
+  }, [milkType, editingIntakeId]);
+
   // Filtering States
   const [showIntakeFilter, setShowIntakeFilter] = useState(false);
   const [intakeFilters, setIntakeFilters] = useState<FilterState>({ search: '', dateStart: '', dateEnd: '' });
@@ -333,6 +347,12 @@ export const InputTab: React.FC = () => {
         setProtein(entry.proteinPct.toString());
         setPh(entry.ph?.toString() || '');
         setTemp(entry.tempCelsius.toString());
+        setApplyLabCoefficient((entry.labCoefficient ?? 1) !== 1 || Math.abs(getEffectiveIntakeQuantityKg(entry) - entry.quantityKg) > 0.0001);
+        setPricingMode(entry.pricingMode || 'invoice_total');
+        setInvoiceTotalEur(entry.calculatedCost?.toString() || '');
+        setUnitPricePerKg(entry.unitPricePerKg?.toString() || '');
+        setUnitPriceBasis(entry.unitPriceBasis || 'received_kg');
+        setInvoiceNumber(entry.invoiceNumber || '');
         setIsEcological(entry.isEcological || false);
         setNote(entry.note || '');
         setTags(entry.tags || []);
@@ -358,6 +378,24 @@ export const InputTab: React.FC = () => {
     if (!activeProduct) return null;
     return parsePackagingString(pkgString, activeProduct.defaultPalletWeight, activeProduct.defaultBagWeight);
   }, [pkgString, activeProduct]);
+  const intakeDerived = useMemo(() => {
+    return resolveEffectiveQuantityKg({
+      quantityKg: Number(intakeKg),
+      applyCoefficient: applyLabCoefficient,
+      fatPct: Number(fat),
+      proteinPct: Number(protein),
+    });
+  }, [intakeKg, applyLabCoefficient, fat, protein]);
+  const intakePricingPreview = useMemo(() => {
+    return resolveIntakeCost({
+      pricingMode,
+      invoiceTotalEur: pricingMode === 'invoice_total' ? Number(invoiceTotalEur) : null,
+      unitPricePerKg: pricingMode === 'unit_price' ? Number(unitPricePerKg) : null,
+      unitPriceBasis: pricingMode === 'unit_price' ? unitPriceBasis : null,
+      quantityKg: Number(intakeKg),
+      effectiveQuantityKg: intakeDerived.effectiveQuantityKg,
+    });
+  }, [pricingMode, invoiceTotalEur, unitPricePerKg, unitPriceBasis, intakeKg, intakeDerived.effectiveQuantityKg]);
   const intakeErrors = useMemo(() => validateIntakeForm({
     supplierId: selectedSupplierId,
     milkType,
@@ -367,7 +405,11 @@ export const InputTab: React.FC = () => {
     protein,
     ph,
     temp,
-  }), [selectedSupplierId, milkType, intakeDate, intakeKg, fat, protein, ph, temp]);
+    pricingMode,
+    invoiceTotalEur,
+    unitPricePerKg,
+    unitPriceBasis,
+  }), [selectedSupplierId, milkType, intakeDate, intakeKg, fat, protein, ph, temp, pricingMode, invoiceTotalEur, unitPricePerKg, unitPriceBasis]);
   const outputErrors = useMemo(() => validateOutputForm({
     productId: selectedProductId,
     batchId,
@@ -382,7 +424,7 @@ export const InputTab: React.FC = () => {
       ph: Number.isFinite(nextPh) && (nextPh > 6.74 || nextPh < 6.55),
     };
   }, [temp, ph]);
-  const hasIntakeChanges = Boolean(intakeKg || fat || protein || ph || temp || isEcological || note || tags.length || editingIntakeId);
+  const hasIntakeChanges = Boolean(intakeKg || fat || protein || ph || temp || invoiceTotalEur || unitPricePerKg || invoiceNumber || isEcological || note || tags.length || editingIntakeId);
   const hasOutputChanges = Boolean(pkgString || editingOutputId || (batchId && batchId !== defaultBatchId));
 
   useUnsavedChangesWarning(hasIntakeChanges || hasOutputChanges);
@@ -399,6 +441,12 @@ export const InputTab: React.FC = () => {
     if (draft.protein) setProtein(draft.protein);
     if (draft.ph) setPh(draft.ph);
     if (draft.temp) setTemp(draft.temp);
+    if (typeof draft.applyLabCoefficient === 'boolean') setApplyLabCoefficient(draft.applyLabCoefficient);
+    if (draft.pricingMode) setPricingMode(draft.pricingMode);
+    if (draft.invoiceTotalEur) setInvoiceTotalEur(draft.invoiceTotalEur);
+    if (draft.unitPricePerKg) setUnitPricePerKg(draft.unitPricePerKg);
+    if (draft.unitPriceBasis) setUnitPriceBasis(draft.unitPriceBasis);
+    if (draft.invoiceNumber) setInvoiceNumber(draft.invoiceNumber);
     if (typeof draft.isEcological === 'boolean') setIsEcological(draft.isEcological);
     if (draft.note) setNote(draft.note);
     if (Array.isArray(draft.tags)) setTags(draft.tags);
@@ -415,8 +463,8 @@ export const InputTab: React.FC = () => {
 
   useEffect(() => {
     if (editingIntakeId) return;
-    saveDraft(INTAKE_DRAFT_KEY, { selectedSupplierId, milkType, intakeKg, intakeDate, fat, protein, ph, temp, isEcological, note, tags });
-  }, [selectedSupplierId, milkType, intakeKg, intakeDate, fat, protein, ph, temp, isEcological, note, tags, editingIntakeId]);
+    saveDraft(INTAKE_DRAFT_KEY, { selectedSupplierId, milkType, intakeKg, intakeDate, fat, protein, ph, temp, applyLabCoefficient, pricingMode, invoiceTotalEur, unitPricePerKg, unitPriceBasis, invoiceNumber, isEcological, note, tags });
+  }, [selectedSupplierId, milkType, intakeKg, intakeDate, fat, protein, ph, temp, applyLabCoefficient, pricingMode, invoiceTotalEur, unitPricePerKg, unitPriceBasis, invoiceNumber, isEcological, note, tags, editingIntakeId]);
 
   useEffect(() => {
     if (editingOutputId) return;
@@ -525,6 +573,12 @@ export const InputTab: React.FC = () => {
       fatPct: parsedFat,
       proteinPct: parsedProtein,
       tempCelsius: parsedTemp,
+      applyLabCoefficient,
+      pricingMode,
+      invoiceTotalEur: pricingMode === 'invoice_total' ? Number(invoiceTotalEur) : null,
+      unitPricePerKg: pricingMode === 'unit_price' ? Number(unitPricePerKg) : null,
+      unitPriceBasis: pricingMode === 'unit_price' ? unitPriceBasis : null,
+      invoiceNumber: invoiceNumber.trim() || null,
       isEcological,
       tags: autoTags,
       note: note,
@@ -540,9 +594,10 @@ export const InputTab: React.FC = () => {
       }
 
       // Reset Form
-      setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setNote(''); setTags([]); setIsEcological(false);
+      setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setInvoiceTotalEur(''); setUnitPricePerKg(''); setInvoiceNumber(''); setPricingMode('invoice_total'); setUnitPriceBasis('received_kg'); setNote(''); setTags([]); setIsEcological(false);
       setMilkType(milkTypes[0] || 'Skim milk');
       setIntakeDate(new Date().toISOString().split('T')[0]);
+      setApplyLabCoefficient(isRawMilkType(milkTypes[0] || 'Skim milk'));
       clearDraft(INTAKE_DRAFT_KEY);
     } catch (error) {
       console.error('Failed to save intake entry', error);
@@ -561,9 +616,10 @@ export const InputTab: React.FC = () => {
 
   const handleCancelIntakeEdit = () => {
     setEditingIntakeId(null);
-    setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setNote(''); setTags([]); setIsEcological(false);
+    setIntakeKg(''); setFat(''); setProtein(''); setPh(''); setTemp(''); setInvoiceTotalEur(''); setUnitPricePerKg(''); setInvoiceNumber(''); setPricingMode('invoice_total'); setUnitPriceBasis('received_kg'); setNote(''); setTags([]); setIsEcological(false);
     setMilkType(milkTypes[0] || 'Skim milk');
     setIntakeDate(new Date().toISOString().split('T')[0]);
+    setApplyLabCoefficient(isRawMilkType(milkTypes[0] || 'Skim milk'));
     clearDraft(INTAKE_DRAFT_KEY);
   };
 
@@ -715,7 +771,7 @@ export const InputTab: React.FC = () => {
             </div>
 
             <div className="col-span-4 md:col-span-3">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Kg</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Received kg</label>
               <InputField 
                 type="number" 
                 value={intakeKg}
@@ -765,6 +821,115 @@ export const InputTab: React.FC = () => {
                     placeholder="4.0"
                     className={intakeErrors.temp ? INTAKE_ERROR_CLASS : intakeWarningState.temp ? INTAKE_WARNING_CLASS : ''}
                   />
+            </div>
+
+            <div className="col-span-12 rounded-lg border border-slate-200 bg-white p-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Raw Milk Coefficient</div>
+                  <div className="mt-1 text-xs text-slate-500">Use lab-adjusted kg for raw milk yield calculations only.</div>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={applyLabCoefficient}
+                    onChange={(e) => setApplyLabCoefficient(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Apply raw-milk coefficient
+                </label>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-md bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Received kg</div>
+                  <div className="mt-1 text-sm font-bold text-slate-800">{Number(intakeKg || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</div>
+                </div>
+                <div className="rounded-md bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Lab coefficient</div>
+                  <div className="mt-1 text-sm font-bold text-slate-800">{applyLabCoefficient ? intakeDerived.labCoefficient.toFixed(3) : '1.000'}</div>
+                </div>
+                <div className="rounded-md bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Effective kg</div>
+                  <div className="mt-1 text-sm font-bold text-slate-800">{intakeDerived.effectiveQuantityKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-span-12 rounded-lg border border-slate-200 bg-white p-3">
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Pricing</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPricingMode('invoice_total')}
+                  className={`rounded-md px-3 py-1.5 text-xs font-bold uppercase transition-all ${pricingMode === 'invoice_total' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  Invoice total (€)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPricingMode('unit_price')}
+                  className={`rounded-md px-3 py-1.5 text-xs font-bold uppercase transition-all ${pricingMode === 'unit_price' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  Unit price × quantity
+                </button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Invoice number</label>
+                  <InputField value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Optional invoice reference" />
+                </div>
+
+                {pricingMode === 'invoice_total' ? (
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Invoice total (€)</label>
+                    <InputField
+                      type="number"
+                      step="0.01"
+                      value={invoiceTotalEur}
+                      onChange={(e) => setInvoiceTotalEur(e.target.value)}
+                      placeholder="0.00"
+                      className={intakeErrors.invoiceTotalEur ? INTAKE_ERROR_CLASS : ''}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 block mb-1.5">Unit price (€/kg)</label>
+                      <InputField
+                        type="number"
+                        step="0.0001"
+                        value={unitPricePerKg}
+                        onChange={(e) => setUnitPricePerKg(e.target.value)}
+                        placeholder="0.0000"
+                        className={intakeErrors.unitPricePerKg ? INTAKE_ERROR_CLASS : ''}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 block mb-1.5">Pricing basis</label>
+                      <SelectField value={unitPriceBasis} onChange={(e) => setUnitPriceBasis(e.target.value as IntakeUnitPriceBasis)} className={intakeErrors.unitPriceBasis ? INTAKE_ERROR_CLASS : ''}>
+                        <option value="received_kg">Received kg</option>
+                        <option value="effective_kg">Lab-adjusted kg</option>
+                      </SelectField>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+                <div className="rounded-md bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total €</div>
+                  <div className="mt-1 text-sm font-bold text-slate-800">€{intakePricingPreview.calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                </div>
+                <div className="rounded-md bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">€/received kg</div>
+                  <div className="mt-1 text-sm font-bold text-slate-800">€{intakePricingPreview.derivedUnitPricePerReceivedKg.toFixed(4)}</div>
+                </div>
+                <div className="rounded-md bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">€/effective kg</div>
+                  <div className="mt-1 text-sm font-bold text-slate-800">€{intakePricingPreview.derivedUnitPricePerEffectiveKg.toFixed(4)}</div>
+                </div>
+              </div>
             </div>
 
             {/* Ecological Toggle */}
@@ -863,6 +1028,14 @@ export const InputTab: React.FC = () => {
                       entry.ph > 6.74 || entry.ph < 6.55 ? 'text-red-600 font-bold' :
                       entry.ph < 6.60 ? 'text-amber-600' : 'text-slate-700'
                     }`}>pH {entry.ph}</span>
+                    <span className="text-slate-300 hidden md:inline">•</span>
+                    <span className="whitespace-nowrap text-slate-700">€{entry.calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    {entry.invoiceNumber && (
+                      <>
+                        <span className="text-slate-300 hidden md:inline">•</span>
+                        <span className="whitespace-nowrap text-slate-500">Inv {entry.invoiceNumber}</span>
+                      </>
+                    )}
                     {entry.note && <span className="italic opacity-75 truncate max-w-[150px] md:max-w-none">- {entry.note}</span>}
                   </div>
                 </div>
@@ -871,6 +1044,9 @@ export const InputTab: React.FC = () => {
                     <div className={`font-mono font-bold text-sm md:text-base ${entry.isEcological ? 'text-red-600' : 'text-blue-700'}`}>
                       {entry.quantityKg.toLocaleString()} kg
                     </div>
+                    {(entry.labCoefficient ?? 1) !== 1 && (
+                      <div className="text-[11px] text-slate-500">x{(entry.labCoefficient ?? 1).toFixed(3)} • {getEffectiveIntakeQuantityKg(entry).toLocaleString(undefined, { maximumFractionDigits: 1 })} eff kg</div>
+                    )}
                     <div className="flex items-center gap-1 justify-end">
                       <div className={`text-xs font-medium ${entry.tempCelsius > 8 && !entry.isTempAlertDismissed ? 'text-red-600 font-bold' : 'text-slate-500'}`}>
                         {entry.tempCelsius}°C

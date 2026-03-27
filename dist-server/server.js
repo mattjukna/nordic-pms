@@ -291,11 +291,15 @@ async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
       { header: "Date", key: "date", width: 14 },
       { header: "Supplier", key: "supplier", width: 30 },
       { header: "Milk Type", key: "milkType", width: 16 },
-      { header: "Kg", key: "kg", width: 12 },
+      { header: "Received Kg", key: "kg", width: 12 },
+      { header: "Lab Coefficient", key: "labCoefficient", width: 14 },
+      { header: "Effective Kg", key: "effectiveKg", width: 12 },
       { header: "Fat %", key: "fat", width: 10 },
       { header: "Protein %", key: "protein", width: 10 },
       { header: "pH", key: "ph", width: 8 },
       { header: "Temp \xB0C", key: "temp", width: 10 },
+      { header: "Invoice #", key: "invoiceNumber", width: 18 },
+      { header: "Total Cost \u20AC", key: "totalCost", width: 14 },
       { header: "Eco", key: "eco", width: 8 },
       { header: "Tags", key: "tags", width: 30 },
       { header: "Note", key: "note", width: 40 }
@@ -306,18 +310,25 @@ async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
         supplier: r.supplierName || (r.supplier?.name || ""),
         milkType: r.milkType,
         kg: r.quantityKg,
+        labCoefficient: r.labCoefficient ?? 1,
+        effectiveKg: r.effectiveQuantityKg ?? r.quantityKg,
         fat: r.fatPct,
         protein: r.proteinPct,
         ph: r.ph,
         temp: r.tempCelsius,
+        invoiceNumber: r.invoiceNumber || "",
+        totalCost: r.calculatedCost ?? 0,
         eco: r.isEcological ? "Yes" : "No",
         tags: Array.isArray(r.tags) ? r.tags.map((t) => t.tag).join(", ") : "",
         note: r.note || ""
       });
     }
     sheet.getColumn("kg").numFmt = "#,##0";
+    sheet.getColumn("labCoefficient").numFmt = "0.000";
+    sheet.getColumn("effectiveKg").numFmt = "#,##0.00";
     sheet.getColumn("fat").numFmt = "0.00";
     sheet.getColumn("protein").numFmt = "0.00";
+    sheet.getColumn("totalCost").numFmt = "\u20AC#,##0.00";
   }
   if (report === "full" || report === "production") {
     const sheet = workbook.addWorksheet("Production");
@@ -416,6 +427,144 @@ async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
   return Buffer.from(buf);
 }
 
+// utils/companyCodes.ts
+function parseCompanyCodes(value) {
+  const input = (value ?? "").trim();
+  if (!input) {
+    return [];
+  }
+  const seen = /* @__PURE__ */ new Set();
+  const codes = [];
+  for (const part of input.split(/[;,\n|]+/g)) {
+    const normalized = part.trim().replace(/\s+/g, " ");
+    if (!normalized) {
+      continue;
+    }
+    const dedupeKey = normalized.toUpperCase();
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    codes.push(normalized);
+  }
+  return codes;
+}
+function normalizeCompanyCodes(value) {
+  const codes = parseCompanyCodes(value);
+  return codes.length > 0 ? codes.join("; ") : null;
+}
+function getPrimaryCompanyCode(value) {
+  return parseCompanyCodes(value)[0] ?? null;
+}
+
+// utils/intakeCoefficient.ts
+function calculateLabCoefficient(fatPct, proteinPct) {
+  if (!Number.isFinite(fatPct) || !Number.isFinite(proteinPct)) return 1;
+  return 1 + (fatPct - 3.4) * 0.178 + (proteinPct - 3) * 0.267;
+}
+function resolveEffectiveQuantityKg(input) {
+  const quantityKg = Number.isFinite(input.quantityKg) && input.quantityKg > 0 ? input.quantityKg : 0;
+  if (!input.applyCoefficient) {
+    return { labCoefficient: 1, effectiveQuantityKg: quantityKg };
+  }
+  const derivedCoefficient = Number.isFinite(input.manualCoefficient) && (input.manualCoefficient ?? 0) > 0 ? Number(input.manualCoefficient) : calculateLabCoefficient(input.fatPct, input.proteinPct);
+  const labCoefficient = Number.isFinite(derivedCoefficient) && derivedCoefficient > 0 ? derivedCoefficient : 1;
+  return {
+    labCoefficient,
+    effectiveQuantityKg: quantityKg * labCoefficient
+  };
+}
+
+// utils/intakePricing.ts
+var toNonNegativeNumber = (value) => {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Number(value));
+};
+function resolveIntakeCost(input) {
+  const quantityKg = toNonNegativeNumber(input.quantityKg);
+  const effectiveQuantityKg = toNonNegativeNumber(input.effectiveQuantityKg || input.quantityKg);
+  let calculatedCost = 0;
+  if (input.pricingMode === "unit_price") {
+    const unitPricePerKg = toNonNegativeNumber(input.unitPricePerKg);
+    const basisQty = input.unitPriceBasis === "effective_kg" ? effectiveQuantityKg : quantityKg;
+    calculatedCost = unitPricePerKg * basisQty;
+  } else {
+    calculatedCost = toNonNegativeNumber(input.invoiceTotalEur);
+  }
+  return {
+    calculatedCost,
+    derivedUnitPricePerReceivedKg: quantityKg > 0 ? calculatedCost / quantityKg : 0,
+    derivedUnitPricePerEffectiveKg: effectiveQuantityKg > 0 ? calculatedCost / effectiveQuantityKg : 0
+  };
+}
+
+// utils/serverValidation.ts
+var isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
+var isFiniteNumber = (value) => typeof value === "number" && Number.isFinite(value);
+var isNullableFiniteNumber = (value) => value == null || isFiniteNumber(value);
+function fail(...errors) {
+  return { ok: false, errors };
+}
+function succeed(value) {
+  return { ok: true, value };
+}
+function validateIntakePayload(body) {
+  const errors = [];
+  if (!isNonEmptyString(body?.supplierId)) errors.push("supplierId is required.");
+  if (!isNonEmptyString(body?.supplierName)) errors.push("supplierName is required.");
+  if (!isNonEmptyString(body?.routeGroup)) errors.push("routeGroup is required.");
+  if (!isNonEmptyString(body?.milkType)) errors.push("milkType is required.");
+  if (!isFiniteNumber(body?.quantityKg) || body.quantityKg <= 0) errors.push("quantityKg must be greater than zero.");
+  if (!isFiniteNumber(body?.fatPct) || body.fatPct < 0 || body.fatPct > 100) errors.push("fatPct must be between 0 and 100.");
+  if (!isFiniteNumber(body?.proteinPct) || body.proteinPct < 0 || body.proteinPct > 100) errors.push("proteinPct must be between 0 and 100.");
+  if (!isFiniteNumber(body?.ph) || body.ph < 0 || body.ph > 14) errors.push("ph must be between 0 and 14.");
+  if (!isFiniteNumber(body?.tempCelsius) || body.tempCelsius < -10 || body.tempCelsius > 60) errors.push("tempCelsius must be between -10 and 60.");
+  if (!isFiniteNumber(body?.timestamp)) errors.push("timestamp must be a valid epoch millisecond value.");
+  if (body?.pricingMode != null && body.pricingMode !== "invoice_total" && body.pricingMode !== "unit_price") {
+    errors.push("pricingMode must be invoice_total or unit_price.");
+  }
+  if (body?.unitPriceBasis != null && body.unitPriceBasis !== "received_kg" && body.unitPriceBasis !== "effective_kg") {
+    errors.push("unitPriceBasis must be received_kg or effective_kg.");
+  }
+  if (body?.pricingMode === "invoice_total") {
+    if (!isFiniteNumber(body?.invoiceTotalEur) || body.invoiceTotalEur <= 0) errors.push("invoiceTotalEur must be greater than zero for invoice_total pricing.");
+  }
+  if (body?.pricingMode === "unit_price") {
+    if (!isFiniteNumber(body?.unitPricePerKg) || body.unitPricePerKg < 0) errors.push("unitPricePerKg must be zero or higher for unit_price pricing.");
+    if (body?.unitPriceBasis !== "received_kg" && body?.unitPriceBasis !== "effective_kg") errors.push("unitPriceBasis is required for unit_price pricing.");
+  }
+  if (body?.applyLabCoefficient != null && typeof body.applyLabCoefficient !== "boolean") {
+    errors.push("applyLabCoefficient must be boolean when provided.");
+  }
+  if (!isNullableFiniteNumber(body?.manualLabCoefficient) || isFiniteNumber(body?.manualLabCoefficient) && body.manualLabCoefficient <= 0) {
+    errors.push("manualLabCoefficient must be greater than zero when provided.");
+  }
+  return errors.length > 0 ? fail(...errors) : succeed(body);
+}
+function validateOutputPayload(body) {
+  const errors = [];
+  if (!isNonEmptyString(body?.productId)) errors.push("productId is required.");
+  if (!isNonEmptyString(body?.batchId)) errors.push("batchId is required.");
+  if (!isNonEmptyString(body?.packagingString)) errors.push("packagingString is required.");
+  if (!isFiniteNumber(body?.timestamp)) errors.push("timestamp must be a valid epoch millisecond value.");
+  return errors.length > 0 ? fail(...errors) : succeed(body);
+}
+function validateDispatchPayload(body) {
+  const errors = [];
+  if (!isNonEmptyString(body?.productId)) errors.push("productId is required.");
+  if (!isNonEmptyString(body?.buyerName ?? body?.buyer)) errors.push("buyerName is required.");
+  if (!isFiniteNumber(body?.orderedQuantityKg) || body.orderedQuantityKg <= 0) errors.push("orderedQuantityKg must be greater than zero.");
+  if (!isFiniteNumber(body?.salesPricePerKg) || body.salesPricePerKg < 0) errors.push("salesPricePerKg must be zero or higher.");
+  if (!isFiniteNumber(body?.date)) errors.push("date must be a valid epoch millisecond value.");
+  return errors.length > 0 ? fail(...errors) : succeed(body);
+}
+function validateShipmentPayload(body) {
+  const errors = [];
+  if (!isFiniteNumber(body?.quantityKg) || body.quantityKg <= 0) errors.push("quantityKg must be greater than zero.");
+  if (!isFiniteNumber(body?.date)) errors.push("date must be a valid epoch millisecond value.");
+  return errors.length > 0 ? fail(...errors) : succeed(body);
+}
+
 // server.ts
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
@@ -451,11 +600,17 @@ var toClientIntake = (i) => ({
   routeGroup: i.routeGroup,
   milkType: i.milkType,
   quantityKg: i.quantityKg,
+  effectiveQuantityKg: typeof i.effectiveQuantityKg === "number" ? i.effectiveQuantityKg : i.quantityKg,
+  labCoefficient: typeof i.labCoefficient === "number" ? i.labCoefficient : 1,
   ph: i.ph,
   fatPct: i.fatPct,
   proteinPct: i.proteinPct,
   tempCelsius: i.tempCelsius,
   isEcological: Boolean(i.isEcological),
+  pricingMode: i.pricingMode ?? null,
+  unitPricePerKg: typeof i.unitPricePerKg === "number" ? i.unitPricePerKg : null,
+  unitPriceBasis: i.unitPriceBasis ?? null,
+  invoiceNumber: i.invoiceNumber ?? null,
   note: i.note ?? "",
   timestamp: mapDate(i.timestamp),
   calculatedCost: typeof i.calculatedCost === "number" ? i.calculatedCost : 0,
@@ -481,6 +636,8 @@ var toClientDispatch = (d) => ({
   id: d.id,
   date: mapDate(d.date),
   buyer: d.buyerName || "",
+  buyerId: d.buyerId ?? void 0,
+  buyerCompanyCode: d.buyerCompanyCode ?? void 0,
   contractNumber: d.contractNumber ?? void 0,
   productId: d.productId,
   quantityKg: d.quantityKg,
@@ -502,6 +659,117 @@ var toClientSupplier = (s) => ({
   fatBonusPerPct: typeof s.fatBonusPerPct === "number" ? s.fatBonusPerPct : 0,
   proteinBonusPerPct: typeof s.proteinBonusPerPct === "number" ? s.proteinBonusPerPct : 0
 });
+var toNullableString = (value) => typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+var resolveLegacySupplierIntakeCost = async (input) => {
+  const year = input.timestamp.getFullYear();
+  const month = input.timestamp.getMonth();
+  const periodStart = new Date(year, month, 1);
+  const supplier = await prisma_default.supplier.findUnique({ where: { id: input.supplierId } });
+  const pricing = await prisma_default.supplierPricingPeriod.findFirst({ where: { supplierId: input.supplierId, periodStart } });
+  const basePrice = pricing?.normalMilkPricePerKg ?? pricing?.basePricePerKg ?? supplier?.normalMilkPricePerKg ?? supplier?.basePricePerKg ?? 0;
+  const fatBonus = pricing?.fatBonusPerPct ?? supplier?.fatBonusPerPct ?? 0;
+  const proteinBonus = pricing?.proteinBonusPerPct ?? supplier?.proteinBonusPerPct ?? 0;
+  const unitAdjust = (input.fatPct - 4) * 10 * fatBonus + (input.proteinPct - 3.2) * 10 * proteinBonus;
+  const unitPrice = basePrice + unitAdjust;
+  return Math.max(0, (input.quantityKg || 0) * unitPrice);
+};
+var resolvePersistedIntakeValues = async (input) => {
+  const body = input.body || {};
+  const existing = input.existing || null;
+  const quantityKg = Number(body.quantityKg ?? existing?.quantityKg ?? 0);
+  const fatPct = Number(body.fatPct ?? existing?.fatPct ?? 0);
+  const proteinPct = Number(body.proteinPct ?? existing?.proteinPct ?? 0);
+  const ph = Number(body.ph ?? existing?.ph ?? 0);
+  const tempCelsius = Number(body.tempCelsius ?? existing?.tempCelsius ?? 0);
+  const timestamp = body.timestamp ? new Date(body.timestamp) : new Date(existing?.timestamp);
+  const pricingMode = body.pricingMode ?? existing?.pricingMode ?? null;
+  const shouldApplyCoefficient = typeof body.applyLabCoefficient === "boolean" ? body.applyLabCoefficient : existing?.labCoefficient != null ? Number(existing.labCoefficient) !== 1 || Number(existing?.effectiveQuantityKg ?? existing?.quantityKg ?? 0) !== Number(existing?.quantityKg ?? 0) : false;
+  const effective = resolveEffectiveQuantityKg({
+    quantityKg,
+    applyCoefficient: shouldApplyCoefficient,
+    fatPct,
+    proteinPct,
+    manualCoefficient: body.manualLabCoefficient ?? null
+  });
+  if (!(effective.labCoefficient > 0) || !(effective.effectiveQuantityKg > 0)) {
+    throw new Error("Resolved intake coefficient or effective quantity is invalid.");
+  }
+  let calculatedCost;
+  let unitPricePerKg = null;
+  let unitPriceBasis = null;
+  if (pricingMode === "invoice_total" || pricingMode === "unit_price") {
+    unitPricePerKg = pricingMode === "unit_price" ? Number(body.unitPricePerKg ?? existing?.unitPricePerKg ?? 0) : null;
+    unitPriceBasis = pricingMode === "unit_price" ? body.unitPriceBasis ?? existing?.unitPriceBasis ?? null : null;
+    const pricing = resolveIntakeCost({
+      pricingMode,
+      invoiceTotalEur: pricingMode === "invoice_total" ? Number(body.invoiceTotalEur ?? existing?.calculatedCost ?? 0) : null,
+      unitPricePerKg,
+      unitPriceBasis,
+      quantityKg,
+      effectiveQuantityKg: effective.effectiveQuantityKg
+    });
+    calculatedCost = pricing.calculatedCost;
+  } else {
+    calculatedCost = await resolveLegacySupplierIntakeCost({
+      supplierId: body.supplierId ?? existing?.supplierId,
+      timestamp,
+      quantityKg,
+      fatPct,
+      proteinPct
+    });
+  }
+  return {
+    supplierId: body.supplierId ?? existing?.supplierId,
+    supplierName: body.supplierName ?? existing?.supplierName,
+    routeGroup: body.routeGroup ?? existing?.routeGroup,
+    milkType: body.milkType ?? existing?.milkType,
+    quantityKg,
+    effectiveQuantityKg: effective.effectiveQuantityKg,
+    labCoefficient: effective.labCoefficient,
+    ph,
+    fatPct,
+    proteinPct,
+    tempCelsius,
+    isEcological: body.isEcological ?? existing?.isEcological ?? false,
+    pricingMode,
+    unitPricePerKg: pricingMode === "unit_price" ? unitPricePerKg : null,
+    unitPriceBasis: pricingMode === "unit_price" ? unitPriceBasis : null,
+    invoiceNumber: toNullableString(body.invoiceNumber ?? existing?.invoiceNumber ?? null),
+    note: body.note ?? existing?.note ?? null,
+    timestamp,
+    calculatedCost,
+    isTempAlertDismissed: body.isTempAlertDismissed ?? existing?.isTempAlertDismissed ?? false,
+    isDiscarded: body.isDiscarded ?? existing?.isDiscarded ?? false
+  };
+};
+var DEFAULT_AZURE_FRONTEND_ORIGIN = "https://nordic-pms-prod-2026-bxh5f7bcc6ccfgfg.polandcentral-01.azurewebsites.net";
+var normalizeOrigin = (value) => {
+  if (!value) return null;
+  try {
+    return new URL(value).origin.toLowerCase();
+  } catch {
+    return value.trim().replace(/\/+$/, "").toLowerCase() || null;
+  }
+};
+var getRequestOrigin = (req) => {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const hostHeader = String(req.headers.host || "").trim();
+  const protocol = forwardedProto || req.protocol || "http";
+  const host = forwardedHost || hostHeader;
+  if (!host) return null;
+  return normalizeOrigin(`${protocol}://${host}`);
+};
+var parseCorsOrigins = () => {
+  const raw = process.env.CORS_ALLOWED_ORIGINS || process.env.APP_ALLOWED_ORIGINS || "http://localhost:3000;http://127.0.0.1:3000";
+  const configuredOrigins = raw.split(/[;,]/).map((value) => normalizeOrigin(value)).filter(Boolean);
+  const azureWebsiteOrigin = process.env.WEBSITE_HOSTNAME ? normalizeOrigin(`https://${process.env.WEBSITE_HOSTNAME}`) : null;
+  return Array.from(new Set([
+    ...configuredOrigins,
+    DEFAULT_AZURE_FRONTEND_ORIGIN,
+    azureWebsiteOrigin
+  ].filter((value) => Boolean(value))));
+};
 async function startServer() {
   if (typeof process.env.WEBSITE_INSTANCE_ID === "undefined" || process.env.NODE_ENV !== "production") {
     try {
@@ -516,7 +784,33 @@ async function startServer() {
   const port = Number(process.env.PORT || 3e3);
   const host = "0.0.0.0";
   let prismaAvailable = true;
-  app.use(cors());
+  const allowedOrigins = parseCorsOrigins();
+  app.use(cors((req, callback) => {
+    const incomingOrigin = typeof req.headers.origin === "string" ? req.headers.origin : void 0;
+    const requestOrigin = normalizeOrigin(incomingOrigin);
+    const serverOrigin = getRequestOrigin(req);
+    const sameOrigin = requestOrigin ? requestOrigin === serverOrigin : false;
+    const configuredOrigin = requestOrigin ? allowedOrigins.includes(requestOrigin) : false;
+    const branch = !requestOrigin ? "allow-no-origin" : sameOrigin ? "allow-same-origin" : configuredOrigin ? "allow-configured-origin" : "reject-unauthorized-origin";
+    console.log("[CORS]", {
+      incomingOrigin: incomingOrigin || null,
+      normalizedOrigin: requestOrigin,
+      allowedOrigins,
+      requestOriginHost: serverOrigin,
+      branch
+    });
+    if (!requestOrigin || sameOrigin || configuredOrigin) {
+      callback(null, { origin: true, credentials: true });
+      return;
+    }
+    callback(new Error("Origin not allowed by CORS"));
+  }));
+  app.use((err, req, res, next) => {
+    if (err?.message === "Origin not allowed by CORS") {
+      return res.status(403).json({ error: "Origin not allowed by CORS" });
+    }
+    return next(err);
+  });
   app.use(express.json());
   const AUTH_DISABLED = (process.env.AUTH_DISABLED || "").toLowerCase() === "true";
   const AAD_TENANT = process.env.AAD_TENANT_ID || process.env.AAD_TENANT || process.env.AAD_TENANTID || "";
@@ -616,8 +910,8 @@ async function startServer() {
       const [suppliers, buyers, products, milkTypes, intakeEntries, outputEntries, dispatchEntries] = await Promise.all([
         prisma_default.supplier.findMany(),
         prisma_default.buyer.findMany({ include: { contracts: true } }),
-        prisma_default.product.findMany(),
-        prisma_default.milkType.findMany(),
+        prisma_default.product.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+        prisma_default.milkType.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
         prisma_default.intakeEntry.findMany({ include: { tags: true }, orderBy: { timestamp: "desc" } }),
         prisma_default.outputEntry.findMany({ orderBy: { timestamp: "desc" } }),
         prisma_default.dispatchEntry.findMany({ include: { shipments: true }, orderBy: { date: "desc" } })
@@ -647,7 +941,7 @@ async function startServer() {
         name: body.name,
         routeGroup: body.routeGroup,
         contractQuota: body.contractQuota ?? null,
-        companyCode: body.companyCode ?? null,
+        companyCode: normalizeCompanyCodes(body.companyCode),
         phoneNumber: body.phoneNumber ?? null,
         country: body.country ?? null,
         addressLine1: body.addressLine1 ?? null,
@@ -671,6 +965,7 @@ async function startServer() {
     try {
       const data = { ...req.body };
       if (data.createdOn) data.createdOn = new Date(data.createdOn);
+      if (Object.prototype.hasOwnProperty.call(data, "companyCode")) data.companyCode = normalizeCompanyCodes(data.companyCode);
       const updated = await prisma_default.supplier.update({ where: { id }, data });
       void logAudit(req, { action: "UPDATE", tableName: "Supplier", recordId: updated.id, details: JSON.stringify(toClientSupplier(updated)) });
       res.json(toClientSupplier(updated));
@@ -694,7 +989,7 @@ async function startServer() {
     try {
       const created = await prisma_default.buyer.create({ data: {
         name: b.name,
-        companyCode: b.companyCode ?? null,
+        companyCode: normalizeCompanyCodes(b.companyCode),
         phoneNumber: b.phoneNumber ?? null,
         country: b.country ?? null,
         addressLine1: b.addressLine1 ?? null,
@@ -709,7 +1004,9 @@ async function startServer() {
   });
   app.put("/api/buyers/:id", async (req, res) => {
     try {
-      await prisma_default.buyer.update({ where: { id: req.params.id }, data: req.body });
+      const data = { ...req.body };
+      if (Object.prototype.hasOwnProperty.call(data, "companyCode")) data.companyCode = normalizeCompanyCodes(data.companyCode);
+      await prisma_default.buyer.update({ where: { id: req.params.id }, data });
       const fetched = await prisma_default.buyer.findUnique({ where: { id: req.params.id }, include: { contracts: true } });
       res.json({ ...fetched, createdOn: mapDate(fetched?.createdOn), contracts: fetched?.contracts?.map((c) => ({ ...c, startDate: mapDate(c.startDate), endDate: mapDate(c.endDate) })) });
     } catch (err) {
@@ -766,7 +1063,8 @@ async function startServer() {
     const p = req.body;
     if (!p.id || !p.name) return res.status(400).json({ error: "Missing product id or name" });
     try {
-      const created = await prisma_default.product.create({ data: p });
+      const maxSortOrder = await prisma_default.product.aggregate({ _max: { sortOrder: true } });
+      const created = await prisma_default.product.create({ data: { ...p, sortOrder: (maxSortOrder._max.sortOrder ?? -1) + 1 } });
       res.json(created);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -788,11 +1086,24 @@ async function startServer() {
       res.status(400).json({ error: err.message });
     }
   });
+  app.post("/api/products/reorder", async (req, res) => {
+    const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds.filter((id) => typeof id === "string" && id.trim().length > 0) : [];
+    if (orderedIds.length === 0) return res.status(400).json({ error: "Missing orderedIds" });
+    try {
+      await prisma_default.$transaction(orderedIds.map((id, index) => prisma_default.product.update({ where: { id }, data: { sortOrder: index } })));
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
   app.post("/api/milk-types", async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: "Missing milk type name" });
     try {
-      const created = await prisma_default.milkType.upsert({ where: { name }, update: {}, create: { name } });
+      const existing = await prisma_default.milkType.findUnique({ where: { name } });
+      if (existing) return res.json(existing);
+      const maxSortOrder = await prisma_default.milkType.aggregate({ _max: { sortOrder: true } });
+      const created = await prisma_default.milkType.create({ data: { name, sortOrder: (maxSortOrder._max.sortOrder ?? -1) + 1 } });
       res.json(created);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -801,6 +1112,16 @@ async function startServer() {
   app.delete("/api/milk-types/:name", async (req, res) => {
     try {
       await prisma_default.milkType.delete({ where: { name: req.params.name } });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+  app.post("/api/milk-types/reorder", async (req, res) => {
+    const orderedNames = Array.isArray(req.body?.orderedNames) ? req.body.orderedNames.filter((name) => typeof name === "string" && name.trim().length > 0) : [];
+    if (orderedNames.length === 0) return res.status(400).json({ error: "Missing orderedNames" });
+    try {
+      await prisma_default.$transaction(orderedNames.map((name, index) => prisma_default.milkType.update({ where: { name }, data: { sortOrder: index } })));
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: err.message });
@@ -906,37 +1227,11 @@ async function startServer() {
   });
   app.post("/api/intake-entries", async (req, res) => {
     const body = req.body;
-    if (!body.supplierId || !body.timestamp) return res.status(400).json({ error: "Missing supplierId or timestamp" });
+    const validation = validateIntakePayload(body);
+    if (!validation.ok) return res.status(400).json({ error: "Invalid intake payload", details: validation.errors });
     try {
-      const ts = new Date(body.timestamp);
-      const year = ts.getFullYear();
-      const month = ts.getMonth();
-      const periodStart = new Date(year, month, 1);
-      const supplier = await prisma_default.supplier.findUnique({ where: { id: body.supplierId } });
-      const pricing = await prisma_default.supplierPricingPeriod.findFirst({ where: { supplierId: body.supplierId, periodStart } });
-      const basePrice = pricing?.normalMilkPricePerKg ?? pricing?.basePricePerKg ?? supplier?.normalMilkPricePerKg ?? supplier?.basePricePerKg ?? 0;
-      const fatBonus = pricing?.fatBonusPerPct ?? supplier?.fatBonusPerPct ?? 0;
-      const proteinBonus = pricing?.proteinBonusPerPct ?? supplier?.proteinBonusPerPct ?? 0;
-      const unitAdjust = (body.fatPct - 4) * 10 * fatBonus + (body.proteinPct - 3.2) * 10 * proteinBonus;
-      const unitPrice = basePrice + unitAdjust;
-      const calculatedCost = (body.quantityKg || 0) * unitPrice;
-      const created = await prisma_default.intakeEntry.create({ data: {
-        supplierId: body.supplierId,
-        supplierName: body.supplierName,
-        routeGroup: body.routeGroup,
-        milkType: body.milkType,
-        quantityKg: body.quantityKg,
-        ph: body.ph,
-        fatPct: body.fatPct,
-        proteinPct: body.proteinPct,
-        tempCelsius: body.tempCelsius,
-        isEcological: body.isEcological ?? false,
-        note: body.note ?? null,
-        timestamp: ts,
-        calculatedCost,
-        isTempAlertDismissed: body.isTempAlertDismissed ?? false,
-        isDiscarded: body.isDiscarded ?? false
-      } });
+      const intakeData = await resolvePersistedIntakeValues({ body });
+      const created = await prisma_default.intakeEntry.create({ data: intakeData });
       if (Array.isArray(body.tags)) {
         for (const t of body.tags) {
           await prisma_default.intakeTag.create({ data: { intakeEntryId: created.id, tag: t } });
@@ -954,23 +1249,29 @@ async function startServer() {
     try {
       const data = { ...req.body };
       if (data.timestamp) data.timestamp = new Date(data.timestamp);
-      const ts = data.timestamp ? new Date(data.timestamp) : null;
-      if (data.supplierId && ts) {
-        const year = ts.getFullYear();
-        const month = ts.getMonth();
-        const periodStart = new Date(year, month, 1);
-        const supplier = await prisma_default.supplier.findUnique({ where: { id: data.supplierId } });
-        const pricing = await prisma_default.supplierPricingPeriod.findFirst({ where: { supplierId: data.supplierId, periodStart } });
-        const basePrice = pricing?.normalMilkPricePerKg ?? pricing?.basePricePerKg ?? supplier?.normalMilkPricePerKg ?? supplier?.basePricePerKg ?? 0;
-        const fatBonus = pricing?.fatBonusPerPct ?? supplier?.fatBonusPerPct ?? 0;
-        const proteinBonus = pricing?.proteinBonusPerPct ?? supplier?.proteinBonusPerPct ?? 0;
-        const fatPct = data.fatPct ?? 4;
-        const proteinPct = data.proteinPct ?? 3.2;
-        const unitAdjust = (fatPct - 4) * 10 * fatBonus + (proteinPct - 3.2) * 10 * proteinBonus;
-        const unitPrice = basePrice + unitAdjust;
-        data.calculatedCost = (data.quantityKg ?? 0) * unitPrice;
-      }
-      const updated = await prisma_default.intakeEntry.update({ where: { id }, data });
+      const existingEntry = await prisma_default.intakeEntry.findUnique({ where: { id } });
+      if (!existingEntry) return res.status(404).json({ error: "Not found" });
+      const mergedValidation = validateIntakePayload({
+        supplierId: data.supplierId ?? existingEntry.supplierId,
+        supplierName: data.supplierName ?? existingEntry.supplierName,
+        routeGroup: data.routeGroup ?? existingEntry.routeGroup,
+        milkType: data.milkType ?? existingEntry.milkType,
+        quantityKg: data.quantityKg ?? existingEntry.quantityKg,
+        ph: data.ph ?? existingEntry.ph,
+        fatPct: data.fatPct ?? existingEntry.fatPct,
+        proteinPct: data.proteinPct ?? existingEntry.proteinPct,
+        tempCelsius: data.tempCelsius ?? existingEntry.tempCelsius,
+        timestamp: data.timestamp ? data.timestamp.getTime() : existingEntry.timestamp.getTime(),
+        pricingMode: req.body.pricingMode ?? existingEntry.pricingMode ?? null,
+        invoiceTotalEur: req.body.invoiceTotalEur ?? (existingEntry.pricingMode === "invoice_total" ? existingEntry.calculatedCost : null),
+        unitPricePerKg: req.body.unitPricePerKg ?? existingEntry.unitPricePerKg ?? null,
+        unitPriceBasis: req.body.unitPriceBasis ?? existingEntry.unitPriceBasis ?? null,
+        applyLabCoefficient: typeof req.body.applyLabCoefficient === "boolean" ? req.body.applyLabCoefficient : (existingEntry.labCoefficient ?? 1) !== 1,
+        manualLabCoefficient: req.body.manualLabCoefficient ?? null
+      });
+      if (!mergedValidation.ok) return res.status(400).json({ error: "Invalid intake payload", details: mergedValidation.errors });
+      const persisted = await resolvePersistedIntakeValues({ body: req.body, existing: existingEntry });
+      const updated = await prisma_default.intakeEntry.update({ where: { id }, data: persisted });
       if (Array.isArray(req.body.tags)) {
         await prisma_default.intakeTag.deleteMany({ where: { intakeEntryId: id } });
         for (const t of req.body.tags) {
@@ -995,7 +1296,8 @@ async function startServer() {
   });
   app.post("/api/output-entries", async (req, res) => {
     const body = req.body;
-    if (!body.productId || !body.timestamp) return res.status(400).json({ error: "Missing productId or timestamp" });
+    const validation = validateOutputPayload(body);
+    if (!validation.ok) return res.status(400).json({ error: "Invalid output payload", details: validation.errors });
     try {
       const product = await prisma_default.product.findUnique({ where: { id: body.productId } });
       const parsed = parsePackagingString(body.packagingString || "", product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
@@ -1022,6 +1324,13 @@ async function startServer() {
     try {
       const existing = await prisma_default.outputEntry.findUnique({ where: { id } });
       if (!existing) return res.status(404).json({ error: "Not found" });
+      const validation = validateOutputPayload({
+        productId: existing.productId,
+        batchId: existing.batchId,
+        packagingString: req.body.packagingString ?? existing.packagingString,
+        timestamp: existing.timestamp.getTime()
+      });
+      if (!validation.ok) return res.status(400).json({ error: "Invalid output payload", details: validation.errors });
       const product = await prisma_default.product.findUnique({ where: { id: existing.productId } });
       const parsed = parsePackagingString(req.body.packagingString || existing.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
       if (anyFractional(parsed)) return res.status(400).json({ error: "Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose." });
@@ -1049,12 +1358,14 @@ async function startServer() {
   });
   app.post("/api/dispatch-entries", async (req, res) => {
     const b = req.body;
-    if (!b.productId || b.quantityKg == null) return res.status(400).json({ error: "Missing productId or quantityKg" });
+    const validation = validateDispatchPayload(b);
+    if (!validation.ok) return res.status(400).json({ error: "Invalid dispatch payload", details: validation.errors });
     try {
       const created = await prisma_default.dispatchEntry.create({ data: {
         date: b.date ? new Date(b.date) : /* @__PURE__ */ new Date(),
         buyerId: b.buyerId ?? null,
-        buyerName: b.buyerName || "",
+        buyerName: b.buyerName || b.buyer || "",
+        buyerCompanyCode: normalizeCompanyCodes(b.buyerCompanyCode) ?? getPrimaryCompanyCode(b.companyCode) ?? null,
         contractNumber: b.contractNumber ?? null,
         productId: b.productId,
         quantityKg: b.quantityKg,
@@ -1079,7 +1390,25 @@ async function startServer() {
   app.put("/api/dispatch-entries/:id", async (req, res) => {
     try {
       const data = { ...req.body };
+      const existing = await prisma_default.dispatchEntry.findUnique({ where: { id: req.params.id } });
+      if (!existing) return res.status(404).json({ error: "Not found" });
       if (data.date) data.date = new Date(data.date);
+      if (Object.prototype.hasOwnProperty.call(data, "buyer")) {
+        data.buyerName = data.buyer;
+        delete data.buyer;
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "buyerCompanyCode")) {
+        data.buyerCompanyCode = normalizeCompanyCodes(data.buyerCompanyCode) ?? null;
+      }
+      const mergedDispatch = {
+        productId: data.productId ?? existing.productId,
+        buyerName: data.buyerName ?? existing.buyerName,
+        orderedQuantityKg: data.orderedQuantityKg ?? existing.orderedQuantityKg ?? existing.quantityKg,
+        salesPricePerKg: data.salesPricePerKg ?? existing.salesPricePerKg,
+        date: data.date ? data.date.getTime() : existing.date.getTime()
+      };
+      const dispatchValidation = validateDispatchPayload(mergedDispatch);
+      if (!dispatchValidation.ok) return res.status(400).json({ error: "Invalid dispatch payload", details: dispatchValidation.errors });
       if (typeof data.orderedQuantityKg === "number") {
         const parent = await prisma_default.dispatchEntry.findUnique({ where: { id: req.params.id }, include: { shipments: true } });
         const shipped = parent ? (parent.shipments || []).reduce((acc, s) => acc + (s.quantityKg || 0), 0) : 0;
@@ -1107,7 +1436,8 @@ async function startServer() {
   app.post("/api/dispatch-entries/:id/shipments", async (req, res) => {
     const dispatchId = req.params.id;
     const s = req.body;
-    if (!s.quantityKg) return res.status(400).json({ error: "Missing quantityKg" });
+    const validation = validateShipmentPayload(s);
+    if (!validation.ok) return res.status(400).json({ error: "Invalid shipment payload", details: validation.errors });
     try {
       const parent = await prisma_default.dispatchEntry.findUnique({ where: { id: dispatchId }, include: { shipments: true } });
       if (!parent) return res.status(404).json({ error: "Dispatch not found" });
@@ -1174,6 +1504,11 @@ async function startServer() {
     try {
       const existing = await prisma_default.dispatchShipment.findUnique({ where: { id: shipmentId } });
       if (!existing) return res.status(404).json({ error: "Shipment not found" });
+      const shipmentValidation = validateShipmentPayload({
+        quantityKg: body.quantityKg ?? existing.quantityKg,
+        date: body.date ?? existing.date.getTime()
+      });
+      if (!shipmentValidation.ok) return res.status(400).json({ error: "Invalid shipment payload", details: shipmentValidation.errors });
       const dispatchEntry = await prisma_default.dispatchEntry.findUnique({ where: { id } });
       if (!dispatchEntry) return res.status(404).json({ error: "Dispatch not found" });
       const product = await prisma_default.product.findUnique({ where: { id: dispatchEntry.productId } });
