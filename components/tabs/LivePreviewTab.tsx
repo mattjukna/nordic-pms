@@ -1,23 +1,35 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
-import { Scale, Truck, ChevronDown, ChevronRight, AlertCircle, Leaf, Package, Calendar, Filter, Factory, Droplets, Info, Ban } from 'lucide-react';
-import { IntakeEntry, OutputEntry } from '../../types';
-
-// Conservative average yield factor for plant (MPC85 + Permeate)
-const THEORETICAL_YIELD_FACTOR = 0.17; 
+import { Scale, Truck, ChevronDown, ChevronRight, AlertCircle, Leaf, Package, Calendar, Filter, Factory, Droplets, Ban } from 'lucide-react';
 
 type TimeRange = 'day' | 'week' | 'month' | 'quarter' | 'year';
 type ViewMode = 'intake' | 'production';
+
+const startOfDayTs = (date: Date) => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next.getTime();
+};
+
+const endOfDayTs = (date: Date) => {
+  const next = new Date(date);
+  next.setHours(23, 59, 59, 999);
+  return next.getTime();
+};
 
 export const LivePreviewTab: React.FC = () => {
   const { intakeEntries, outputEntries, suppliers, products } = useStore();
   const [viewMode, setViewMode] = useState<ViewMode>('intake');
   const [timeRange, setTimeRange] = useState<TimeRange>('month'); // Default to month for quota context
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('all');
-  const [collapsedItems, setCollapsedItems] = useState<Set<string>>(new Set());
+  const [collapsedSuppliers, setCollapsedSuppliers] = useState<Set<string>>(new Set());
+  const [collapsedProducts, setCollapsedProducts] = useState<Set<string>>(new Set());
   const [showPallets, setShowPallets] = useState(false);
+  const initializedProductIds = useRef<Set<string>>(new Set());
 
   // --- Helper: Date Filtering ---
   const getDateRangeStart = (range: TimeRange): number => {
@@ -34,11 +46,39 @@ export const LivePreviewTab: React.FC = () => {
     }
   };
 
-  const startTime = useMemo(() => getDateRangeStart(timeRange), [timeRange]);
+  const { startTime, endTime } = useMemo(() => {
+    if (customStart) {
+      const start = startOfDayTs(new Date(customStart));
+      const end = customEnd ? endOfDayTs(new Date(customEnd)) : endOfDayTs(new Date());
+      return { startTime: start, endTime: end };
+    }
+
+    return {
+      startTime: getDateRangeStart(timeRange),
+      endTime: endOfDayTs(new Date()),
+    };
+  }, [timeRange, customEnd, customStart]);
+
+  useEffect(() => {
+    setCollapsedProducts((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+
+      for (const product of products) {
+        if (!initializedProductIds.current.has(product.id)) {
+          initializedProductIds.current.add(product.id);
+          next.add(product.id);
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [products]);
 
   // --- Data Processing: Intake ---
   const intakeData = useMemo(() => {
-    let entries = intakeEntries.filter(e => e.timestamp >= startTime);
+    let entries = intakeEntries.filter(e => e.timestamp >= startTime && e.timestamp <= endTime);
     
     if (selectedSupplierId !== 'all') {
       entries = entries.filter(e => e.supplierId === selectedSupplierId);
@@ -89,11 +129,11 @@ export const LivePreviewTab: React.FC = () => {
     bySupplier.sort((a, b) => b.total - a.total);
 
     return { totalIntake, totalDiscarded, bySupplier };
-  }, [intakeEntries, suppliers, startTime, selectedSupplierId]);
+  }, [intakeEntries, suppliers, startTime, endTime, selectedSupplierId]);
 
   // --- Data Processing: Production ---
   const productionData = useMemo(() => {
-    const entries = outputEntries.filter(e => e.timestamp >= startTime);
+    const entries = outputEntries.filter(e => e.timestamp >= startTime && e.timestamp <= endTime);
     const totalOutput = entries.reduce((sum, e) => sum + e.parsed.totalWeight, 0);
     const totalPallets = entries.reduce((sum, e) => sum + e.parsed.pallets, 0);
     const totalBigBags = entries.reduce((sum, e) => sum + e.parsed.bigBags, 0);
@@ -117,14 +157,25 @@ export const LivePreviewTab: React.FC = () => {
     }).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
 
     return { totalOutput, totalPallets, totalBigBags, totalTanks, byProduct };
-  }, [outputEntries, products, startTime]);
+  }, [outputEntries, products, startTime, endTime]);
 
 
-  const toggleCollapse = (id: string) => {
-    const newSet = new Set(collapsedItems);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setCollapsedItems(newSet);
+  const toggleSupplierCollapse = (id: string) => {
+    setCollapsedSuppliers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleProductCollapse = (id: string) => {
+    setCollapsedProducts((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -196,16 +247,48 @@ export const LivePreviewTab: React.FC = () => {
             {(['day', 'week', 'month', 'quarter', 'year'] as TimeRange[]).map((range) => (
               <button
                 key={range}
-                onClick={() => setTimeRange(range)}
+                onClick={() => {
+                  setTimeRange(range);
+                  setCustomStart('');
+                  setCustomEnd('');
+                }}
                 className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all uppercase whitespace-nowrap ${
                   timeRange === range 
-                    ? 'bg-white text-slate-800 shadow-sm' 
+                    ? (!customStart ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700')
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 {range}
               </button>
             ))}
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs">
+            <Calendar size={14} className="text-slate-400" />
+            <input
+              type="date"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              className="bg-transparent text-slate-600 outline-none"
+            />
+            <span className="text-slate-300">→</span>
+            <input
+              type="date"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              className="bg-transparent text-slate-600 outline-none"
+            />
+            {(customStart || customEnd) && (
+              <button
+                onClick={() => {
+                  setCustomStart('');
+                  setCustomEnd('');
+                }}
+                className="rounded bg-slate-100 px-2 py-1 font-bold text-slate-500 hover:bg-slate-200"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -254,7 +337,7 @@ export const LivePreviewTab: React.FC = () => {
             </h3>
             
             {intakeData.bySupplier.map(supplier => {
-              const isCollapsed = collapsedItems.has(supplier.id);
+              const isCollapsed = collapsedSuppliers.has(supplier.id);
               const hasData = supplier.total > 0;
               
               return (
@@ -262,7 +345,7 @@ export const LivePreviewTab: React.FC = () => {
                   {/* Header Row */}
                   <div 
                     className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors rounded-xl"
-                    onClick={() => toggleCollapse(supplier.id)}
+                    onClick={() => toggleSupplierCollapse(supplier.id)}
                   >
                     {/* Supplier Info */}
                     <div className="flex-1">
@@ -407,16 +490,16 @@ export const LivePreviewTab: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {productionData.byProduct.map(product => {
-                const isCollapsed = collapsedItems.has(product.id);
+                const isCollapsed = collapsedProducts.has(product.id);
                 return (
                   <div key={product.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div 
                       className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"
-                      onClick={() => toggleCollapse(product.id)}
+                      onClick={() => toggleProductCollapse(product.id)}
                     >
                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-xs">
-                            {product.id}
+                          <div className="flex h-10 min-w-[3.5rem] max-w-[7rem] items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50 px-2 text-center text-[11px] font-bold leading-tight text-emerald-600">
+                            <span className="block w-full truncate whitespace-nowrap">{product.id}</span>
                           </div>
                           <div>
                              <div className="font-bold text-slate-800">{product.name}</div>

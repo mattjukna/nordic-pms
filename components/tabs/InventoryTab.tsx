@@ -19,6 +19,7 @@ import { validateDispatchForm, validateShipmentForm } from '../../utils/validati
 import autoTable from 'jspdf-autotable';
 
 const DISPATCH_DRAFT_KEY = 'nordic-pms-draft-dispatch';
+const INVALID_FIELD_CLASS = 'border-red-300 bg-red-50/40 focus:border-red-400 focus:ring-red-500/10';
 
 export const InventoryTab: React.FC = () => {
   const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating } = useStore();
@@ -989,17 +990,6 @@ export const InventoryTab: React.FC = () => {
 
           {showDispatchForm && (
             <div className={`animate-slide-up bg-white border rounded-xl p-4 shadow-lg ring-4 z-10 shrink-0 ${dispatchStatus === 'confirmed' ? 'border-blue-200 ring-blue-50' : 'border-amber-200 ring-amber-50'}`}>
-              {(Object.keys(dispatchErrors).length > 0 || Object.keys(shipmentErrors).length > 0) && (
-                <div className="mb-4 rounded-lg border bg-slate-50 px-3 py-2 text-sm">
-                  {Object.values(dispatchErrors).map((message) => (
-                    <div key={message} className="text-red-600">• {message}</div>
-                  ))}
-                  {Object.values(shipmentErrors).map((message) => (
-                    <div key={message} className="text-amber-600">• {message}</div>
-                  ))}
-                </div>
-              )}
-              
               {editingDispatchId && (
                  <div className="flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider mb-2">
                    <div className="bg-amber-100 p-1 rounded"><Pencil size={12} /></div> Editing Entry
@@ -1020,7 +1010,7 @@ export const InventoryTab: React.FC = () => {
                     type="date"
                     value={dispatchDate}
                     onChange={e => setDispatchDate(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-md px-3 py-1.5 text-xs text-slate-700 font-medium outline-none focus:ring-2 focus:ring-blue-100"
+                    className={`bg-white border rounded-md px-3 py-1.5 text-xs text-slate-700 font-medium outline-none focus:ring-2 focus:ring-blue-100 ${dispatchErrors.dispatchDate ? INVALID_FIELD_CLASS : 'border-slate-300'}`}
                  />
               </div>
 
@@ -1036,7 +1026,7 @@ export const InventoryTab: React.FC = () => {
                          setSelectedContractId(''); // Reset contract on buyer change
                          setPricePerKg('');
                     }}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className={`w-full bg-white border text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${dispatchErrors.buyerId ? INVALID_FIELD_CLASS : 'border-slate-300'}`}
                   >
                     {buyers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -1066,7 +1056,7 @@ export const InventoryTab: React.FC = () => {
                         setQuantity('');
                         setPkgString('');
                     }}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className={`w-full bg-white border text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${dispatchErrors.productId ? INVALID_FIELD_CLASS : 'border-slate-300'}`}
                   >
                     {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
@@ -1100,7 +1090,7 @@ export const InventoryTab: React.FC = () => {
                           value={pkgString}
                           onChange={(e) => setPkgString(e.target.value)}
                           placeholder="e.g. 10 pad"
-                          className="w-full bg-white border border-slate-300 text-slate-900 rounded-md pl-3 pr-10 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          className={`w-full bg-white border text-slate-900 rounded-md pl-3 pr-10 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${dispatchErrors.packagingString || dispatchErrors.quantity ? INVALID_FIELD_CLASS : 'border-slate-300'}`}
                         />
                         <button 
                            onClick={() => {
@@ -1128,7 +1118,7 @@ export const InventoryTab: React.FC = () => {
                     type="number"
                     value={pricePerKg}
                     onChange={(e) => setPricePerKg(e.target.value)}
-                    className="w-full bg-white border border-emerald-300 text-emerald-900 rounded-md p-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    className={`w-full bg-white border text-emerald-900 rounded-md p-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${dispatchErrors.pricePerKg ? INVALID_FIELD_CLASS : 'border-emerald-300'}`}
                     placeholder="e.g. 5.50"
                   />
                 </div>
@@ -1164,7 +1154,7 @@ export const InventoryTab: React.FC = () => {
                           type="date"
                           value={shipmentDate}
                           onChange={e => setShipmentDate(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs"
+                          className={`w-full bg-white border rounded p-1.5 text-xs ${shipmentErrors.shipmentDate ? INVALID_FIELD_CLASS : 'border-slate-200'}`}
                         />
                       </div>
                       <div className="md:col-span-2">
@@ -1183,7 +1173,7 @@ export const InventoryTab: React.FC = () => {
                                 }
                               }}
                               placeholder="e.g. 2 pad; 1 bb"
-                              className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs font-mono pr-8"
+                              className={`w-full bg-white border rounded p-1.5 text-xs font-mono pr-8 ${shipmentErrors.shipmentPkgString ? INVALID_FIELD_CLASS : 'border-slate-200'}`}
                             />
                             <button 
                                onClick={() => {
@@ -1201,7 +1191,7 @@ export const InventoryTab: React.FC = () => {
                               value={shipmentQty}
                               onChange={e => setShipmentQty(e.target.value)}
                               placeholder="kg"
-                              className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs font-mono"
+                              className={`w-full bg-white border rounded p-1.5 text-xs font-mono ${shipmentErrors.shipmentQty ? INVALID_FIELD_CLASS : 'border-slate-200'}`}
                             />
                           </div>
                         </div>
