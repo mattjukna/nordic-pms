@@ -659,6 +659,37 @@ var toClientSupplier = (s) => ({
   fatBonusPerPct: typeof s.fatBonusPerPct === "number" ? s.fatBonusPerPct : 0,
   proteinBonusPerPct: typeof s.proteinBonusPerPct === "number" ? s.proteinBonusPerPct : 0
 });
+var classifyBootstrapError = (err) => {
+  const message = String(err?.message || "Unknown database error");
+  const code = typeof err?.code === "string" ? err.code : null;
+  const lowerMessage = message.toLowerCase();
+  if (code === "P2022" || lowerMessage.includes("the column") || lowerMessage.includes("does not exist in the current database")) {
+    return {
+      category: "schema-mismatch",
+      error: "Database schema mismatch",
+      hint: "Apply the pending IntakeEntry migration before starting this build."
+    };
+  }
+  if (code === "P1001" || lowerMessage.includes("can't reach database server") || lowerMessage.includes("cannot reach database server") || lowerMessage.includes("timed out") || lowerMessage.includes("econnrefused") || lowerMessage.includes("etimedout") || lowerMessage.includes("server was not found")) {
+    return {
+      category: "database-unreachable",
+      error: "Database unreachable",
+      hint: "Check Azure SQL availability, firewall rules, and transient connectivity."
+    };
+  }
+  if (code === "P1000" || code === "P1010" || lowerMessage.includes("authentication failed") || lowerMessage.includes("login failed") || lowerMessage.includes("permission was denied")) {
+    return {
+      category: "database-auth-config",
+      error: "Database auth/config issue",
+      hint: "Check database credentials, permissions, and runtime configuration."
+    };
+  }
+  return {
+    category: "database-error",
+    error: message,
+    hint: "Check DATABASE_URL, firewall access, and database migration state."
+  };
+};
 var toNullableString = (value) => typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 var resolveLegacySupplierIntakeCost = async (input) => {
   const year = input.timestamp.getFullYear();
@@ -929,8 +960,14 @@ async function startServer() {
       const mapDispatches = dispatchEntries.map((d) => toClientDispatch(d));
       res.json({ suppliers: mapSuppliers, buyers: mapBuyers, products: mapProducts, milkTypes: mapMilkTypes, intakeEntries: mapIntakes, outputEntries: mapOutputs, dispatchEntries: mapDispatches });
     } catch (err) {
-      console.error("DB bootstrap error:", err?.message ?? err);
-      res.status(500).json({ error: err?.message ?? "Database error", hint: "Check DATABASE_URL / firewall / db paused" });
+      const diagnostic = classifyBootstrapError(err);
+      console.error("[BOOTSTRAP] database failure", {
+        category: diagnostic.category,
+        code: err?.code ?? null,
+        message: err?.message ?? String(err),
+        meta: err?.meta ?? null
+      });
+      res.status(500).json({ error: diagnostic.error, hint: diagnostic.hint });
     }
   });
   app.post("/api/suppliers", async (req, res) => {
