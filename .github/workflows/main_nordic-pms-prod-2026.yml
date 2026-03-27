@@ -89,6 +89,19 @@ jobs:
         with:
           name: node-app
 
+      - name: Inspect Prisma deploy context
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "PWD=$(pwd)"
+          echo "Repo root prisma entries:"
+          ls -la
+          echo "nordic-backend/prisma entries:"
+          ls -la nordic-backend/prisma
+          echo "nordic-backend/prisma/migrations entries:"
+          ls -la nordic-backend/prisma/migrations
+          echo "nordic-backend/prisma/migrations/migration_lock.toml:"
+          cat nordic-backend/prisma/migrations/migration_lock.toml
+
       - name: Apply Prisma migrations to production
         working-directory: nordic-backend
         env:
