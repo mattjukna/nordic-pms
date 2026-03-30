@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "import:companies": "tsx scripts/import-companies.ts",
+    "import:historic-output": "tsx scripts/import-historic-output.ts",
     "build:client": "vite build",
     "build:server": "npm run prisma:generate && tsup server.ts --format esm --platform node --target node22 --out-dir dist-server --clean --sourcemap --splitting=false --external vite --external lightningcss && npm run fix:esm",
     "build": "npm run build:client && npm run build:server",
