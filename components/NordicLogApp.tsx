@@ -78,7 +78,7 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative px-2 md:px-4 pb-8">
+      <main className="flex-1 relative px-2 md:px-4 pb-8 min-w-0 overflow-x-hidden">
         {sessionEvent && (
           <div className={`mb-4 rounded-xl border px-4 py-3 text-sm flex items-center justify-between gap-3 ${
             sessionEvent.level === 'error'

@@ -78,7 +78,7 @@ const SmartNoteInput: React.FC<{
 const InputField = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
   <input 
     {...props}
-    className={`w-full bg-white border border-slate-300 rounded-md px-3 py-2.5 md:py-2 text-base md:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 ${props.className || ''}`}
+    className={`w-full min-w-0 bg-white border border-slate-300 rounded-md px-3 py-2.5 md:py-2 text-base md:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 ${props.className || ''}`}
   />
 );
 
@@ -673,7 +673,7 @@ export const InputTab: React.FC = () => {
   const isOutputValid = parserPreview && parserPreview.isValid && Object.keys(outputErrors).length === 0;
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in">
+    <div className="flex flex-col gap-6 animate-fade-in min-w-0">
       <ConfirmationModal 
         isOpen={confirmModal.isOpen}
         title={confirmModal.title}
@@ -725,14 +725,14 @@ export const InputTab: React.FC = () => {
       </div>
 
       {activeMode === 'intake' && (
-      <div className="flex flex-col lg:flex-row gap-6 animate-slide-up">
-        <div className="flex-1 flex flex-col gap-4">
+      <div className="flex flex-col lg:flex-row gap-6 animate-slide-up min-w-0">
+        <div className="flex-1 min-w-0 flex flex-col gap-4">
         <div className="text-slate-500 uppercase text-xs font-bold tracking-widest px-1 pt-2 md:pt-0">
           New Intake Entry
         </div>
         
         {/* Entry Form */}
-        <GlassCard className={`p-4 md:p-5 transition-all duration-300 ${editingIntakeId ? 'bg-amber-50/50 border-amber-200 shadow-md ring-2 ring-amber-100' : 'bg-slate-50/50'}`}>
+        <GlassCard className={`p-4 md:p-5 transition-all duration-300 overflow-hidden ${editingIntakeId ? 'bg-amber-50/50 border-amber-200 shadow-md ring-2 ring-amber-100' : 'bg-slate-50/50'}`}>
           <div className="grid grid-cols-12 gap-3 md:gap-4 items-end">
              {/* ... Form Fields ... */}
              {/* Note: Kept existing logic mostly same, just ensuring PackagingWizard usage below */}
@@ -1095,8 +1095,8 @@ export const InputTab: React.FC = () => {
       )}
 
       {activeMode === 'output' && (
-      <div className="flex flex-col lg:flex-row gap-6 animate-slide-up">
-      <div className="flex-1 flex flex-col gap-4">
+      <div className="flex flex-col lg:flex-row gap-6 animate-slide-up min-w-0">
+      <div className="flex-1 min-w-0 flex flex-col gap-4">
         <div className="text-slate-500 uppercase text-xs font-bold tracking-widest px-1">
           New Output Log
         </div>
