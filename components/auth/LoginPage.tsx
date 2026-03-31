@@ -39,7 +39,7 @@ export const LoginPage: React.FC<{
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4">
       <GlassCard className="p-8 max-w-sm text-center">
-        <h2 className="text-2xl font-bold mb-2">Nordic Proteins PMS</h2>
+        <img src="/logo.png" alt="Nordic Insights" className="h-10 mx-auto mb-2" />
         <p className="text-sm text-slate-500 mb-6">Please sign in with your Microsoft account to continue.</p>
 
         {loading ? (

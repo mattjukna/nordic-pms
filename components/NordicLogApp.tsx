@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Factory, LayoutDashboard, BarChart3, Bot, FileInput, Package, Settings, Scale, Box, Layers } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Bot, FileInput, Package, Settings, Scale, Box, Layers } from 'lucide-react';
 import { useStore } from '../store';
 import { GlassCard } from './ui/GlassCard';
 import UserMenu from './ui/UserMenu';
@@ -33,14 +33,7 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
       <div className="p-2 md:p-4 shrink-0 z-50 sticky top-0">
         <GlassCard className="p-3 md:px-6 md:py-4 flex items-center justify-between gap-3 md:gap-4 shadow-md md:shadow-sm ring-1 ring-slate-900/5 backdrop-blur-xl bg-white/80 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="bg-blue-600 rounded-lg p-2 text-white shadow-sm shrink-0">
-              <Factory size={18} className="md:w-6 md:h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-sm md:text-xl font-bold tracking-tight text-slate-900 leading-tight truncate">
-                Nordic Proteins PM
-              </h1>
-            </div>
+            <img src="/logo.png" alt="Nordic Insights" className="h-8 md:h-10" />
           </div>
 
           {/* User menu on the right */}
