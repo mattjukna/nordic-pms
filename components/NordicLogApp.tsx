@@ -119,13 +119,27 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
           </div>
           ) : hydrateError ? (
             <div className="p-12 text-center flex flex-col items-center gap-4">
-              <div className="text-red-600 font-semibold text-lg">Unable to connect to the database</div>
-              <p className="text-slate-500 text-sm max-w-md">
-                The database did not respond after several attempts. Please check your connection or try again.
-              </p>
-              <button onClick={hydrateFromApi} className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
-                Try again
-              </button>
+              {hydrateError.startsWith('Authentication') ? (
+                <>
+                  <div className="text-red-600 font-semibold text-lg">Authentication failed</div>
+                  <p className="text-slate-500 text-sm max-w-md">
+                    Your session could not be verified. Please sign in again to continue.
+                  </p>
+                  <button onClick={() => window.location.reload()} className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                    Reload &amp; sign in
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="text-red-600 font-semibold text-lg">Unable to connect to the database</div>
+                  <p className="text-slate-500 text-sm max-w-md">
+                    The database did not respond after several attempts. Please check your connection or try again.
+                  </p>
+                  <button onClick={hydrateFromApi} className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                    Try again
+                  </button>
+                </>
+              )}
             </div>
         ) : (
           <>

@@ -244,6 +244,9 @@ export const useStore = create<AppState>((set, get) => ({
   hydrateFromApi: async () => {
     const MAX_RETRIES = 20;
     const RETRY_DELAY_MS = 5000;
+    const MAX_AUTH_RETRIES = 4;
+    const AUTH_RETRY_DELAY_MS = 2000;
+    let authFailures = 0;
     set({ isHydrating: true, hydrateError: null, hydrateRetryCount: 0 });
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -261,12 +264,15 @@ export const useStore = create<AppState>((set, get) => ({
         }));
         return;
       } catch (err: any) {
-        // Auth errors should not be retried – stop immediately
         if (err instanceof AuthError) {
-          set({ isHydrating: false, hydrateRetryCount: 0 });
-          return;
-        }
-        if (attempt < MAX_RETRIES) {
+          authFailures++;
+          if (authFailures > MAX_AUTH_RETRIES) {
+            set({ hydrateError: 'Authentication failed. Please sign in again.', isHydrating: false });
+            return;
+          }
+          set({ hydrateRetryCount: attempt + 1 });
+          await new Promise((r) => setTimeout(r, AUTH_RETRY_DELAY_MS));
+        } else if (attempt < MAX_RETRIES) {
           set({ hydrateRetryCount: attempt + 1 });
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
         } else {
