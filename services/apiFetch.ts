@@ -1,6 +1,13 @@
 import { getAccessToken } from '../auth/useAccessToken';
 import { emitSessionEvent } from './sessionEvents';
 
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
 async function readResponseBody(res: Response) {
   return res.text().catch(() => '');
 }
@@ -9,7 +16,12 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit) {
   const headers: Record<string,string> = { 'Content-Type': 'application/json', ...(init?.headers as Record<string,string> || {}) };
   const send = async (token: string) => fetch(input, { ...init, headers: { ...headers, Authorization: `Bearer ${token}` } });
 
-  let token = await getAccessToken({ interactive: false });
+  let token: string;
+  try {
+    token = await getAccessToken({ interactive: false });
+  } catch (e: any) {
+    throw new AuthError(e?.message || 'Authentication required');
+  }
   let res = await send(token);
   let bodyText = await readResponseBody(res);
 
@@ -23,7 +35,7 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit) {
   if (res.status === 401 || res.status === 403) {
     emitSessionEvent({ level: 'error', message: 'Session expired. Sign-in is required to continue.' });
     void getAccessToken({ forceRefresh: true, interactive: true }).catch(() => undefined);
-    throw new Error(`API ${res.status} ${res.statusText}: ${bodyText}`);
+    throw new AuthError(`API ${res.status} ${res.statusText}: ${bodyText}`);
   }
   if (!res.ok) {
     throw new Error(`API ${res.status} ${res.statusText}: ${bodyText}`);

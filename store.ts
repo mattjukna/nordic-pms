@@ -1,6 +1,6 @@
 
 import { create } from 'zustand';
-import { apiFetch } from './services/apiFetch';
+import { apiFetch, AuthError } from './services/apiFetch';
 import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract } from './types';
 import { DEFAULT_CONFIG } from './constants';
 import { getEffectiveIntakeQuantityKg } from './utils/intakeCoefficient';
@@ -261,6 +261,11 @@ export const useStore = create<AppState>((set, get) => ({
         }));
         return;
       } catch (err: any) {
+        // Auth errors should not be retried – stop immediately
+        if (err instanceof AuthError) {
+          set({ isHydrating: false, hydrateRetryCount: 0 });
+          return;
+        }
         if (attempt < MAX_RETRIES) {
           set({ hydrateRetryCount: attempt + 1 });
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
