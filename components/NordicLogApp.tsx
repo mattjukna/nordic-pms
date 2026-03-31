@@ -33,7 +33,7 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
       <div className="p-2 md:p-4 shrink-0 z-50 sticky top-0">
         <GlassCard className="p-3 md:px-6 md:py-4 flex items-center justify-between gap-3 md:gap-4 shadow-md md:shadow-sm ring-1 ring-slate-900/5 backdrop-blur-xl bg-white/80 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
-            <img src="/logo.png" alt="Nordic Insights" className="h-8 md:h-10" />
+            <img src="/logo.png" alt="Nordic Insights" className="h-10 md:h-14" />
           </div>
 
           {/* User menu on the right */}
