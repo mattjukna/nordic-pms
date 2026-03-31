@@ -270,7 +270,7 @@ export const TrendsTab: React.FC = () => {
   const buyerRevenueData = useMemo(() => {
     const totals: Record<string, number> = {};
     filteredDispatch.forEach(d => { const name = d.buyer || 'Unknown'; totals[name] = (totals[name] || 0) + getShippedRevenue(d); });
-    return Object.entries(totals).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
+    return Object.entries(totals).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
   }, [filteredDispatch]);
 
   /* ───── PRODUCT REVENUE ───── */
@@ -553,14 +553,14 @@ export const TrendsTab: React.FC = () => {
                 <div className="text-sm font-extrabold text-slate-800">Revenue by Buyer</div>
               </div>
               {buyerRevenueData.length === 0 ? <EmptyState title="No buyer data" /> : (
-                <div className="h-64">
+                <div style={{ height: Math.max(200, buyerRevenueData.length * 36 + 40) }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={buyerRevenueData} layout="vertical" margin={{ left: 100, right: 16 }}>
+                    <BarChart data={buyerRevenueData} layout="vertical" margin={{ left: 16, right: 16 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e6e9ef" horizontal={false} />
                       <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} />
-                      <YAxis dataKey="name" type="category" tick={{ fill: '#64748b', fontSize: 11 }} width={96} />
+                      <YAxis dataKey="name" type="category" tick={{ fill: '#64748b', fontSize: 10 }} width={160} interval={0} />
                       <Tooltip content={<ChartTooltip eurKeys={['value']} />} />
-                      <Bar dataKey="value" name="Revenue" fill="#8b5cf6" barSize={16} animationDuration={800} animationEasing="ease-out" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="value" name="Revenue" fill="#8b5cf6" barSize={18} animationDuration={800} animationEasing="ease-out" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

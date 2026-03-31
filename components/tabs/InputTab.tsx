@@ -394,14 +394,14 @@ export const InputTab: React.FC = () => {
   // Build filter option lists
   const intakeFilterOptions = useMemo<FilterOption[]>(() => {
     const uniqueSuppliers = [...new Set(intakeEntries.map(e => e.supplierName))].sort();
-    const uniqueRoutes = [...new Set(intakeEntries.map(e => e.routeGroup).filter(Boolean))].sort();
+    const uniqueRoutes = [...new Set(suppliers.map(s => s.routeGroup).filter(Boolean))].sort();
     const uniqueMilkTypes = [...new Set(intakeEntries.map(e => e.milkType).filter(Boolean))].sort();
     return [
       { key: 'supplier', label: 'All suppliers', options: uniqueSuppliers.map(s => ({ value: s, label: s })) },
       { key: 'route', label: 'All routes', options: uniqueRoutes.map(r => ({ value: r, label: r })) },
       { key: 'milkType', label: 'All milk types', options: uniqueMilkTypes.map(m => ({ value: m, label: m })) },
     ];
-  }, [intakeEntries]);
+  }, [intakeEntries, suppliers]);
 
   const outputFilterOptions = useMemo<FilterOption[]>(() => {
     const uniqueProducts = [...new Set(outputEntries.map(e => e.productId))].sort();
@@ -557,7 +557,10 @@ export const InputTab: React.FC = () => {
         data = data.filter(e => e.supplierName === intakeFilters.supplier);
       }
       if (intakeFilters.route) {
-        data = data.filter(e => e.routeGroup === intakeFilters.route);
+        data = data.filter(e => {
+          const sup = suppliers.find(s => s.id === e.supplierId);
+          return (sup?.routeGroup || e.routeGroup) === intakeFilters.route;
+        });
       }
       if (intakeFilters.milkType) {
         data = data.filter(e => e.milkType === intakeFilters.milkType);
@@ -782,31 +785,31 @@ export const InputTab: React.FC = () => {
       <ReportExportModal open={showReportModal} onClose={() => setShowReportModal(false)} />
 
       {/* Mode Toggle */}
-      <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full">
-         <div className="flex bg-slate-100 p-1 rounded-lg w-full md:w-auto">
+      <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full overflow-x-auto">
+         <div className="flex bg-slate-100 p-1 rounded-lg w-full md:w-auto min-w-0">
             <button
               onClick={() => setActiveMode('intake')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 text-sm font-bold rounded-md transition-all ${
+              className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-6 py-2 text-xs md:text-sm font-bold rounded-md transition-all whitespace-nowrap min-w-0 ${
                 activeMode === 'intake' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Droplets size={16} /> Milk Intake
+              <Droplets size={16} className="shrink-0" /> <span className="truncate">Milk{"\u00A0"}Intake</span>
             </button>
             <button
               onClick={() => setActiveMode('output')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 text-sm font-bold rounded-md transition-all ${
+              className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-6 py-2 text-xs md:text-sm font-bold rounded-md transition-all whitespace-nowrap min-w-0 ${
                 activeMode === 'output' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Factory size={16} /> Production
+              <Factory size={16} className="shrink-0" /> <span className="truncate">Production</span>
             </button>
             <button
               onClick={() => setActiveMode('purchase')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 text-sm font-bold rounded-md transition-all ${
+              className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-6 py-2 text-xs md:text-sm font-bold rounded-md transition-all whitespace-nowrap min-w-0 ${
                 activeMode === 'purchase' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Receipt size={16} /> Invoices
+              <Receipt size={16} className="shrink-0" /> <span className="truncate">Invoices</span>
             </button>
          </div>
          <div className="ml-3 hidden md:block">
