@@ -8,18 +8,18 @@ export const DEFAULT_CONFIG: GlobalConfig = {
 };
 
 export const PRODUCTS: Product[] = [
-  { id: 'MPC85', name: 'MPC 85', details: 'Solids: 85%', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 85, yieldFactor: 0.125 }, 
-  { id: 'MPC88', name: 'MPC 88', details: 'Solids: 88%', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 88, yieldFactor: 0.12 },
-  { id: 'MPC83', name: 'MPC 83', details: 'Solids: 83%', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 83, yieldFactor: 0.13 },
-  { id: 'MPC70', name: 'MPC 70', details: 'Solids: 70%', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 70, yieldFactor: 0.14 },
-  { id: 'MPC70W', name: 'MPC 70W', details: 'Solids: 70% (W)', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 70, yieldFactor: 0.14 },
-  { id: 'MPI', name: 'MPI', details: 'Milk Protein Isolate', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 90, yieldFactor: 0.09 },
-  { id: 'MCC', name: 'MCC', details: 'Micellar Casein', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 85, yieldFactor: 0.11 },
-  { id: 'SMP', name: 'SMP', details: 'Skim Milk Powder', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 34, yieldFactor: 0.09 },
-  { id: 'WMP26', name: 'WMP 26/26', details: 'Whole Milk Powder', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 26, yieldFactor: 0.11 },
-  { id: 'PERM015', name: 'Permeate powder 015', details: 'Permeate', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 4, yieldFactor: 0.05 },
-  { id: 'PM12', name: 'PM12', details: 'Protein Mix 12', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 12, yieldFactor: 0.10 },
-  { id: 'CREAM', name: 'Cream', details: 'Cream 40%', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 2, yieldFactor: 0.10 },
+  { id: 'MPC85', name: 'MPC 85', details: 'Milk protein concentrate with 85% protein on dry basis. Primary high-value product for sports nutrition and clinical applications.', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 85, yieldFactor: 0.125 }, 
+  { id: 'MPC88', name: 'MPC 88', details: 'Premium milk protein concentrate at 88% protein. Used in high-protein bars, RTD beverages, and infant formula fortification.', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 88, yieldFactor: 0.12 },
+  { id: 'MPC83', name: 'MPC 83', details: 'Milk protein concentrate with 83% protein. Cost-effective alternative to MPC 85 for processed cheese and bakery enrichment.', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 83, yieldFactor: 0.13 },
+  { id: 'MPC70', name: 'MPC 70', details: 'Mid-range milk protein concentrate at 70% protein. Versatile ingredient for yoghurt, ice cream, and nutritional supplements.', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 70, yieldFactor: 0.14 },
+  { id: 'MPC70W', name: 'MPC 70W', details: 'Wet-process milk protein concentrate at 70% protein. Liquid format for direct use in fresh dairy blends and UHT beverages.', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 70, yieldFactor: 0.14 },
+  { id: 'MPI', name: 'MPI', details: 'Milk protein isolate with ≥90% protein purity. Ultra-filtered for premium sports nutrition, medical foods, and clear protein drinks.', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 90, yieldFactor: 0.09 },
+  { id: 'MCC', name: 'MCC', details: 'Micellar casein concentrate derived from cold microfiltration. Slow-release protein used in meal replacements and overnight recovery products.', defaultPalletWeight: 900, defaultBagWeight: 850, proteinTargetPct: 85, yieldFactor: 0.11 },
+  { id: 'SMP', name: 'SMP', details: 'Skim milk powder produced by spray drying pasteurised skim milk. Staple ingredient for recombined dairy, confectionery, and baked goods.', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 34, yieldFactor: 0.09 },
+  { id: 'WMP26', name: 'WMP 26/26', details: 'Whole milk powder with 26% protein and 26% fat. Used in chocolate manufacturing, infant formula, and reconstituted milk products.', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 26, yieldFactor: 0.11 },
+  { id: 'PERM015', name: 'Permeate powder 015', details: 'Dairy permeate powder from UF processing with ~0.15% protein. Lactose-rich ingredient for animal feed, fermentation substrates, and cost-effective fillers.', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 4, yieldFactor: 0.05 },
+  { id: 'PM12', name: 'PM12', details: 'Protein mix standardised to 12% protein. Economical blend of MPC and permeate for mass-market dairy beverages and commodity powders.', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 12, yieldFactor: 0.10 },
+  { id: 'CREAM', name: 'Cream', details: 'Fresh cream at 40% milkfat content, separated during intake processing. Sold as bulk liquid for butter production, confectionery, and food service.', defaultPalletWeight: 1000, defaultBagWeight: 1000, proteinTargetPct: 2, yieldFactor: 0.10 },
 ];
 
 // Initial Data to load into Store
