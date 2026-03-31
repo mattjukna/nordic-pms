@@ -16,6 +16,7 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
   const setActiveTab = useStore((state) => state.setActiveTab);
   const isHydrating = useStore((state) => state.isHydrating);
   const hydrateError = useStore((state) => state.hydrateError);
+  const hydrateRetryCount = useStore((state) => state.hydrateRetryCount);
   const userSettings = useStore((state) => state.userSettings);
   const hydrateFromApi = useStore((state) => state.hydrateFromApi);
   const [sessionEvent, setSessionEvent] = useState<SessionEvent | null>(null);
@@ -99,11 +100,32 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
           </div>
         )}
         {isHydrating ? (
-          <div className="p-6 text-center">Loading data...</div>
+          <div className="p-16 text-center flex flex-col items-center gap-4">
+            <div className="relative h-14 w-14">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-100"></div>
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-600 animate-spin"></div>
+            </div>
+            {hydrateRetryCount > 0 ? (
+              <>
+                <p className="text-slate-700 font-semibold text-lg">Database is waking up…</p>
+                <p className="text-slate-500 text-sm max-w-md">
+                  The database goes to sleep after a period of inactivity. It usually takes up to a minute to resume.
+                  Retrying automatically — attempt {hydrateRetryCount}.
+                </p>
+              </>
+            ) : (
+              <p className="text-slate-600 font-medium">Loading data…</p>
+            )}
+          </div>
           ) : hydrateError ? (
-            <div className="p-6 text-center">
-              <div className="mb-4 text-red-700 font-bold">Failed to load data: {hydrateError}</div>
-              <button onClick={hydrateFromApi} className="px-4 py-2 bg-blue-600 text-white rounded">Retry</button>
+            <div className="p-12 text-center flex flex-col items-center gap-4">
+              <div className="text-red-600 font-semibold text-lg">Unable to connect to the database</div>
+              <p className="text-slate-500 text-sm max-w-md">
+                The database did not respond after several attempts. Please check your connection or try again.
+              </p>
+              <button onClick={hydrateFromApi} className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                Try again
+              </button>
             </div>
         ) : (
           <>

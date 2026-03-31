@@ -25,6 +25,7 @@ interface AppState {
   // Hydration state
   isHydrating: boolean;
   hydrateError: string | null;
+  hydrateRetryCount: number;
   hydrateFromApi: () => Promise<void>;
 
   // Database State
@@ -239,22 +240,34 @@ export const useStore = create<AppState>((set, get) => ({
 
   isHydrating: false,
   hydrateError: null,
+  hydrateRetryCount: 0,
   hydrateFromApi: async () => {
-    set({ isHydrating: true, hydrateError: null });
-    try {
-      const data = await api<any>('/api/bootstrap');
-      set(() => ({
-        suppliers: (data.suppliers || []).map((s: any) => parseSupplier(s)),
-        buyers: (data.buyers || []).map((b: any) => parseBuyer(b)),
-        products: data.products || [],
-        milkTypes: data.milkTypes || [],
-        intakeEntries: (data.intakeEntries || []).map((i: any) => parseIntakeEntry(i)),
-        outputEntries: (data.outputEntries || []).map((o: any) => parseOutputEntry(o)),
-        dispatchEntries: (data.dispatchEntries || []).map((d: any) => parseDispatchEntry(d)),
-        isHydrating: false
-      }));
-    } catch (err: any) {
-      set({ hydrateError: err.message || String(err), isHydrating: false });
+    const MAX_RETRIES = 20;
+    const RETRY_DELAY_MS = 5000;
+    set({ isHydrating: true, hydrateError: null, hydrateRetryCount: 0 });
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const data = await api<any>('/api/bootstrap');
+        set(() => ({
+          suppliers: (data.suppliers || []).map((s: any) => parseSupplier(s)),
+          buyers: (data.buyers || []).map((b: any) => parseBuyer(b)),
+          products: data.products || [],
+          milkTypes: data.milkTypes || [],
+          intakeEntries: (data.intakeEntries || []).map((i: any) => parseIntakeEntry(i)),
+          outputEntries: (data.outputEntries || []).map((o: any) => parseOutputEntry(o)),
+          dispatchEntries: (data.dispatchEntries || []).map((d: any) => parseDispatchEntry(d)),
+          isHydrating: false,
+          hydrateRetryCount: 0,
+        }));
+        return;
+      } catch (err: any) {
+        if (attempt < MAX_RETRIES) {
+          set({ hydrateRetryCount: attempt + 1 });
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        } else {
+          set({ hydrateError: err.message || String(err), isHydrating: false });
+        }
+      }
     }
   },
 
