@@ -39,7 +39,7 @@ export function validateIntakeForm(input: {
   protein: string;
   ph: string;
   temp: string;
-  pricingMode: IntakePricingMode;
+  pricingMode: IntakePricingMode | '';
   invoiceTotalEur: string;
   unitPricePerKg: string;
   unitPriceBasis: IntakeUnitPriceBasis | '';
@@ -70,11 +70,12 @@ export function validateIntakeForm(input: {
   if (temp === null) addError(errors, 'temp', 'Enter the delivery temperature.');
   else if (temp < -10 || temp > 60) addError(errors, 'temp', 'Temperature must be between -10°C and 60°C.');
 
+  // Pricing is optional — accountant can add pricing later via the Invoices tab
   if (input.pricingMode === 'invoice_total') {
     const invoiceTotal = parseNumericInput(input.invoiceTotalEur);
     if (invoiceTotal === null) addError(errors, 'invoiceTotalEur', 'Enter the invoice total.');
     else if (invoiceTotal <= 0) addError(errors, 'invoiceTotalEur', 'Invoice total must be greater than zero.');
-  } else {
+  } else if (input.pricingMode === 'unit_price') {
     const unitPrice = parseNumericInput(input.unitPricePerKg);
     if (unitPrice === null) addError(errors, 'unitPricePerKg', 'Enter the unit price.');
     else if (unitPrice < 0) addError(errors, 'unitPricePerKg', 'Unit price cannot be negative.');

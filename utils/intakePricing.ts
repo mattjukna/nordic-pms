@@ -6,7 +6,7 @@ const toNonNegativeNumber = (value: number | null | undefined) => {
 };
 
 export function resolveIntakeCost(input: {
-  pricingMode: IntakePricingMode;
+  pricingMode: IntakePricingMode | '' | null;
   invoiceTotalEur?: number | null;
   unitPricePerKg?: number | null;
   unitPriceBasis?: IntakeUnitPriceBasis | null;

@@ -275,14 +275,8 @@ const resolvePersistedIntakeValues = async (input: {
         });
         calculatedCost = pricing.calculatedCost;
     } else {
-        // Temporary compatibility fallback for legacy clients deployed before the new intake pricing UI.
-        calculatedCost = await resolveLegacySupplierIntakeCost({
-            supplierId: body.supplierId ?? existing?.supplierId,
-            timestamp,
-            quantityKg,
-            fatPct,
-            proteinPct,
-        });
+        // No pricing mode specified — entry awaits invoice assignment later
+        calculatedCost = 0;
     }
 
     return {

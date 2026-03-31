@@ -6,7 +6,7 @@ import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { PackagingWizard } from '../ui/PackagingWizard';
 import ReportExportModal from '../ui/ReportExportModal';
 import { SmartSelect } from '../ui/SmartSelect';
-import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, Calculator, Droplets, Factory, Ban } from 'lucide-react';
+import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, Calculator, Droplets, Factory, Ban, Receipt } from 'lucide-react';
 import { parsePackagingString } from '../../utils/parser';
 import { anyFractional } from '../../utils/wholeUnits';
 import { buildIntakeTags } from '../../utils/intakeRules';
@@ -16,6 +16,7 @@ import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
 import { validateIntakeForm, validateOutputForm } from '../../utils/validation';
 import type { IntakePricingMode, IntakeUnitPriceBasis } from '../../types';
+import { PurchaseDataTab } from './PurchaseDataTab';
 
 // --- Smart Note Input Component ---
 const SUGGESTED_TAGS = ['#HighTemp', '#HighAcid', '#LowProtein', '#DamagedPackaging', '#LateArrival'];
@@ -218,7 +219,7 @@ export const InputTab: React.FC = () => {
   } = useStore();
 
   // Input Form States (Intake)
-  const [activeMode, setActiveMode] = useState<'intake' | 'output'>('intake');
+  const [activeMode, setActiveMode] = useState<'intake' | 'output' | 'purchase'>('intake');
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [milkType, setMilkType] = useState(milkTypes[0] || 'Skim milk');
   const [intakeKg, setIntakeKg] = useState('');
@@ -228,7 +229,7 @@ export const InputTab: React.FC = () => {
   const [ph, setPh] = useState('');
   const [temp, setTemp] = useState('');
   const [applyLabCoefficient, setApplyLabCoefficient] = useState(() => isRawMilkType(milkTypes[0] || ''));
-  const [pricingMode, setPricingMode] = useState<IntakePricingMode>('invoice_total');
+  const [pricingMode, setPricingMode] = useState<IntakePricingMode | ''>('invoice_total');
   const [invoiceTotalEur, setInvoiceTotalEur] = useState('');
   const [unitPricePerKg, setUnitPricePerKg] = useState('');
   const [unitPriceBasis, setUnitPriceBasis] = useState<IntakeUnitPriceBasis>('received_kg');
@@ -574,7 +575,7 @@ export const InputTab: React.FC = () => {
       proteinPct: parsedProtein,
       tempCelsius: parsedTemp,
       applyLabCoefficient,
-      pricingMode,
+      pricingMode: pricingMode || null,
       invoiceTotalEur: pricingMode === 'invoice_total' ? Number(invoiceTotalEur) : null,
       unitPricePerKg: pricingMode === 'unit_price' ? Number(unitPricePerKg) : null,
       unitPriceBasis: pricingMode === 'unit_price' ? unitPriceBasis : null,
@@ -711,6 +712,14 @@ export const InputTab: React.FC = () => {
               }`}
             >
               <Factory size={16} /> Production
+            </button>
+            <button
+              onClick={() => setActiveMode('purchase')}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 text-sm font-bold rounded-md transition-all ${
+                activeMode === 'purchase' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Receipt size={16} /> Invoices
             </button>
          </div>
          <div className="ml-3 hidden md:block">
@@ -872,8 +881,17 @@ export const InputTab: React.FC = () => {
                 >
                   Unit price × quantity
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPricingMode('')}
+                  className={`rounded-md px-3 py-1.5 text-xs font-bold uppercase transition-all ${pricingMode === '' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  Add later
+                </button>
               </div>
 
+              {pricingMode !== '' && (
+              <>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div className="md:col-span-2">
                   <label className="text-xs font-semibold text-slate-600 block mb-1.5">Invoice number</label>
@@ -930,6 +948,14 @@ export const InputTab: React.FC = () => {
                   <div className="mt-1 text-sm font-bold text-slate-800">€{intakePricingPreview.derivedUnitPricePerEffectiveKg.toFixed(4)}</div>
                 </div>
               </div>
+              </>
+              )}
+
+              {pricingMode === '' && (
+                <div className="mt-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                  Pricing will be added later via the <strong>Invoices</strong> tab.
+                </div>
+              )}
             </div>
 
             {/* Ecological Toggle */}
@@ -1029,7 +1055,11 @@ export const InputTab: React.FC = () => {
                       entry.ph < 6.60 ? 'text-amber-600' : 'text-slate-700'
                     }`}>pH {entry.ph}</span>
                     <span className="text-slate-300 hidden md:inline">•</span>
-                    <span className="whitespace-nowrap text-slate-700">€{entry.calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    {!entry.pricingMode && entry.calculatedCost === 0 ? (
+                      <span className="whitespace-nowrap text-amber-600 font-medium">Awaiting invoice</span>
+                    ) : (
+                      <span className="whitespace-nowrap text-slate-700">€{entry.calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    )}
                     {entry.invoiceNumber && (
                       <>
                         <span className="text-slate-300 hidden md:inline">•</span>
@@ -1259,6 +1289,8 @@ export const InputTab: React.FC = () => {
       </div>
       </div>
       )}
+
+      {activeMode === 'purchase' && <PurchaseDataTab />}
     </div>
   );
 };
