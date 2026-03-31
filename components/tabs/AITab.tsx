@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
+import { Hintable } from '../ui/Hintable';
 import {
   AlertCircle,
   AlertTriangle,
@@ -312,7 +313,7 @@ export const AITab: React.FC = () => {
     <div className="space-y-5 overflow-x-hidden">
 
       {/* Health Scores */}
-      <GlassCard className="p-6">
+      <GlassCard className="p-6" hint="Three health gauges scored 0–100. Financial: based on gross margin (33%+ = 100). Efficiency: based on production yield vs 12.5% target. Quality: intake compliance rate over the last 30 days.">
         <div className="text-sm font-extrabold text-slate-800 mb-4">Operations Health</div>
         <div className="flex flex-wrap justify-center gap-8 md:gap-16">
           <HealthGauge score={healthScores.financial} label="Financial" color={healthScores.financial >= 70 ? '#10b981' : healthScores.financial >= 40 ? '#f59e0b' : '#ef4444'} />
@@ -323,13 +324,15 @@ export const AITab: React.FC = () => {
 
       {/* Weekly Trends */}
       {weeklyTrends.length > 0 && (
+        <Hintable hint="Week-over-week comparison of key operational metrics: intake volume, revenue, production output, and quality compliance. Delta percentages show change from the previous 7-day period.">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {weeklyTrends.map(t => <TrendCard key={t.metric} {...t} />)}
         </div>
+        </Hintable>
       )}
 
       {/* Key Insights */}
-      <GlassCard className="p-4">
+      <GlassCard className="p-4" hint="Auto-computed alerts and recommendations based on your data: margin analysis, inventory warnings, quality violations, supplier risks, and contract fulfillment status. Sorted by severity — critical issues first.">
         <button onClick={() => toggleSection('insights')} className="w-full flex items-center justify-between group">
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4 text-blue-500" />
@@ -358,7 +361,7 @@ export const AITab: React.FC = () => {
       </GlassCard>
 
       {/* Supplier Performance */}
-      <GlassCard className="p-4">
+      <GlassCard className="p-4" hint="Table showing each supplier's total intake volume, number of loads, total cost, average cost per kg, and quality compliance percentage. Sorted by volume.">
         <button onClick={() => toggleSection('suppliers')} className="w-full flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-purple-500" />
@@ -402,7 +405,7 @@ export const AITab: React.FC = () => {
       </GlassCard>
 
       {/* Product Performance */}
-      <GlassCard className="p-4">
+      <GlassCard className="p-4" hint="Table showing each product's produced and shipped quantities, total revenue, average selling price per kg, and current stock level (produced − shipped). Sorted by revenue.">
         <button onClick={() => toggleSection('products')} className="w-full flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-emerald-500" />
@@ -442,7 +445,7 @@ export const AITab: React.FC = () => {
       </GlassCard>
 
       {/* System Alerts */}
-      <GlassCard className="p-4">
+      <GlassCard className="p-4" hint="Real-time system notifications including data sync issues, validation warnings, and operational alerts.">
         <button onClick={() => toggleSection('alerts')} className="w-full flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-500" />

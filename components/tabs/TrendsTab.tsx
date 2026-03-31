@@ -470,7 +470,7 @@ export const TrendsTab: React.FC = () => {
         <div className="space-y-5">
           {/* KPI cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Total revenue from dispatches with shipped or delivered status in the selected time period. The delta badge shows percentage change compared to the previous period of equal length.">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold uppercase text-slate-500">Revenue</div>
                 <DeltaBadge current={financialKPIs.revenue} previous={prevFinancialKPIs.revenue} />
@@ -479,7 +479,7 @@ export const TrendsTab: React.FC = () => {
               <div className="mt-1 text-xs text-slate-500">From {filteredDispatch.length} dispatches</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Total cost of raw milk purchases, calculated as quantity (kg) × agreed price per kg for each intake. Delta badge shows change vs previous period — green means costs decreased.">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold uppercase text-slate-500">Milk Spend</div>
                 <DeltaBadge current={financialKPIs.rawMaterialCost} previous={prevFinancialKPIs.rawMaterialCost} inverse />
@@ -488,7 +488,7 @@ export const TrendsTab: React.FC = () => {
               <div className="mt-1 text-xs text-slate-500">Avg {financialKPIs.avgMilkPrice.toFixed(3)} €/kg</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Cost of Goods Sold = raw milk cost + estimated processing cost + value of discarded milk. Represents the total cost attributable to production.">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold uppercase text-slate-500">Total COGS</div>
               </div>
@@ -496,7 +496,7 @@ export const TrendsTab: React.FC = () => {
               <div className="mt-1 text-xs text-slate-500">Milk + Processing + Loss</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Gross margin = (Revenue − COGS) ÷ Revenue × 100. Shows how much of each euro earned is retained as profit before operating expenses.">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold uppercase text-slate-500">Gross Margin</div>
                 <DeltaBadge current={financialKPIs.marginPct} previous={prevFinancialKPIs.marginPct} />
@@ -507,7 +507,7 @@ export const TrendsTab: React.FC = () => {
           </div>
 
           {/* Financial trend chart */}
-          <GlassCard className="p-4">
+          <GlassCard className="p-4" hint="Daily comparison of dispatch revenue (blue bars) vs milk purchase cost (amber bars). The green profit line shows Revenue − Cost per day. Helps identify profitable and unprofitable periods.">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-blue-500" />
@@ -547,7 +547,7 @@ export const TrendsTab: React.FC = () => {
 
           {/* Buyer Revenue + Cost Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <GlassCard className="p-4">
+            <GlassCard className="p-4" hint="Horizontal bar chart ranking buyers by total revenue from shipped dispatches. Useful for identifying revenue concentration — ideally no single buyer should dominate.">
               <div className="flex items-center gap-2 mb-3">
                 <Users className="h-4 w-4 text-purple-500" />
                 <div className="text-sm font-extrabold text-slate-800">Revenue by Buyer</div>
@@ -567,7 +567,7 @@ export const TrendsTab: React.FC = () => {
               )}
             </GlassCard>
 
-            <GlassCard className="p-4">
+            <GlassCard className="p-4" hint="Pie chart showing the split of total costs: raw milk purchases, estimated processing costs, and losses from discarded milk.">
               <div className="flex items-center gap-2 mb-3">
                 <Coins className="h-4 w-4 text-amber-500" />
                 <div className="text-sm font-extrabold text-slate-800">Cost Breakdown</div>
@@ -589,7 +589,7 @@ export const TrendsTab: React.FC = () => {
           </div>
 
           {/* Revenue by Product */}
-          <GlassCard className="p-4">
+          <GlassCard className="p-4" hint="Table of all products ranked by revenue. Shows total revenue, shipped volume (kg), average selling price per kg, and each product's share of total revenue.">
             <div className="flex items-center gap-2 mb-3">
               <Package className="h-4 w-4 text-emerald-500" />
               <div className="text-sm font-extrabold text-slate-800">Revenue by Product</div>
@@ -640,7 +640,7 @@ export const TrendsTab: React.FC = () => {
         <div className="space-y-5">
           {/* KPI cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Net milk intake = total intake minus discarded loads. Counts only milk accepted for production in the selected period.">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold uppercase text-slate-500">Intake (Net)</div>
                 <DeltaBadge current={productionKPIs.totalIntake} previous={prevProductionKPIs.totalIntake} />
@@ -649,7 +649,7 @@ export const TrendsTab: React.FC = () => {
               <div className="mt-1 text-xs text-slate-500">Top: {productionKPIs.topProductName}</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Total weight of finished products produced. Variance = Output − (Net Intake × target yield factor).">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold uppercase text-slate-500">Output</div>
                 <DeltaBadge current={productionKPIs.totalOutput} previous={prevProductionKPIs.totalOutput} />
@@ -658,7 +658,7 @@ export const TrendsTab: React.FC = () => {
               <div className="mt-1 text-xs text-slate-500">Variance: {formatKg(productionKPIs.varianceKg)}</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Production yield = Total Output ÷ Net Intake × 100. Target is 12.5% (typical for cheese production). Higher yield means more efficient conversion of milk to product.">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold uppercase text-slate-500">Yield</div>
                 <DeltaBadge current={productionKPIs.currentYield} previous={prevProductionKPIs.currentYield} />
@@ -667,7 +667,7 @@ export const TrendsTab: React.FC = () => {
               <div className="mt-1 text-xs text-slate-500">Target: {(TARGET_YIELD_FACTOR * 100).toFixed(1)}%</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Milk loads rejected during intake due to quality issues (temperature, pH, contamination). Shows total discarded kg and percentage of total intake.">
               <div className="text-xs font-bold uppercase text-slate-500">Discarded</div>
               <div className="mt-2 text-xl md:text-2xl font-extrabold text-red-600">{formatKg(productionKPIs.discardedKg)}</div>
               <div className="mt-1 text-xs text-slate-500">{productionKPIs.discardedPct.toFixed(1)}% of total intake</div>
@@ -677,7 +677,7 @@ export const TrendsTab: React.FC = () => {
           {/* OUTPUT SUBTAB */}
           {prodSubtab === 'output' && (
             <>
-              <GlassCard className="p-4 flex items-center justify-between gap-4 flex-wrap">
+              <GlassCard className="p-4 flex items-center justify-between gap-4 flex-wrap" hint="Use the product filter to drill down into a specific product's production, shipment, and revenue data.">
                 <div>
                   <div className="text-sm font-extrabold text-slate-800">Output Overview</div>
                   <div className="text-xs text-slate-500 mt-1">Select product to inspect per-product KPIs and trends</div>
@@ -692,7 +692,7 @@ export const TrendsTab: React.FC = () => {
               </GlassCard>
 
               {productFilter === ALL ? (
-                <GlassCard className="p-4">
+                <GlassCard className="p-4" hint="Summary table showing each product's produced quantity, shipped quantity, revenue, average price per kg, and net stock (produced − shipped).">
                   <div className="text-sm font-extrabold text-slate-800 mb-3">Product Summary</div>
                   <div className="w-full overflow-x-auto">
                     <table className="w-full text-left text-sm">
@@ -725,7 +725,7 @@ export const TrendsTab: React.FC = () => {
                 </GlassCard>
               ) : (
                 <>
-                  <GlassCard className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <GlassCard className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4" hint="Key metrics for the selected product: total produced weight, total shipped weight, and total revenue from shipped dispatches.">
                     <div className="p-2">
                       <div className="text-xs font-bold uppercase text-slate-500">Produced</div>
                       <div className="mt-2 text-2xl font-extrabold text-slate-800">{formatKg(outputForProduct.reduce((s, o) => s + (o.parsed?.totalWeight || 0), 0))}</div>
@@ -741,7 +741,7 @@ export const TrendsTab: React.FC = () => {
                   </GlassCard>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                    <GlassCard className="p-4 lg:col-span-2">
+                    <GlassCard className="p-4 lg:col-span-2" hint="Area chart showing daily production output (blue) vs daily shipped quantity (green) for the selected product. Gaps indicate stock building up or being depleted.">
                       <div className="text-sm font-extrabold text-slate-800 mb-3">Daily Produced vs Shipped</div>
                       {buildDailySeriesForProduct(outputForProduct, dispatchForProduct).length === 0 ? <EmptyState title="No daily data" /> : (
                         <div className="h-60 md:h-72">
@@ -766,7 +766,7 @@ export const TrendsTab: React.FC = () => {
                       )}
                     </GlassCard>
 
-                    <GlassCard className="p-4 lg:col-span-1">
+                    <GlassCard className="p-4 lg:col-span-1" hint="Bar chart showing daily revenue from shipped dispatches for the selected product.">
                       <div className="text-sm font-extrabold text-slate-800 mb-3">Daily Revenue</div>
                       {buildDailySeriesForProduct(outputForProduct, dispatchForProduct).length === 0 ? <EmptyState title="No revenue data" /> : (
                         <div className="h-60 md:h-72">
@@ -793,7 +793,7 @@ export const TrendsTab: React.FC = () => {
               )}
 
               {/* Product Mix Pie */}
-              <GlassCard className="p-4">
+              <GlassCard className="p-4" hint="Pie chart showing the share of each product in total output by weight. Helps visualize production focus and diversification.">
                 <div className="text-sm font-extrabold text-slate-800 mb-3">Product Mix (Output)</div>
                 {productMixData.length === 0 ? <EmptyState title="No output data" /> : (
                   <div className="h-56 md:h-72">
@@ -824,7 +824,7 @@ export const TrendsTab: React.FC = () => {
 
               {/* Yield Trend */}
               {dailyProductionData.length > 1 && (
-                <GlassCard className="p-4">
+                <GlassCard className="p-4" hint="Daily yield percentage (output ÷ intake × 100) over time. The red dashed line shows the 12.5% target. Consistent yield above target indicates efficient production.">
                   <div className="flex items-center gap-2 mb-3">
                     <TrendingUp className="h-4 w-4 text-emerald-500" />
                     <div className="text-sm font-extrabold text-slate-800">Daily Yield Trend</div>
@@ -856,7 +856,7 @@ export const TrendsTab: React.FC = () => {
           {/* INTAKE SUBTAB */}
           {prodSubtab === 'intake' && (
             <>
-              <GlassCard className="p-4 flex items-center justify-between gap-4 flex-wrap">
+              <GlassCard className="p-4 flex items-center justify-between gap-4 flex-wrap" hint="Intake analytics filtered by milk type and supplier. Use the filters to drill down into specific intake segments.">
                 <div>
                   <div className="text-sm font-extrabold text-slate-800">Intake Overview</div>
                   <div className="text-xs text-slate-500 mt-1">Filters apply to intake analytics</div>
@@ -875,7 +875,7 @@ export const TrendsTab: React.FC = () => {
                 </div>
               </GlassCard>
 
-              <GlassCard className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <GlassCard className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4" hint="Net Intake: accepted milk volume. Discarded: rejected milk volume. Avg Fat/Prot/pH: average quality parameters for accepted milk loads in this period.">
                 <div>
                   <div className="text-xs font-bold uppercase text-slate-500">Net Intake</div>
                   <div className="mt-2 text-2xl font-extrabold text-slate-800">{formatKg(intakeKPIs.netKg)}</div>
@@ -891,7 +891,7 @@ export const TrendsTab: React.FC = () => {
               </GlassCard>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <GlassCard className="p-4 lg:col-span-2">
+                <GlassCard className="p-4 lg:col-span-2" hint="Area chart showing daily accepted intake (blue) vs discarded volume (red). Spikes in discards may indicate supply chain quality issues.">
                   <div className="text-sm font-extrabold text-slate-800 mb-3">Daily Intake vs Discarded</div>
                   {dailyIntakeData.length === 0 ? <EmptyState title="No intake data" /> : (
                     <div className="h-64 md:h-72">
@@ -920,7 +920,7 @@ export const TrendsTab: React.FC = () => {
                   )}
                 </GlassCard>
 
-                <GlassCard className="p-4 lg:col-span-1">
+                <GlassCard className="p-4 lg:col-span-1" hint="Pie chart showing the volume share of each milk type (e.g. cow, goat, sheep) in total intake.">
                   <div className="text-sm font-extrabold text-slate-800 mb-3">Milk Types</div>
                   {milkTypeMixFiltered.length === 0 ? <EmptyState title="No milk type data" /> : (
                     <div className="h-56 md:h-72">
@@ -950,7 +950,7 @@ export const TrendsTab: React.FC = () => {
                 </GlassCard>
               </div>
 
-              <GlassCard className="p-4">
+              <GlassCard className="p-4" hint="Bar chart showing each supplier's contribution to total intake volume (kg). Helps identify supplier concentration and diversification.">
                 <div className="text-sm font-extrabold text-slate-800 mb-3">Supplier Mix</div>
                 {supplierMix.length === 0 ? <EmptyState title="No supplier data" /> : (
                   <div className="h-72">
@@ -982,7 +982,7 @@ export const TrendsTab: React.FC = () => {
         <div className="space-y-5">
           {/* KPI cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Percentage of intake loads meeting all quality standards: temperature ≤8°C and pH within 6.55–6.74 range. Green ≥90%, amber ≥70%, red <70%.">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold uppercase text-slate-500">Compliance</div>
                 <DeltaBadge current={qualityKPIs.compliancePct} previous={prevQualityKPIs.compliancePct} />
@@ -991,19 +991,19 @@ export const TrendsTab: React.FC = () => {
               <div className="mt-1 text-xs text-slate-500">{qualityKPIs.total} loads analyzed</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Average fat percentage across all intake loads in the period. Target is 4.0%. Higher fat content generally means better cheese yield.">
               <div className="text-xs font-bold uppercase text-slate-500">Avg Fat</div>
               <div className="mt-2 text-xl md:text-2xl font-extrabold text-slate-800">{qualityKPIs.avgFat.toFixed(2)}%</div>
               <div className="mt-1 text-xs text-slate-500">Target: {FAT_TARGET.toFixed(1)}%</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Average protein percentage across all intake loads. Target is 3.2%. Protein is essential for cheese curd formation.">
               <div className="text-xs font-bold uppercase text-slate-500">Avg Protein</div>
               <div className="mt-2 text-xl md:text-2xl font-extrabold text-slate-800">{qualityKPIs.avgProt.toFixed(2)}%</div>
               <div className="mt-1 text-xs text-slate-500">Target: {PROT_TARGET.toFixed(1)}%</div>
             </GlassCard>
 
-            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
+            <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200" hint="Average pH across all intake loads. Standard range is 6.55–6.74. pH outside this range may indicate spoilage or contamination.">
               <div className="text-xs font-bold uppercase text-slate-500">Avg pH</div>
               <div className="mt-2 text-xl md:text-2xl font-extrabold text-slate-800">{qualityKPIs.avgPh.toFixed(2)}</div>
               <div className="mt-1 text-xs text-slate-500">Std: {PH_MIN}–{PH_MAX}</div>
@@ -1012,7 +1012,7 @@ export const TrendsTab: React.FC = () => {
 
           {/* Violations alert */}
           {(qualityKPIs.highTempCount + qualityKPIs.badPhCount > 0) && (
-            <GlassCard className="p-4 bg-red-50/60 border border-red-200">
+            <GlassCard className="p-4 bg-red-50/60 border border-red-200" hint="Count of temperature violations (>8°C) and pH violations (outside 6.55–6.74) detected in intake loads during the current period.">
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-red-500" />
                 <div className="text-sm font-extrabold text-red-800">Quality Violations</div>
@@ -1025,7 +1025,7 @@ export const TrendsTab: React.FC = () => {
           )}
 
           {/* Quality trend with reference lines */}
-          <GlassCard className="p-4">
+          <GlassCard className="p-4" hint="Line chart tracking daily average fat % (blue), protein % (green), and pH (red) over time. Dashed reference lines show target values. Helps identify quality trends and seasonal patterns.">
             <div className="text-sm font-extrabold text-slate-800 mb-3">Quality Trends (Fat, Protein, pH)</div>
             {qualityTrendData.length === 0 ? <EmptyState title="No quality data in this range" /> : (
               <div className="h-72 md:h-80">
@@ -1051,7 +1051,7 @@ export const TrendsTab: React.FC = () => {
           </GlassCard>
 
           {/* Supplier Quality Scorecard */}
-          <GlassCard className="p-4">
+          <GlassCard className="p-4" hint="Table ranking suppliers by quality compliance. Shows number of loads, total volume, average fat/protein/pH values, and overall compliance percentage. Use to identify unreliable suppliers.">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-4 w-4 text-blue-500" />
               <div className="text-sm font-extrabold text-slate-800">Supplier Quality Scorecard</div>
@@ -1093,7 +1093,7 @@ export const TrendsTab: React.FC = () => {
           </GlassCard>
 
           {/* Top Issues / Outliers */}
-          <GlassCard className="p-4">
+          <GlassCard className="p-4" hint="Table of specific intake loads with quality parameter violations. Red-highlighted values indicate fat, protein, pH, or temperature outside acceptable ranges. Review with suppliers.">
             <div className="text-sm font-extrabold text-slate-800 mb-3">Top Quality Issues</div>
             {outliers.length === 0 ? (
               <div className="text-slate-400 italic text-sm">No notable issues in this range</div>
