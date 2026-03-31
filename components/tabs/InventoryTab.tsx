@@ -61,7 +61,10 @@ export const InventoryTab: React.FC = () => {
 
   // Filter State
   const [showFilter, setShowFilter] = useState(false);
-  const [filters, setFilters] = useState({ search: '', dateStart: '', dateEnd: '', status: 'all' as 'all' | 'confirmed' | 'planned' });
+  const [filters, setFilters] = useState({ search: '', dateStart: '', dateEnd: '', status: 'all' as 'all' | 'confirmed' | 'planned', buyer: '', product: '' });
+  const [localFilterSearch, setLocalFilterSearch] = useState('');
+  const filterDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showArchivedContracts, setShowArchivedContracts] = useState(false);
 
   useEffect(() => {
     if (buyers.length === 0) {
@@ -93,20 +96,39 @@ export const InventoryTab: React.FC = () => {
   const activeProduct = useMemo(() => products.find(p => p.id === selectedProduct), [selectedProduct, products]);
 
   // Derived: Available Contracts for selected Buyer & Product
-  const availableContracts = useMemo(() => {
-    if (!currentBuyer || !currentBuyer.contracts) return [];
-    return currentBuyer.contracts.filter(c => c.productId === selectedProduct);
-  }, [currentBuyer, selectedProduct]);
+  const { activeContracts, archivedContracts } = useMemo(() => {
+    if (!currentBuyer || !currentBuyer.contracts) return { activeContracts: [], archivedContracts: [] };
+    const matching = currentBuyer.contracts.filter(c => c.productId === selectedProduct);
+    const now = Date.now();
+    const active: typeof matching = [];
+    const archived: typeof matching = [];
+    for (const c of matching) {
+      // A contract is "archived" if its end date has passed AND it's been fully dispatched
+      const fulfilledKg = dispatchEntries
+        .filter(d => d.contractNumber === c.contractNumber && d.buyerId === currentBuyer.id)
+        .reduce((sum, d) => sum + d.quantityKg, 0);
+      const isPastEnd = c.endDate != null && c.endDate < now;
+      const isFulfilled = c.agreedAmountKg > 0 && fulfilledKg >= c.agreedAmountKg;
+      if (isPastEnd || isFulfilled) {
+        archived.push(c);
+      } else {
+        active.push(c);
+      }
+    }
+    return { activeContracts: active, archivedContracts: archived };
+  }, [currentBuyer, selectedProduct, dispatchEntries]);
+
+  const allContracts = useMemo(() => [...activeContracts, ...archivedContracts], [activeContracts, archivedContracts]);
 
   // Auto-fill price when contract changes
   useEffect(() => {
     if (selectedContractId) {
-       const contract = availableContracts.find(c => c.id === selectedContractId);
+       const contract = allContracts.find(c => c.id === selectedContractId);
        if (contract) {
          setPricePerKg(contract.pricePerKg.toString());
        }
     }
-  }, [selectedContractId, availableContracts]);
+  }, [selectedContractId, allContracts]);
 
   useEffect(() => {
     if (currentBuyerCompanyCodes.length === 0) {
@@ -423,7 +445,7 @@ export const InventoryTab: React.FC = () => {
     const qty = parseFloat(quantity);
     const price = parseFloat(pricePerKg);
     const buyerName = buyers.find(b => b.id === selectedBuyerId)?.name || 'Unknown';
-    const contractNum = availableContracts.find(c => c.id === selectedContractId)?.contractNumber;
+    const contractNum = allContracts.find(c => c.id === selectedContractId)?.contractNumber;
 
     // Stock Check Logic
     const currentStock = stockLevels.find(p => p.id === selectedProduct)?.realStockKg || 0;
@@ -730,13 +752,20 @@ export const InventoryTab: React.FC = () => {
       if (filters.status !== 'all') {
         data = data.filter(e => e.status === filters.status);
       }
+      if (filters.buyer) {
+        data = data.filter(e => e.buyer === filters.buyer);
+      }
+      if (filters.product) {
+        data = data.filter(e => e.productId === filters.product);
+      }
       if (filters.search) {
         const lowerQ = filters.search.toLowerCase();
         data = data.filter(e => 
           e.buyer.toLowerCase().includes(lowerQ) ||
           e.productId.toLowerCase().includes(lowerQ) ||
           e.quantityKg.toString().includes(lowerQ) ||
-          (e.batchRefId && e.batchRefId.toLowerCase().includes(lowerQ))
+          (e.batchRefId && e.batchRefId.toLowerCase().includes(lowerQ)) ||
+          (e.contractNumber && e.contractNumber.toLowerCase().includes(lowerQ))
         );
       }
       if (filters.dateStart) {
@@ -1064,18 +1093,42 @@ export const InventoryTab: React.FC = () => {
                 
                 {/* Contract Selection */}
                 <div className="md:col-span-2">
-                   <label className="block text-xs font-semibold text-slate-500 mb-1">Active Contract (Optional)</label>
+                   <div className="flex items-center justify-between mb-1">
+                     <label className="text-xs font-semibold text-slate-500">Contract (Optional)</label>
+                     {archivedContracts.length > 0 && (
+                       <button
+                         type="button"
+                         onClick={() => setShowArchivedContracts(!showArchivedContracts)}
+                         className="text-[10px] text-slate-400 hover:text-blue-600 font-medium"
+                       >
+                         {showArchivedContracts ? 'Hide' : 'Show'} expired ({archivedContracts.length})
+                       </button>
+                     )}
+                   </div>
                    <select
                       value={selectedContractId}
                       onChange={(e) => setSelectedContractId(e.target.value)}
                       className="w-full bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                    >
                       <option value="">-- No Contract (Manual Price) --</option>
-                      {availableContracts.map(c => (
-                         <option key={c.id} value={c.id}>
-                            {c.contractNumber} (Rate: €{c.pricePerKg})
-                         </option>
-                      ))}
+                      {activeContracts.length > 0 && (
+                        <optgroup label="Active">
+                          {activeContracts.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.contractNumber} — €{c.pricePerKg}/kg{c.agreedAmountKg ? ` (${c.agreedAmountKg.toLocaleString()} kg)` : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {showArchivedContracts && archivedContracts.length > 0 && (
+                        <optgroup label="Expired / Fulfilled">
+                          {archivedContracts.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.contractNumber} — €{c.pricePerKg}/kg (archived)
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                    </select>
                 </div>
 
@@ -1310,11 +1363,42 @@ export const InventoryTab: React.FC = () => {
                   <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
                   <input 
                     type="text" 
-                    placeholder="Search buyer, product..." 
+                    placeholder="Search buyer, product, contract..." 
                     className="w-full bg-white text-slate-900 pl-8 pr-2 py-1.5 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-slate-400"
-                    value={filters.search}
-                    onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                    value={localFilterSearch}
+                    onChange={(e) => {
+                      setLocalFilterSearch(e.target.value);
+                      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+                      filterDebounceRef.current = setTimeout(() => {
+                        setFilters(prev => ({ ...prev, search: e.target.value }));
+                      }, 300);
+                    }}
                   />
+                </div>
+
+                <div className="col-span-6">
+                  <select
+                    value={filters.buyer}
+                    onChange={(e) => setFilters(prev => ({ ...prev, buyer: e.target.value }))}
+                    className="w-full bg-white text-slate-700 text-[11px] border border-slate-200 rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">All buyers</option>
+                    {[...new Set(dispatchEntries.map(e => e.buyer))].sort().map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-6">
+                  <select
+                    value={filters.product}
+                    onChange={(e) => setFilters(prev => ({ ...prev, product: e.target.value }))}
+                    className="w-full bg-white text-slate-700 text-[11px] border border-slate-200 rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">All products</option>
+                    {[...new Set(dispatchEntries.map(e => e.productId))].sort().map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
                 </div>
                 
                 <div className="col-span-12 flex gap-2 items-center bg-white p-1.5 rounded border border-slate-200">

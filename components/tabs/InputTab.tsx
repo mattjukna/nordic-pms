@@ -107,6 +107,13 @@ interface FilterState {
   search: string;
   dateStart: string;
   dateEnd: string;
+  [key: string]: string; // dynamic filter keys (e.g. supplier, route, product)
+}
+
+interface FilterOption {
+  key: string;
+  label: string;
+  options: { value: string; label: string }[];
 }
 
 const FilterSection: React.FC<{
@@ -116,7 +123,22 @@ const FilterSection: React.FC<{
   onFilterChange: (updates: Partial<FilterState>) => void;
   count: number;
   label: string;
-}> = ({ isOpen, onToggle, filters, onFilterChange, count, label }) => {
+  filterOptions?: FilterOption[];
+}> = ({ isOpen, onToggle, filters, onFilterChange, count, label, filterOptions }) => {
+  const [localSearch, setLocalSearch] = React.useState(filters.search);
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    setLocalSearch(filters.search);
+  }, [filters.search]);
+
+  const handleSearchChange = (value: string) => {
+    setLocalSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onFilterChange({ search: value });
+    }, 300);
+  };
   
   const setPreset = (days: number) => {
     const end = new Date();
@@ -128,6 +150,8 @@ const FilterSection: React.FC<{
     });
   };
 
+  const hasActiveFilters = filters.search || filters.dateStart || filters.dateEnd || (filterOptions || []).some(o => filters[o.key]);
+
   return (
     <div className="flex flex-col gap-2 mb-2 bg-slate-50 border border-slate-200 rounded-lg p-2">
       <div className="flex items-center justify-between cursor-pointer" onClick={onToggle}>
@@ -135,6 +159,7 @@ const FilterSection: React.FC<{
           <Filter size={14} className={isOpen ? 'text-blue-600' : 'text-slate-400'} />
           <span>{label} History</span>
           <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{count}</span>
+          {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
         </div>
         <button className="text-slate-400 hover:text-blue-600">
           {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -149,10 +174,28 @@ const FilterSection: React.FC<{
               type="text" 
               placeholder="Search..." 
               className="w-full bg-white text-slate-900 pl-8 pr-2 py-1.5 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-slate-400"
-              value={filters.search}
-              onChange={(e) => onFilterChange({ search: e.target.value })}
+              value={localSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
+
+          {filterOptions && filterOptions.length > 0 && (
+            <div className="col-span-12 grid grid-cols-2 md:grid-cols-4 gap-2">
+              {filterOptions.map(opt => (
+                <select
+                  key={opt.key}
+                  value={filters[opt.key] || ''}
+                  onChange={(e) => onFilterChange({ [opt.key]: e.target.value })}
+                  className="bg-white text-slate-700 text-[11px] border border-slate-200 rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">{opt.label}</option>
+                  {opt.options.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              ))}
+            </div>
+          )}
           
           <div className="col-span-12 flex gap-2 items-center bg-white p-1.5 rounded border border-slate-200">
              <Calendar size={14} className="text-slate-400 ml-1" />
@@ -185,6 +228,19 @@ const FilterSection: React.FC<{
                   {p.l}
                </button>
              ))}
+             {hasActiveFilters && (
+               <button
+                 onClick={() => {
+                   const reset: Partial<FilterState> = { search: '', dateStart: '', dateEnd: '' };
+                   (filterOptions || []).forEach(o => { reset[o.key] = ''; });
+                   onFilterChange(reset);
+                   setLocalSearch('');
+                 }}
+                 className="bg-red-50 border border-red-200 text-red-500 hover:bg-red-100 text-[10px] px-2 py-1 rounded transition-colors uppercase font-semibold"
+               >
+                 Clear
+               </button>
+             )}
           </div>
 
           <div className="col-span-12 text-[10px] text-center text-slate-400 italic">
@@ -330,10 +386,29 @@ export const InputTab: React.FC = () => {
 
   // Filtering States
   const [showIntakeFilter, setShowIntakeFilter] = useState(false);
-  const [intakeFilters, setIntakeFilters] = useState<FilterState>({ search: '', dateStart: '', dateEnd: '' });
+  const [intakeFilters, setIntakeFilters] = useState<FilterState>({ search: '', dateStart: '', dateEnd: '', supplier: '', route: '', milkType: '' });
   
   const [showOutputFilter, setShowOutputFilter] = useState(false);
-  const [outputFilters, setOutputFilters] = useState<FilterState>({ search: '', dateStart: '', dateEnd: '' });
+  const [outputFilters, setOutputFilters] = useState<FilterState>({ search: '', dateStart: '', dateEnd: '', product: '' });
+
+  // Build filter option lists
+  const intakeFilterOptions = useMemo<FilterOption[]>(() => {
+    const uniqueSuppliers = [...new Set(intakeEntries.map(e => e.supplierName))].sort();
+    const uniqueRoutes = [...new Set(intakeEntries.map(e => e.routeGroup).filter(Boolean))].sort();
+    const uniqueMilkTypes = [...new Set(intakeEntries.map(e => e.milkType).filter(Boolean))].sort();
+    return [
+      { key: 'supplier', label: 'All suppliers', options: uniqueSuppliers.map(s => ({ value: s, label: s })) },
+      { key: 'route', label: 'All routes', options: uniqueRoutes.map(r => ({ value: r, label: r })) },
+      { key: 'milkType', label: 'All milk types', options: uniqueMilkTypes.map(m => ({ value: m, label: m })) },
+    ];
+  }, [intakeEntries]);
+
+  const outputFilterOptions = useMemo<FilterOption[]>(() => {
+    const uniqueProducts = [...new Set(outputEntries.map(e => e.productId))].sort();
+    return [
+      { key: 'product', label: 'All products', options: uniqueProducts.map(p => ({ value: p, label: p })) },
+    ];
+  }, [outputEntries]);
 
   // Load editing data (Intake)
   useEffect(() => {
@@ -478,6 +553,15 @@ export const InputTab: React.FC = () => {
     
     // Apply Filters
     if (showIntakeFilter) {
+      if (intakeFilters.supplier) {
+        data = data.filter(e => e.supplierName === intakeFilters.supplier);
+      }
+      if (intakeFilters.route) {
+        data = data.filter(e => e.routeGroup === intakeFilters.route);
+      }
+      if (intakeFilters.milkType) {
+        data = data.filter(e => e.milkType === intakeFilters.milkType);
+      }
       if (intakeFilters.search) {
         const lowerQ = intakeFilters.search.toLowerCase();
         data = data.filter(e => 
@@ -506,6 +590,9 @@ export const InputTab: React.FC = () => {
     let data = [...outputEntries].sort((a, b) => b.timestamp - a.timestamp);
 
     if (showOutputFilter) {
+      if (outputFilters.product) {
+        data = data.filter(e => e.productId === outputFilters.product);
+      }
       if (outputFilters.search) {
         const lowerQ = outputFilters.search.toLowerCase();
         data = data.filter(e => 
@@ -1020,6 +1107,7 @@ export const InputTab: React.FC = () => {
             onFilterChange={(updates) => setIntakeFilters(prev => ({ ...prev, ...updates }))}
             count={intakeEntries.length}
             label="Raw Milk Intake"
+            filterOptions={intakeFilterOptions}
           />
 
           <div className="space-y-2">
@@ -1241,6 +1329,7 @@ export const InputTab: React.FC = () => {
             onFilterChange={(updates) => setOutputFilters(prev => ({ ...prev, ...updates }))}
             count={outputEntries.length}
             label="Fractionation Output"
+            filterOptions={outputFilterOptions}
           />
 
           <div className="space-y-2">

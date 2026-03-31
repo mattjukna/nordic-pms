@@ -29,8 +29,10 @@ export const LivePreviewTab: React.FC = () => {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('all');
   const [collapsedSuppliers, setCollapsedSuppliers] = useState<Set<string>>(new Set());
   const [collapsedProducts, setCollapsedProducts] = useState<Set<string>>(new Set());
+  const [collapsedRoutes, setCollapsedRoutes] = useState<Set<string>>(new Set());
   const [showPallets, setShowPallets] = useState(false);
   const initializedProductIds = useRef<Set<string>>(new Set());
+  const initializedSupplierIds = useRef<Set<string>>(new Set());
 
   // --- Helper: Date Filtering ---
   const getDateRangeStart = (range: TimeRange): number => {
@@ -76,6 +78,22 @@ export const LivePreviewTab: React.FC = () => {
       return changed ? next : prev;
     });
   }, [products]);
+
+  // Default: collapse all suppliers
+  useEffect(() => {
+    setCollapsedSuppliers((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const supplier of suppliers) {
+        if (!initializedSupplierIds.current.has(supplier.id)) {
+          initializedSupplierIds.current.add(supplier.id);
+          next.add(supplier.id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [suppliers]);
 
   // --- Data Processing: Intake ---
   const intakeData = useMemo(() => {
@@ -133,6 +151,22 @@ export const LivePreviewTab: React.FC = () => {
     return { totalIntake, totalEffectiveIntake, totalDiscarded, bySupplier };
   }, [intakeEntries, suppliers, startTime, endTime, selectedSupplierId]);
 
+  // Group suppliers by routeGroup
+  const suppliersByRoute = useMemo(() => {
+    const groups: { route: string; suppliers: typeof intakeData.bySupplier; routeTotal: number }[] = [];
+    const routeMap = new Map<string, typeof intakeData.bySupplier>();
+    for (const s of intakeData.bySupplier) {
+      const route = s.routeGroup || 'Other';
+      if (!routeMap.has(route)) routeMap.set(route, []);
+      routeMap.get(route)!.push(s);
+    }
+    for (const [route, sups] of routeMap) {
+      groups.push({ route, suppliers: sups, routeTotal: sups.reduce((sum, s) => sum + s.total, 0) });
+    }
+    groups.sort((a, b) => b.routeTotal - a.routeTotal);
+    return groups;
+  }, [intakeData.bySupplier]);
+
   // --- Data Processing: Production ---
   const productionData = useMemo(() => {
     const entries = outputEntries.filter(e => e.timestamp >= startTime && e.timestamp <= endTime);
@@ -167,6 +201,15 @@ export const LivePreviewTab: React.FC = () => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleRouteCollapse = (route: string) => {
+    setCollapsedRoutes((prev) => {
+      const next = new Set(prev);
+      if (next.has(route)) next.delete(route);
+      else next.add(route);
       return next;
     });
   };
@@ -332,13 +375,30 @@ export const LivePreviewTab: React.FC = () => {
              </GlassCard>
           </div>
 
-          {/* Suppliers List */}
+          {/* Suppliers grouped by Route */}
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2 px-1">
               <Truck size={16} /> Supplier Performance
             </h3>
             
-            {intakeData.bySupplier.map(supplier => {
+            {suppliersByRoute.map(group => {
+              const isRouteCollapsed = collapsedRoutes.has(group.route);
+              return (
+                <div key={group.route} className="space-y-2">
+                  {/* Route Group Header */}
+                  <div
+                    className="flex items-center justify-between bg-slate-100 rounded-lg px-4 py-2 cursor-pointer hover:bg-slate-200 transition-colors"
+                    onClick={() => toggleRouteCollapse(group.route)}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isRouteCollapsed ? <ChevronRight size={14} className="text-slate-500"/> : <ChevronDown size={14} className="text-slate-500"/>}
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600">{group.route}</span>
+                      <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded-full">{group.suppliers.length} suppliers</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-blue-600">{group.routeTotal.toLocaleString()} kg</span>
+                  </div>
+
+                  {!isRouteCollapsed && group.suppliers.map(supplier => {
               const isCollapsed = collapsedSuppliers.has(supplier.id);
               const hasData = supplier.total > 0;
               
@@ -428,6 +488,9 @@ export const LivePreviewTab: React.FC = () => {
                       No intake entries for this period.
                     </div>
                   )}
+                </div>
+              );
+            })}
                 </div>
               );
             })}
