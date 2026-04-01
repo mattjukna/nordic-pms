@@ -22,7 +22,7 @@ const DISPATCH_DRAFT_KEY = 'nordic-pms-draft-dispatch';
 const INVALID_FIELD_CLASS = 'border-red-300 bg-red-50/40 focus:border-red-400 focus:ring-red-500/10';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating, stockAdjustments, addStockAdjustment, removeStockAdjustment } = useStore();
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating, stockAdjustments, addStockAdjustment, removeStockAdjustment, addContract } = useStore();
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState<boolean>(() => (userSettings?.defaultStockView === 'pallets'));
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);
@@ -79,6 +79,16 @@ export const InventoryTab: React.FC = () => {
   const [corrError, setCorrError] = useState('');
   const [showAdjustmentHistory, setShowAdjustmentHistory] = useState(false);
 
+  // Inline contract creation state
+  const [showInlineContract, setShowInlineContract] = useState(false);
+  const [inlineContractNumber, setInlineContractNumber] = useState('');
+  const [inlineContractPrice, setInlineContractPrice] = useState('');
+  const [inlineContractAmount, setInlineContractAmount] = useState('');
+  const [inlineContractStart, setInlineContractStart] = useState(new Date().toISOString().split('T')[0]);
+  const [inlineContractEnd, setInlineContractEnd] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split('T')[0]; });
+  const [inlineContractSubmitting, setInlineContractSubmitting] = useState(false);
+  const [inlineContractError, setInlineContractError] = useState('');
+
   useEffect(() => {
     if (buyers.length === 0) {
       if (selectedBuyerId) setSelectedBuyerId('');
@@ -116,13 +126,12 @@ export const InventoryTab: React.FC = () => {
     const active: typeof matching = [];
     const archived: typeof matching = [];
     for (const c of matching) {
-      // A contract is "archived" if its end date has passed AND it's been fully dispatched
-      const fulfilledKg = dispatchEntries
+      const usedCount = dispatchEntries
         .filter(d => d.contractNumber === c.contractNumber && d.buyerId === currentBuyer.id)
-        .reduce((sum, d) => sum + d.quantityKg, 0);
+        .length;
       const isPastEnd = c.endDate != null && c.endDate < now;
-      const isFulfilled = c.agreedAmountKg > 0 && fulfilledKg >= c.agreedAmountKg;
-      if (isPastEnd || isFulfilled) {
+      const isUsed = usedCount > 0;
+      if (isPastEnd || isUsed) {
         archived.push(c);
       } else {
         active.push(c);
@@ -1310,31 +1319,86 @@ export const InventoryTab: React.FC = () => {
                        </button>
                      )}
                    </div>
-                   <select
-                      value={selectedContractId}
-                      onChange={(e) => setSelectedContractId(e.target.value)}
-                      className="w-full bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                   >
-                      <option value="">-- No Contract (Manual Price) --</option>
-                      {activeContracts.length > 0 && (
-                        <optgroup label="Active">
-                          {activeContracts.map(c => (
-                            <option key={c.id} value={c.id}>
-                              {c.contractNumber} — €{c.pricePerKg}/kg{c.agreedAmountKg ? ` (${c.agreedAmountKg.toLocaleString()} kg)` : ''}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {showArchivedContracts && archivedContracts.length > 0 && (
-                        <optgroup label="Expired / Fulfilled">
-                          {archivedContracts.map(c => (
-                            <option key={c.id} value={c.id}>
-                              {c.contractNumber} — €{c.pricePerKg}/kg (archived)
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                   </select>
+                   <div className="flex gap-1">
+                     <select
+                        value={selectedContractId}
+                        onChange={(e) => setSelectedContractId(e.target.value)}
+                        className="flex-1 bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                     >
+                        <option value="">-- No Contract (Manual Price) --</option>
+                        {activeContracts.length > 0 && (
+                          <optgroup label="Active">
+                            {activeContracts.map(c => (
+                              <option key={c.id} value={c.id}>
+                                {c.contractNumber} — €{c.pricePerKg}/kg{c.agreedAmountKg ? ` (${c.agreedAmountKg.toLocaleString()} kg)` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {showArchivedContracts && archivedContracts.length > 0 && (
+                          <optgroup label="Expired / Fulfilled">
+                            {archivedContracts.map(c => (
+                              <option key={c.id} value={c.id}>
+                                {c.contractNumber} — €{c.pricePerKg}/kg (archived)
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                     </select>
+                     <button
+                       type="button"
+                       onClick={() => { setShowInlineContract(!showInlineContract); setInlineContractError(''); }}
+                       className={`p-2 rounded-md border text-sm font-bold transition-colors ${showInlineContract ? 'bg-blue-50 border-blue-300 text-blue-600' : 'bg-white border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-300'}`}
+                       title="Quick-add contract"
+                     >
+                       <Plus size={14} />
+                     </button>
+                   </div>
+                   {showInlineContract && (
+                     <div className="mt-2 p-2.5 bg-blue-50/60 border border-blue-200 rounded-lg space-y-2">
+                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                         <input className="bg-white border border-slate-300 rounded p-1.5 text-xs" placeholder="Contract No.*" value={inlineContractNumber} onChange={e => setInlineContractNumber(e.target.value)} />
+                         <input type="number" className="bg-white border border-slate-300 rounded p-1.5 text-xs" placeholder="Price €/kg*" value={inlineContractPrice} onChange={e => setInlineContractPrice(e.target.value)} step="0.01" />
+                         <input type="number" className="bg-white border border-slate-300 rounded p-1.5 text-xs" placeholder="Amount (kg)" value={inlineContractAmount} onChange={e => setInlineContractAmount(e.target.value)} />
+                         <div className="flex gap-1">
+                           <input type="date" className="flex-1 bg-white border border-slate-300 rounded p-1.5 text-[10px]" value={inlineContractStart} onChange={e => setInlineContractStart(e.target.value)} title="Start date" />
+                           <input type="date" className="flex-1 bg-white border border-slate-300 rounded p-1.5 text-[10px]" value={inlineContractEnd} onChange={e => setInlineContractEnd(e.target.value)} title="End date" />
+                         </div>
+                       </div>
+                       {inlineContractError && <div className="text-xs text-red-600">{inlineContractError}</div>}
+                       <div className="flex gap-2">
+                         <button
+                           type="button"
+                           disabled={inlineContractSubmitting || !inlineContractNumber.trim() || !inlineContractPrice}
+                           onClick={async () => {
+                             if (!selectedBuyerId || !selectedProduct) return;
+                             setInlineContractSubmitting(true);
+                             setInlineContractError('');
+                             try {
+                               await addContract(selectedBuyerId, {
+                                 contractNumber: inlineContractNumber.trim(),
+                                 productId: selectedProduct,
+                                 pricePerKg: parseFloat(inlineContractPrice) || 0,
+                                 agreedAmountKg: parseFloat(inlineContractAmount) || 0,
+                                 startDate: new Date(inlineContractStart).getTime(),
+                                 endDate: new Date(inlineContractEnd).getTime(),
+                               });
+                               setInlineContractNumber(''); setInlineContractPrice(''); setInlineContractAmount('');
+                               setShowInlineContract(false);
+                             } catch (err: any) {
+                               setInlineContractError(err?.message || 'Failed to create contract');
+                             } finally {
+                               setInlineContractSubmitting(false);
+                             }
+                           }}
+                           className="px-3 py-1 text-xs font-bold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
+                         >
+                           {inlineContractSubmitting ? 'Saving…' : 'Add Contract'}
+                         </button>
+                         <button type="button" onClick={() => setShowInlineContract(false)} className="px-3 py-1 text-xs font-bold rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Cancel</button>
+                       </div>
+                     </div>
+                   )}
                 </div>
 
                 <div className="relative">

@@ -354,30 +354,29 @@ export const InputTab: React.FC = () => {
     }
   }, [products, selectedProductId]);
 
+  // Track previous supplier to only auto-fill on actual supplier change
+  const prevSupplierRef = React.useRef(selectedSupplierId);
+
+  // Auto-fill Supplier Details (only on supplier change)
   useEffect(() => {
+    const isSupplierChange = prevSupplierRef.current !== selectedSupplierId;
+    prevSupplierRef.current = selectedSupplierId;
+
     const supplier = suppliers.find(s => s.id === selectedSupplierId);
-    const preferredMilkType = supplier?.defaultMilkType;
-
-    if (preferredMilkType && milkTypes.includes(preferredMilkType)) {
-      if (milkType !== preferredMilkType) setMilkType(preferredMilkType);
-      return;
-    }
-
-    if (!milkType || (milkTypes.length > 0 && !milkTypes.includes(milkType))) {
-      setMilkType(milkTypes[0] || 'Skim milk');
-    }
-  }, [milkTypes, milkType, selectedSupplierId, suppliers]);
-
-  // Auto-fill Supplier Details
-  useEffect(() => {
-    const supplier = suppliers.find(s => s.id === selectedSupplierId);
-    if (supplier) {
+    if (supplier && isSupplierChange) {
       if (supplier.defaultMilkType && milkTypes.includes(supplier.defaultMilkType)) {
         setMilkType(supplier.defaultMilkType);
       }
       if (supplier.isEco !== undefined) setIsEcological(supplier.isEco);
     }
   }, [selectedSupplierId, suppliers, milkTypes]);
+
+  // Ensure milkType is valid (fallback if current value not in list)
+  useEffect(() => {
+    if (milkTypes.length > 0 && milkType && !milkTypes.includes(milkType)) {
+      setMilkType(milkTypes[0] || 'Skim milk');
+    }
+  }, [milkTypes, milkType]);
 
   useEffect(() => {
     if (editingIntakeId) return;

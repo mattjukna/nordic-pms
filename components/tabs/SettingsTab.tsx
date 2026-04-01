@@ -101,6 +101,7 @@ export const SettingsTab: React.FC = () => {
     buyers, addBuyer, updateBuyer, removeBuyer,
     products, addProduct, updateProduct, removeProduct, reorderProducts,
     milkTypes, addMilkType, removeMilkType, reorderMilkTypes,
+    dispatchEntries,
     isHydrating
   } = useStore();
 
@@ -112,6 +113,11 @@ export const SettingsTab: React.FC = () => {
   // Expansion State
   const [expandedSupplierId, setExpandedSupplierId] = useState<string | null>(null);
   const [expandedBuyerId, setExpandedBuyerId] = useState<string | null>(null);
+  const [showUsedContracts, setShowUsedContracts] = useState<Record<string, boolean>>({});
+
+  // Helper: check if a contract has been used in dispatches
+  const isContractUsed = (buyerId: string, contractNumber: string) =>
+    dispatchEntries.some(d => d.contractNumber === contractNumber && d.buyerId === buyerId);
 
   // Edit Mode State
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
@@ -1205,7 +1211,7 @@ export const SettingsTab: React.FC = () => {
                         <div className="flex items-center gap-1"><Globe size={12}/> {b.country}</div>
                       </td>
                       <td className="p-3 text-right font-mono text-xs text-slate-500 hidden md:table-cell">
-                        {b.contracts?.length || 0} active
+                        {(() => { const unused = (b.contracts || []).filter(c => !isContractUsed(b.id, c.contractNumber)).length; const total = (b.contracts || []).length; return unused > 0 ? `${unused} active` : total > 0 ? `${total} used` : '0'; })()}
                       </td>
                       <td className="p-3 text-center w-16">
                         <button 
@@ -1246,21 +1252,56 @@ export const SettingsTab: React.FC = () => {
                                     <Pencil size={12} /> Edit
                                   </button>
                                 </div>
-                                {b.contracts && b.contracts.length > 0 ? (
-                                  <div className="space-y-1">
-                                    {b.contracts.map(c => (
-                                      <div key={c.id} className="bg-white p-2 rounded border border-slate-200 text-xs flex justify-between">
-                                         <div>
-                                            <span className="font-bold text-slate-700">{c.contractNumber}</span>
-                                            <span className="mx-1 text-slate-300">|</span>
-                                            <span className="text-slate-600">{c.productId}</span>
-                                         </div>
-                                         <div className="font-mono text-emerald-600 font-bold">€{c.pricePerKg}</div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-slate-400 italic">No active contracts.</div>
+                                {b.contracts && b.contracts.length > 0 ? (() => {
+                                  const unusedContracts = b.contracts.filter(c => !isContractUsed(b.id, c.contractNumber));
+                                  const usedContracts = b.contracts.filter(c => isContractUsed(b.id, c.contractNumber));
+                                  const showUsed = showUsedContracts[b.id] || false;
+                                  return (
+                                    <div className="space-y-2">
+                                      {unusedContracts.length > 0 ? (
+                                        <div className="max-h-40 overflow-y-auto space-y-1">
+                                          {unusedContracts.map(c => (
+                                            <div key={c.id} className="bg-white p-2 rounded border border-slate-200 text-xs flex justify-between">
+                                               <div>
+                                                  <span className="font-bold text-slate-700">{c.contractNumber}</span>
+                                                  <span className="mx-1 text-slate-300">|</span>
+                                                  <span className="text-slate-600">{c.productId}</span>
+                                               </div>
+                                               <div className="font-mono text-emerald-600 font-bold">€{c.pricePerKg}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="text-xs text-slate-400 italic">No unused contracts.</div>
+                                      )}
+                                      {usedContracts.length > 0 && (
+                                        <div>
+                                          <button
+                                            onClick={() => setShowUsedContracts(prev => ({ ...prev, [b.id]: !prev[b.id] }))}
+                                            className="text-[10px] text-slate-400 hover:text-blue-600 font-medium mb-1"
+                                          >
+                                            {showUsed ? 'Hide' : 'Show'} used contracts ({usedContracts.length})
+                                          </button>
+                                          {showUsed && (
+                                            <div className="max-h-40 overflow-y-auto space-y-1">
+                                              {usedContracts.map(c => (
+                                                <div key={c.id} className="bg-slate-50 p-2 rounded border border-slate-200 text-xs flex justify-between opacity-60">
+                                                   <div>
+                                                      <span className="font-bold text-slate-500">{c.contractNumber}</span>
+                                                      <span className="mx-1 text-slate-300">|</span>
+                                                      <span className="text-slate-400">{c.productId}</span>
+                                                   </div>
+                                                   <div className="font-mono text-slate-400 font-bold">€{c.pricePerKg}</div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })() : (
+                                  <div className="text-xs text-slate-400 italic">No contracts.</div>
                                 )}
                              </div>
                            </div>
