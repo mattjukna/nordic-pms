@@ -5,7 +5,7 @@ import { AlertTriangle, Lock, CheckCircle, X } from 'lucide-react';
 interface ConfirmationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title: string;
   message: string;
   isDanger?: boolean; // Red button for deletes
@@ -23,10 +23,11 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (requireAuth) {
       // Mock Admin Password
       if (password !== 'admin') {
@@ -34,8 +35,16 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         return;
       }
     }
-    onConfirm();
-    resetAndClose();
+    setLoading(true);
+    setError('');
+    try {
+      await onConfirm();
+      resetAndClose();
+    } catch (err: any) {
+      setError(err?.message || 'An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetAndClose = () => {
@@ -71,9 +80,9 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                 onChange={(e) => { setPassword(e.target.value); setError(''); }}
                 autoFocus
               />
-              {error && <p className="text-xs text-red-600 font-bold">{error}</p>}
             </div>
           )}
+          {error && <p className="text-xs text-red-600 font-bold mt-2">{error}</p>}
         </div>
 
         {/* Footer */}
@@ -86,11 +95,13 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           </button>
           <button 
             onClick={handleConfirm}
+            disabled={loading}
             className={`px-4 py-2 text-sm font-bold text-white rounded-lg shadow-sm transition-all transform active:scale-95 ${
+              loading ? 'opacity-60 cursor-not-allowed' :
               isDanger || requireAuth ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {requireAuth ? 'Authorize & Proceed' : 'Confirm'}
+            {loading ? 'Saving…' : requireAuth ? 'Authorize & Proceed' : 'Confirm'}
           </button>
         </div>
       </div>

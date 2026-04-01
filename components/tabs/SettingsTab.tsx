@@ -185,7 +185,7 @@ export const SettingsTab: React.FC = () => {
     isOpen: boolean;
     title: string;
     message: string;
-    action: () => void;
+    action: () => void | Promise<void>;
     isDanger?: boolean;
   }>({ isOpen: false, title: '', message: '', action: () => {} });
 
@@ -251,14 +251,14 @@ export const SettingsTab: React.FC = () => {
     });
   };
 
-  const executeProductSubmit = () => {
+  const executeProductSubmit = async () => {
     const existingProduct = editingProductId ? products.find((product) => product.id === editingProductId) ?? null : null;
     const productData = mapFormToProduct(newProduct, existingProduct);
     if (Object.keys(productErrors).length > 0) return;
     if (editingProductId) {
-      updateProduct(editingProductId, productData);
+      await updateProduct(editingProductId, productData);
     } else {
-      addProduct(productData);
+      await addProduct(productData);
     }
     resetProductForm();
   };
@@ -361,7 +361,7 @@ export const SettingsTab: React.FC = () => {
     });
   };
 
-  const executeSupplierSubmit = () => {
+  const executeSupplierSubmit = async () => {
     if (!newSupplier.name || !newSupplier.routeGroup || !newSupplier.companyCode || !newSupplier.addressLine1 || !newSupplier.country || !newSupplier.createdOn || Object.keys(supplierErrors).length > 0) return;
     const normalizedCompanyCode = normalizeCompanyCodes(newSupplier.companyCode);
     if (!normalizedCompanyCode) return;
@@ -381,9 +381,9 @@ export const SettingsTab: React.FC = () => {
     };
 
     if (editingSupplierId) {
-      updateSupplier(editingSupplierId, supplierData);
+      await updateSupplier(editingSupplierId, supplierData);
     } else {
-      addSupplier(supplierData);
+      await addSupplier(supplierData);
     }
     
     resetSupplierForm();
@@ -448,7 +448,7 @@ export const SettingsTab: React.FC = () => {
     });
   };
 
-  const executeBuyerSubmit = () => {
+  const executeBuyerSubmit = async () => {
     if (!newBuyer.name || !newBuyer.companyCode || !newBuyer.addressLine1 || !newBuyer.country || !newBuyer.createdOn || Object.keys(buyerErrors).length > 0) return;
     const normalizedCompanyCode = normalizeCompanyCodes(newBuyer.companyCode);
     if (!normalizedCompanyCode) return;
@@ -461,13 +461,12 @@ export const SettingsTab: React.FC = () => {
       addressLine1: newBuyer.addressLine1,
       addressLine2: newBuyer.addressLine2,
       createdOn: new Date(newBuyer.createdOn).getTime(),
-      contracts: newBuyer.contracts
     };
 
     if (editingBuyerId) {
-      updateBuyer(editingBuyerId, buyerData);
+      await updateBuyer(editingBuyerId, buyerData);
     } else {
-      addBuyer(buyerData);
+      await addBuyer(buyerData);
     }
 
     resetBuyerForm();
