@@ -3,6 +3,7 @@ import { useMsal } from '@azure/msal-react';
 import { restoreLogoutDebug } from '../../src/auth/logoutDebug';
 import { useStore } from '../../store';
 import UserSettingsModal from './UserSettingsModal';
+import { Moon, Sun } from 'lucide-react';
 
 const initials = (name?: string, email?: string) => {
   if (name) return name.split(' ').map(p => p[0]).slice(0,2).join('').toUpperCase();
@@ -18,6 +19,9 @@ const UserMenu: React.FC = () => {
   const email = acct?.username || acct?.idTokenClaims?.preferred_username || '';
   const [open, setOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const userSettings = useStore((s) => s.userSettings);
+  const setUserSettings = useStore((s) => s.setUserSettings);
+  const isDark = userSettings?.darkMode ?? false;
 
   return (
     <div className="relative">
@@ -31,6 +35,17 @@ const UserMenu: React.FC = () => {
             <div className="text-xs text-slate-500">{email}</div>
           </div>
           <div className="p-2">
+            <button
+              onClick={() => {
+                const next = !isDark;
+                setUserSettings({ darkMode: next });
+                document.documentElement.classList.toggle('dark', next);
+              }}
+              className="w-full text-left px-2 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+            >
+              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+              {isDark ? 'Light Mode' : 'Dark Mode'}
+            </button>
             <button onClick={() => { setShowSettings(true); setOpen(false); }} className="w-full text-left px-2 py-2 text-sm hover:bg-slate-50">Settings</button>
             <button
               onClick={() => {

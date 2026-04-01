@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
@@ -12,7 +12,10 @@ import { getPrimaryCompanyCode, parseCompanyCodes } from '../../utils/companyCod
 import { Package, Truck, ArrowUpRight, Box, Filter, Search, Calendar, ChevronDown, ChevronUp, FileText, Download, Scale, Layers, Tag, Calculator, CheckCircle2, Clock, Trash2, Check, Pencil, Plus, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
+import { apiFetch } from '../../services/apiFetch';
 import { validateDispatchForm, validateShipmentForm } from '../../utils/validation';
 // autoptable has no types exposed here
 // @ts-ignore
@@ -23,6 +26,7 @@ const INVALID_FIELD_CLASS = 'border-red-300 bg-red-50/40 focus:border-red-400 fo
 
 export const InventoryTab: React.FC = () => {
   const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating, stockAdjustments, addStockAdjustment, removeStockAdjustment, addContract } = useStore();
+  const undoableDelete = useUndoDelete();
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState<boolean>(() => (userSettings?.defaultStockView === 'pallets'));
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);
@@ -58,6 +62,27 @@ export const InventoryTab: React.FC = () => {
     type: 'standard',
     message: ''
   });
+
+  // Keyboard shortcuts: Ctrl+S → submit dispatch form, Escape → close form/modal
+  const handleKeyboardSave = useCallback(() => {
+    if (confirmState.isOpen) return;
+    if (showDispatchForm) document.getElementById('dispatch-submit-btn')?.click();
+  }, [showDispatchForm, confirmState.isOpen]);
+
+  const handleKeyboardEscape = useCallback(() => {
+    if (confirmState.isOpen) {
+      setConfirmState(prev => ({ ...prev, isOpen: false }));
+    } else if (editingDispatchId) {
+      setEditingDispatchId(null);
+    } else if (showDispatchForm) {
+      setShowDispatchForm(false);
+    }
+  }, [confirmState.isOpen, editingDispatchId, showDispatchForm]);
+
+  useKeyboardShortcuts({ onSave: handleKeyboardSave, onEscape: handleKeyboardEscape });
+
+  // Bulk selection state
+  const [selectedDispatchIds, setSelectedDispatchIds] = useState<Set<string>>(new Set());
 
   // Filter State
   const [showFilter, setShowFilter] = useState(false);
@@ -611,11 +636,13 @@ export const InventoryTab: React.FC = () => {
   };
 
   const handleDeleteEntry = (id: string) => {
-    setConfirmState({
-      isOpen: true,
-      type: 'delete',
-      message: "Are you sure you want to delete this log entry?",
-      pendingAction: () => removeDispatchEntry(id)
+    const item = dispatchEntries.find(d => d.id === id);
+    if (!item) return;
+    undoableDelete({
+      label: `${item.buyerName} dispatch (${(item.orderedQuantityKg ?? item.quantityKg).toLocaleString()} kg)`,
+      removeFromState: () => useStore.setState((s) => ({ dispatchEntries: s.dispatchEntries.filter(d => d.id !== id) })),
+      restoreToState: () => useStore.setState((s) => ({ dispatchEntries: [item, ...s.dispatchEntries] })),
+      apiEndpoint: `/api/dispatch-entries/${id}`,
     });
   };
 
@@ -711,8 +738,23 @@ export const InventoryTab: React.FC = () => {
     if (!editingDispatchId) return;
     const entry = dispatchEntries.find(e => e.id === editingDispatchId);
     if (!entry || !entry.shipments) return;
+    const shipment = entry.shipments.find(s => s.id === shipmentId);
+    if (!shipment) return;
 
-    await removeDispatchShipment(editingDispatchId, shipmentId);
+    undoableDelete({
+      label: `Shipment (${shipment.quantityKg.toLocaleString()} kg)`,
+      removeFromState: () => useStore.setState((s) => ({
+        dispatchEntries: s.dispatchEntries.map(d => d.id === editingDispatchId
+          ? { ...d, shipments: (d.shipments || []).filter(sh => sh.id !== shipmentId) }
+          : d)
+      })),
+      restoreToState: () => useStore.setState((s) => ({
+        dispatchEntries: s.dispatchEntries.map(d => d.id === editingDispatchId
+          ? { ...d, shipments: [...(d.shipments || []), shipment] }
+          : d)
+      })),
+      apiEndpoint: `/api/dispatch-entries/${editingDispatchId}/shipments/${shipmentId}`,
+    });
   };
 
   const toggleComplete = (id: string, currentStatus: string) => {
@@ -1202,7 +1244,7 @@ export const InventoryTab: React.FC = () => {
                       <td className="p-1 text-right font-mono">{adj.looseKg !== 0 ? (adj.looseKg > 0 ? '+' : '') + adj.looseKg : '—'}</td>
                       <td className="p-1 text-right font-mono font-bold">{adj.adjustmentKg >= 0 ? '+' : ''}{adj.adjustmentKg.toLocaleString()}</td>
                       <td className="p-1 text-slate-500 truncate max-w-[120px]" title={adj.reason}>{adj.reason}</td>
-                      <td className="p-1"><button onClick={() => { setConfirmState({ isOpen: true, type: 'delete', message: `Delete this ${adj.type.replace('_', ' ')} adjustment of ${adj.adjustmentKg.toLocaleString()} kg for ${prod?.name || adj.productId}?`, pendingAction: () => removeStockAdjustment(adj.id) }); }} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button></td>
+                      <td className="p-1"><button onClick={() => { const a = adj; undoableDelete({ label: `${a.type.replace('_', ' ')} adjustment (${a.adjustmentKg.toLocaleString()} kg)`, removeFromState: () => useStore.setState((s) => ({ stockAdjustments: s.stockAdjustments.filter(sa => sa.id !== a.id) })), restoreToState: () => useStore.setState((s) => ({ stockAdjustments: [a, ...s.stockAdjustments] })), apiEndpoint: `/api/stock-adjustments/${a.id}` }); }} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button></td>
                     </tr>
                   );
                 })}
@@ -1584,6 +1626,7 @@ export const InventoryTab: React.FC = () => {
 
               <div className="flex gap-3 mt-6">
                 <button 
+                  id="dispatch-submit-btn"
                   onClick={initiateDispatch}
                   disabled={Object.keys(dispatchErrors).length > 0}
                   className={`flex-1 text-white py-2 rounded-md text-sm font-bold shadow-md ${Object.keys(dispatchErrors).length > 0 ? 'bg-slate-300 cursor-not-allowed' : dispatchStatus === 'confirmed' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'}`}
@@ -1707,10 +1750,36 @@ export const InventoryTab: React.FC = () => {
             {!showFilter && <div className="text-[10px] text-slate-400 pl-6">Showing recent 10 entries</div>}
           </div>
 
+          {selectedDispatchIds.size > 0 && (
+            <div className="flex items-center gap-3 mb-2 px-2">
+              <button
+                onClick={bulkDeleteDispatches}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors"
+              >
+                <Trash2 size={13}/> Delete Selected ({selectedDispatchIds.size})
+              </button>
+              <button onClick={() => setSelectedDispatchIds(new Set())} className="text-xs text-slate-500 hover:text-slate-700">Clear selection</button>
+            </div>
+          )}
+
           <div className="w-full overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
             <table className="w-full text-left text-sm relative">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
                 <tr>
+                  <th className="p-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={displayedDispatches.length > 0 && displayedDispatches.every(e => selectedDispatchIds.has(e.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedDispatchIds(new Set(displayedDispatches.map(d => d.id)));
+                        } else {
+                          setSelectedDispatchIds(new Set());
+                        }
+                      }}
+                      className="rounded border-slate-300"
+                    />
+                  </th>
                   <th className="p-3">Date</th>
                   <th className="p-3">Buyer</th>
                   <th className="p-3">Details</th>
@@ -1722,11 +1791,26 @@ export const InventoryTab: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {displayedDispatches.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400 italic">No dispatches found matching filters.</td>
+                    <td colSpan={7} className="p-8 text-center text-slate-400 italic">No dispatches found matching filters.</td>
                   </tr>
                 ) : (
                   displayedDispatches.map(entry => (
-                    <tr key={entry.id} className={`hover:bg-slate-50 transition-colors ${entry.status === 'planned' ? 'bg-amber-50/30' : ''}`}>
+                    <tr key={entry.id} className={`hover:bg-slate-50 transition-colors ${entry.status === 'planned' ? 'bg-amber-50/30' : ''} ${selectedDispatchIds.has(entry.id) ? 'bg-blue-50' : ''}`}>
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedDispatchIds.has(entry.id)}
+                          onChange={() => {
+                            setSelectedDispatchIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(entry.id)) next.delete(entry.id);
+                              else next.add(entry.id);
+                              return next;
+                            });
+                          }}
+                          className="rounded border-slate-300"
+                        />
+                      </td>
                       <td className="p-3 text-slate-500 font-mono text-xs whitespace-nowrap">{new Date(entry.date).toLocaleDateString()}</td>
                       <td className="p-3 font-medium text-slate-700">{entry.buyer}</td>
                       <td className="p-3 text-slate-600">

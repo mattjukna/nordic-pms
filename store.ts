@@ -212,6 +212,7 @@ type UserSettings = {
   defaultAnalyticsRange: 'week' | 'month' | 'quarter' | 'year' | 'all';
   dateFormat: 'ISO' | 'US';
   compactMode: boolean;
+  darkMode: boolean;
 };
 
 export const useStore = create<AppState>((set, get) => ({
@@ -233,7 +234,8 @@ export const useStore = create<AppState>((set, get) => ({
       defaultStockView: 'kg',
       defaultAnalyticsRange: 'month',
       dateFormat: 'ISO',
-      compactMode: false
+      compactMode: false,
+      darkMode: false
     };
   })(),
   setUserSettings: (patch) => {
@@ -244,7 +246,7 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
   resetUserSettings: () => {
-    const defaults = { plantLabel: 'Fractionation Plant 01', shiftLabel: 'Shift A', defaultStockView: 'kg', defaultAnalyticsRange: 'month', dateFormat: 'ISO', compactMode: false };
+    const defaults = { plantLabel: 'Fractionation Plant 01', shiftLabel: 'Shift A', defaultStockView: 'kg', defaultAnalyticsRange: 'month', dateFormat: 'ISO', compactMode: false, darkMode: false };
     try { localStorage.setItem('userSettings', JSON.stringify(defaults)); } catch (e) {}
     set(() => ({ userSettings: defaults } as any));
   },

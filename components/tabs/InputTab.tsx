@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
@@ -13,7 +13,10 @@ import { buildIntakeTags } from '../../utils/intakeRules';
 import { getEffectiveIntakeQuantityKg, isRawMilkType, resolveEffectiveQuantityKg } from '../../utils/intakeCoefficient';
 import { resolveIntakeCost } from '../../utils/intakePricing';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
+import { apiFetch } from '../../services/apiFetch';
 import { validateIntakeForm, validateOutputForm } from '../../utils/validation';
 import type { IntakePricingMode, IntakeUnitPriceBasis } from '../../types';
 import { PurchaseDataTab } from './PurchaseDataTab';
@@ -273,6 +276,7 @@ export const InputTab: React.FC = () => {
     products,
     milkTypes
   } = useStore();
+  const undoableDelete = useUndoDelete();
 
   // Input Form States (Intake)
   const [activeMode, setActiveMode] = useState<'intake' | 'output' | 'purchase'>('intake');
@@ -330,6 +334,39 @@ export const InputTab: React.FC = () => {
     message: '',
     action: () => {}
   });
+
+  // Keyboard shortcuts: Ctrl+S → submit active form, Escape → close modal/cancel edit
+  const handleKeyboardSave = useCallback(() => {
+    if (confirmModal.isOpen) return; // don't double-submit
+    if (activeMode === 'intake') {
+      // Trigger via a DOM click on submit button or call directly is complex;
+      // we'll use a ref-less approach: the confirmIntakeSubmit is defined later,
+      // so we use a stable ref pattern
+      document.getElementById('intake-submit-btn')?.click();
+    } else if (activeMode === 'output') {
+      document.getElementById('output-submit-btn')?.click();
+    }
+  }, [activeMode, confirmModal.isOpen]);
+
+  const handleKeyboardEscape = useCallback(() => {
+    if (confirmModal.isOpen) {
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } else if (editingIntakeId) {
+      setEditingIntakeId(null);
+    } else if (editingOutputId) {
+      setEditingOutputId(null);
+    } else if (showWizard) {
+      setShowWizard(false);
+    } else if (showReportModal) {
+      setShowReportModal(false);
+    }
+  }, [confirmModal.isOpen, editingIntakeId, editingOutputId, showWizard, showReportModal]);
+
+  useKeyboardShortcuts({ onSave: handleKeyboardSave, onEscape: handleKeyboardEscape });
+
+  // Bulk selection state
+  const [selectedIntakeIds, setSelectedIntakeIds] = useState<Set<string>>(new Set());
+  const [selectedOutputIds, setSelectedOutputIds] = useState<Set<string>>(new Set());
 
   // Set default supplier when list loads
   useEffect(() => {
@@ -695,12 +732,13 @@ export const InputTab: React.FC = () => {
   };
 
   const confirmIntakeDelete = (id: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Delete Intake Entry",
-      message: "Are you sure you want to delete this intake entry? This action cannot be undone.",
-      action: () => removeIntakeEntry(id),
-      isDanger: true
+    const item = intakeEntries.find(e => e.id === id);
+    if (!item) return;
+    undoableDelete({
+      label: `${item.supplierName} intake (${item.quantityKg.toLocaleString()} kg)`,
+      removeFromState: () => useStore.setState((s) => ({ intakeEntries: s.intakeEntries.filter(e => e.id !== id) })),
+      restoreToState: () => useStore.setState((s) => ({ intakeEntries: [item, ...s.intakeEntries] })),
+      apiEndpoint: `/api/intake-entries/${id}`,
     });
   };
 
@@ -744,13 +782,40 @@ export const InputTab: React.FC = () => {
   };
 
   const confirmOutputDelete = (id: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Delete Production Log",
-      message: "Are you sure you want to delete this production output log? This will affect stock levels.",
-      action: () => removeOutputEntry(id),
-      isDanger: true
+    const item = outputEntries.find(e => e.id === id);
+    if (!item) return;
+    undoableDelete({
+      label: `${item.productId} output (${item.totalWeight.toLocaleString()} kg)`,
+      removeFromState: () => useStore.setState((s) => ({ outputEntries: s.outputEntries.filter(e => e.id !== id) })),
+      restoreToState: () => useStore.setState((s) => ({ outputEntries: [item, ...s.outputEntries] })),
+      apiEndpoint: `/api/output-entries/${id}`,
     });
+  };
+
+  const bulkDeleteIntakes = () => {
+    if (selectedIntakeIds.size === 0) return;
+    const items = intakeEntries.filter(e => selectedIntakeIds.has(e.id));
+    const ids = [...selectedIntakeIds];
+    undoableDelete({
+      label: `${ids.length} intake ${ids.length === 1 ? 'entry' : 'entries'}`,
+      removeFromState: () => useStore.setState((s) => ({ intakeEntries: s.intakeEntries.filter(e => !selectedIntakeIds.has(e.id)) })),
+      restoreToState: () => useStore.setState((s) => ({ intakeEntries: [...items, ...s.intakeEntries] })),
+      apiDelete: () => Promise.all(ids.map(id => apiFetch(`/api/intake-entries/${id}`, { method: 'DELETE' }))).then(() => {}),
+    });
+    setSelectedIntakeIds(new Set());
+  };
+
+  const bulkDeleteOutputs = () => {
+    if (selectedOutputIds.size === 0) return;
+    const items = outputEntries.filter(e => selectedOutputIds.has(e.id));
+    const ids = [...selectedOutputIds];
+    undoableDelete({
+      label: `${ids.length} output ${ids.length === 1 ? 'entry' : 'entries'}`,
+      removeFromState: () => useStore.setState((s) => ({ outputEntries: s.outputEntries.filter(e => !selectedOutputIds.has(e.id)) })),
+      restoreToState: () => useStore.setState((s) => ({ outputEntries: [...items, ...s.outputEntries] })),
+      apiDelete: () => Promise.all(ids.map(id => apiFetch(`/api/output-entries/${id}`, { method: 'DELETE' }))).then(() => {}),
+    });
+    setSelectedOutputIds(new Set());
   };
 
   const handleCancelOutputEdit = () => {
@@ -1072,6 +1137,7 @@ export const InputTab: React.FC = () => {
               {editingIntakeId ? (
                 <>
                    <button 
+                    id="intake-submit-btn"
                     onClick={confirmIntakeSubmit}
                     disabled={Object.keys(intakeErrors).length > 0}
                     className={`flex-1 text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all font-bold ${Object.keys(intakeErrors).length > 0 ? 'bg-amber-300 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'}`}
@@ -1089,6 +1155,7 @@ export const InputTab: React.FC = () => {
                 </>
               ) : (
                 <button 
+                  id="intake-submit-btn"
                   onClick={confirmIntakeSubmit}
                   disabled={Object.keys(intakeErrors).length > 0}
                   className={`w-full text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] font-bold ${Object.keys(intakeErrors).length > 0 ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
@@ -1113,6 +1180,24 @@ export const InputTab: React.FC = () => {
           />
 
           <div className="space-y-2">
+            {displayedIntake.length > 0 && (
+              <div className="flex items-center gap-2 px-1">
+                <input type="checkbox"
+                  checked={displayedIntake.length > 0 && displayedIntake.every(e => selectedIntakeIds.has(e.id))}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedIntakeIds(new Set(displayedIntake.map(i => i.id)));
+                    else setSelectedIntakeIds(new Set());
+                  }}
+                  className="rounded border-slate-300"
+                />
+                <span className="text-xs text-slate-500">Select all</span>
+                {selectedIntakeIds.size > 0 && (
+                  <button onClick={bulkDeleteIntakes} className="ml-auto flex items-center gap-1 px-2 py-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 transition-colors">
+                    <Trash2 size={12} /> Delete {selectedIntakeIds.size} selected
+                  </button>
+                )}
+              </div>
+            )}
             {displayedIntake.length === 0 && (
               <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
                 No intake entries found.
@@ -1120,6 +1205,7 @@ export const InputTab: React.FC = () => {
             )}
             {displayedIntake.map(entry => (
               <div key={entry.id} className={`group flex items-center justify-between p-3 border rounded-lg transition-all shadow-sm ${entry.isDiscarded ? 'bg-red-50 border-red-200 opacity-75' : editingIntakeId === entry.id ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
+                <input type="checkbox" checked={selectedIntakeIds.has(entry.id)} onChange={() => setSelectedIntakeIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-semibold flex flex-wrap items-center gap-2 ${entry.isDiscarded ? 'text-red-800' : entry.isEcological ? 'text-red-600' : 'text-slate-800'}`}>
                     <span className="truncate">{entry.supplierName}</span>
@@ -1280,6 +1366,7 @@ export const InputTab: React.FC = () => {
                 {editingOutputId ? (
                   <>
                      <button 
+                      id="output-submit-btn"
                       onClick={confirmOutputSubmit}
                       disabled={!isOutputValid}
                       className={`bg-amber-600 hover:bg-amber-700 text-white shadow-sm rounded-md px-4 flex items-center justify-center transition-all ${!isOutputValid ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1297,6 +1384,7 @@ export const InputTab: React.FC = () => {
                   </>
                 ) : (
                   <button 
+                    id="output-submit-btn"
                     onClick={confirmOutputSubmit}
                     disabled={!isOutputValid}
                     className={`bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm rounded-md px-4 flex items-center justify-center transition-all active:scale-[0.98] ${!isOutputValid ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1335,6 +1423,24 @@ export const InputTab: React.FC = () => {
           />
 
           <div className="space-y-2">
+            {displayedOutput.length > 0 && (
+              <div className="flex items-center gap-2 px-1">
+                <input type="checkbox"
+                  checked={displayedOutput.length > 0 && displayedOutput.every(e => selectedOutputIds.has(e.id))}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedOutputIds(new Set(displayedOutput.map(i => i.id)));
+                    else setSelectedOutputIds(new Set());
+                  }}
+                  className="rounded border-slate-300"
+                />
+                <span className="text-xs text-slate-500">Select all</span>
+                {selectedOutputIds.size > 0 && (
+                  <button onClick={bulkDeleteOutputs} className="ml-auto flex items-center gap-1 px-2 py-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 transition-colors">
+                    <Trash2 size={12} /> Delete {selectedOutputIds.size} selected
+                  </button>
+                )}
+              </div>
+            )}
             {displayedOutput.length === 0 && (
               <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
                 No output entries found.
@@ -1342,6 +1448,7 @@ export const InputTab: React.FC = () => {
             )}
             {displayedOutput.map(entry => (
               <div key={entry.id} className={`group flex items-center justify-between p-3 border rounded-lg transition-all shadow-sm ${editingOutputId === entry.id ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
+                <input type="checkbox" checked={selectedOutputIds.has(entry.id)} onChange={() => setSelectedOutputIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
                     {entry.productId}

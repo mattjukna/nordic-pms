@@ -10,6 +10,8 @@ import { AITab } from './tabs/AITab';
 import { InventoryTab } from './tabs/InventoryTab';
 import { SettingsTab } from './tabs/SettingsTab';
 import { clearSessionEvent, readSessionEvent, SessionEvent, subscribeSessionEvent } from '../services/sessionEvents';
+import ToastContainer from './ui/ToastContainer';
+import OfflineBanner from './ui/OfflineBanner';
 
 const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) => {
   const activeTab = useStore((state) => state.activeTab);
@@ -25,6 +27,11 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
     setSessionEvent(readSessionEvent());
     return subscribeSessionEvent((event) => setSessionEvent(event));
   }, []);
+
+  // Apply dark mode class to <html> on mount and when setting changes
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', !!userSettings?.darkMode);
+  }, [userSettings?.darkMode]);
 
   return (
     <div className={`${userSettings?.compactMode ? 'compact' : ''} w-full max-w-7xl mx-auto flex flex-col min-h-screen bg-slate-50`}>
@@ -146,6 +153,8 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
         )}
       </main>
 
+      <ToastContainer />
+      <OfflineBanner />
     </div>
   );
 };

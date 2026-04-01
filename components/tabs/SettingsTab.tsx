@@ -7,6 +7,7 @@ import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calenda
 import { Supplier, Buyer, BuyerContract, Product } from '../../types';
 import { normalizeCompanyCodes } from '../../utils/companyCodes';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
 import { findBuyerDuplicateWarning, findSupplierDuplicateWarning, validateBuyerForm, validateContractForm, validateMilkTypeName, validateProductForm, validateSupplierForm } from '../../utils/validation';
 
@@ -104,6 +105,7 @@ export const SettingsTab: React.FC = () => {
     dispatchEntries,
     isHydrating
   } = useStore();
+  const undoableDelete = useUndoDelete();
 
   // Search State
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -270,12 +272,13 @@ export const SettingsTab: React.FC = () => {
   };
 
   const confirmProductDelete = (id: string, name: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Delete Product",
-      message: `Are you sure you want to delete ${name}?`,
-      action: () => removeProduct(id),
-      isDanger: true
+    const item = products.find(p => p.id === id);
+    if (!item) return;
+    undoableDelete({
+      label: name,
+      removeFromState: () => useStore.setState((s) => ({ products: s.products.filter(p => p.id !== id) })),
+      restoreToState: () => useStore.setState((s) => ({ products: [...s.products, item].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)) })),
+      apiEndpoint: `/api/products/${id}`,
     });
   };
 
@@ -345,12 +348,11 @@ export const SettingsTab: React.FC = () => {
   };
 
   const confirmMilkTypeDelete = (type: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: "Delete Milk Type",
-      message: `Are you sure you want to delete ${type}?`,
-      action: () => removeMilkType(type),
-      isDanger: true
+    undoableDelete({
+      label: type,
+      removeFromState: () => useStore.setState((s) => ({ milkTypes: s.milkTypes.filter(t => t !== type) })),
+      restoreToState: () => useStore.setState((s) => ({ milkTypes: [...s.milkTypes, type] })),
+      apiEndpoint: `/api/milk-types/${encodeURIComponent(type)}`,
     });
   };
 
