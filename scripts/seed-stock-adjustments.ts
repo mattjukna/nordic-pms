@@ -114,7 +114,25 @@ async function main() {
     console.log(`  Correction needed: ${diffKg >= 0 ? '+' : ''}${diffKg.toLocaleString()} kg`);
 
     if (Math.abs(diffKg) < 1) {
-      console.log(`  ✓ Already aligned, skipping.\n`);
+      // Check if there's already an initial_balance adjustment for this product
+      const existingAdj = existingAdjustments.filter(a => a.productId === productId && a.type === 'initial_balance');
+      if (existingAdj.length > 0) {
+        console.log(`  ✓ Already aligned, skipping.\n`);
+        continue;
+      }
+      // Kg is aligned but no unit adjustment exists — create one for pallet/bb/tank counts
+      console.log(`  Kg aligned but no unit counts recorded — creating unit alignment.\n`);
+      adjustmentsToCreate.push({
+        productId,
+        adjustmentKg: 0,
+        pallets: real.pallets,
+        bigBags: real.bigBags,
+        tanks: real.tanks,
+        looseKg: real.looseKg,
+        reason: `Unit alignment: ${real.pallets} pad + ${real.bigBags} bb + ${real.looseKg} loose kg`,
+        type: 'initial_balance',
+        note: `Auto-seeded — kg was already correct, added unit counts`,
+      });
       continue;
     }
 

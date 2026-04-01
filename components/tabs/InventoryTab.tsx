@@ -261,8 +261,10 @@ export const InventoryTab: React.FC = () => {
       let producedPadKg = 0;
       let producedBbKg = 0;
       let producedTankKg = 0;
+      const batchKgs: { timestamp: number; kg: number }[] = [];
 
       for (const out of productOutputs) {
+        const prevProducedKg = producedKg;
         const segs = out.packagingString ? parsePackagingSegments(out.packagingString, product.defaultPalletWeight, product.defaultBagWeight) : [] as any[];
         if (segs.length > 0) {
           for (const seg of segs) {
@@ -289,6 +291,7 @@ export const InventoryTab: React.FC = () => {
           if (wholeT > 0) { producedTanks += wholeT; producedTankKg += wholeT * 25000; producedKg += wholeT * 25000; }
           if (fracT > 1e-6) { producedTanks += 1; const tk = Math.round(fracT * 25000); producedTankKg += tk; producedKg += tk; }
         }
+        if (out.timestamp) batchKgs.push({ timestamp: out.timestamp, kg: producedKg - prevProducedKg });
       }
 
       // Shipments / dispatches
@@ -390,12 +393,22 @@ export const InventoryTab: React.FC = () => {
 
       const looseWarning = unmappedKgForUnits > 0 || Math.abs(looseKgEstimate) > 50 || unmappedDispatches.length > 0 || problematicShipments.length > 0;
 
-      const oldestBatch = productOutputs.sort((a,b) => a.timestamp - b.timestamp)[0];
+      // FIFO aging: only flag if stock > 0 and the oldest remaining batch is old
       let ageStatus: 'green' | 'yellow' | 'red' = 'green';
-      if (oldestBatch) {
-        const ageDays = (Date.now() - oldestBatch.timestamp) / (1000 * 60 * 60 * 24);
-        if (ageDays > 60) ageStatus = 'red';
-        else if (ageDays > 30) ageStatus = 'yellow';
+      if (currentStockKg > 0 && batchKgs.length > 0) {
+        batchKgs.sort((a, b) => a.timestamp - b.timestamp);
+        let consumed = producedKg - currentStockKg; // total kg that has left the warehouse
+        for (const batch of batchKgs) {
+          if (consumed >= batch.kg) {
+            consumed -= batch.kg;
+            continue; // entire batch consumed
+          }
+          // This batch still has remaining stock — its age determines the status
+          const ageDays = (Date.now() - batch.timestamp) / (1000 * 60 * 60 * 24);
+          if (ageDays > 60) ageStatus = 'red';
+          else if (ageDays > 30) ageStatus = 'yellow';
+          break;
+        }
       }
 
       return {
