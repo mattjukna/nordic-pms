@@ -34,6 +34,7 @@ const REAL_STOCK: Record<string, {
 }> = {
   MPC85: { pallets: 28, bigBags: 12, tanks: 0, looseKg: 570, palletWeight: 900, bagWeight: 850 },
   MPC83: { pallets: 0, bigBags: 30, tanks: 0, looseKg: 248, palletWeight: 900, bagWeight: 850 },
+  MPC85_ORG: { pallets: 4, bigBags: 0, tanks: 0, looseKg: 480, palletWeight: 900, bagWeight: 850 },
   MPI:   { pallets: 16, bigBags: 0, tanks: 0, looseKg: 765, palletWeight: 900, bagWeight: 850 },
   SMP:   { pallets: 63, bigBags: 3, tanks: 0, looseKg: 650, palletWeight: 1000, bagWeight: 1000 },
   WMP26: { pallets: 2, bigBags: 0, tanks: 0, looseKg: 950, palletWeight: 1000, bagWeight: 1000 },
