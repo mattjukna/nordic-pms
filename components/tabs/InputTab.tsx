@@ -395,13 +395,13 @@ export const InputTab: React.FC = () => {
   const intakeFilterOptions = useMemo<FilterOption[]>(() => {
     const uniqueSuppliers = [...new Set(intakeEntries.map(e => e.supplierName))].sort();
     const uniqueRoutes = [...new Set(suppliers.map(s => s.routeGroup).filter(Boolean))].sort();
-    const uniqueMilkTypes = [...new Set(intakeEntries.map(e => e.milkType).filter(Boolean))].sort();
+    const uniqueMilkTypes = milkTypes.length > 0 ? [...milkTypes] : [...new Set(intakeEntries.map(e => e.milkType).filter(Boolean))].sort();
     return [
       { key: 'supplier', label: 'All suppliers', options: uniqueSuppliers.map(s => ({ value: s, label: s })) },
       { key: 'route', label: 'All routes', options: uniqueRoutes.map(r => ({ value: r, label: r })) },
       { key: 'milkType', label: 'All milk types', options: uniqueMilkTypes.map(m => ({ value: m, label: m })) },
     ];
-  }, [intakeEntries, suppliers]);
+  }, [intakeEntries, suppliers, milkTypes]);
 
   const outputFilterOptions = useMemo<FilterOption[]>(() => {
     const uniqueProducts = [...new Set(outputEntries.map(e => e.productId))].sort();

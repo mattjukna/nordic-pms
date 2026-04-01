@@ -380,9 +380,9 @@ export const InventoryTab: React.FC = () => {
       const currentStockBigBags = Math.max(0, Math.round(producedBigBags) - Math.round(shippedBigBags) + Math.round(adjBigBags));
       const currentStockTanks = Math.max(0, Math.round(producedTanks) - Math.round(shippedTanks) + Math.round(adjTanks));
 
-      // Compute average unit weights from produced data when available
-      const avgPadKg = producedPallets > 0 ? (producedPadKg / Math.max(1, producedPallets)) : (product.defaultPalletWeight || 0);
-      const avgBbKg = producedBigBags > 0 ? (producedBbKg / Math.max(1, producedBigBags)) : (product.defaultBagWeight || 0);
+      // Use product default weights for unit kg calculations
+      const avgPadKg = product.defaultPalletWeight || 0;
+      const avgBbKg = product.defaultBagWeight || 0;
 
       const expectedKgFromUnits = (currentStockPallets * avgPadKg) + (currentStockBigBags * avgBbKg) + (currentStockTanks * 25000);
       const looseKgEstimate = currentStockKg - expectedKgFromUnits;
@@ -1027,10 +1027,10 @@ export const InventoryTab: React.FC = () => {
                        ↑ {Math.floor(item.looseKgEstimate / item.defaultPalletWeight)} loose pallet(s) can be consolidated
                      </div>
                    )}
-                   {item.currentStockPallets > 0 && item.currentStockPallets > 0 && (
+                   {(item.currentStockPallets > 0 || item.currentStockBigBags > 0) && (
                      <div className="text-[10px] text-slate-500 mt-1">
-                       {item.currentStockPallets > 0 && item.expectedKgFromUnits && item.currentStockPallets > 0 ? `Avg pad: ${Math.round((item.expectedKgFromUnits || 0) / Math.max(1, item.currentStockPallets))} kg` : ''}
-                       {item.currentStockBigBags > 0 && <span className="ml-2">Avg bb: {Math.round(((item.currentStockBigBags * (item.defaultBagWeight || 0)) || 0) / Math.max(1, item.currentStockBigBags))} kg</span>}
+                       {item.currentStockPallets > 0 ? `Avg pad: ${item.defaultPalletWeight || 0} kg` : ''}
+                       {item.currentStockBigBags > 0 && <span className="ml-2">Avg bb: {item.defaultBagWeight || 0} kg</span>}
                      </div>
                    )}
                    {(item.hasFractionalInput || item.looseWarning || item.unmappedKgForUnits > 0) && (
