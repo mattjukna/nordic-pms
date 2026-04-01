@@ -29,8 +29,8 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
   const handleConfirm = async () => {
     if (requireAuth) {
-      // Mock Admin Password
-      if (password !== 'admin') {
+      const expected = (import.meta as any).env?.VITE_ADMIN_PASSWORD;
+      if (!expected || password !== expected) {
         setError('Incorrect Admin Password');
         return;
       }

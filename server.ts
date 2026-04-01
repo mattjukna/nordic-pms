@@ -590,7 +590,9 @@ async function startServer() {
     app.put('/api/suppliers/:id', async (req, res) => {
         const id = req.params.id;
         try {
-            const data = { ...req.body };
+            const allowedKeys = ['name','routeGroup','contractQuota','companyCode','phoneNumber','country','addressLine1','addressLine2','createdOn','basePricePerKg','normalMilkPricePerKg','fatBonusPerPct','proteinBonusPerPct','isEco','defaultMilkType'] as const;
+            const data: Record<string, any> = {};
+            for (const k of allowedKeys) { if (Object.prototype.hasOwnProperty.call(req.body, k)) data[k] = req.body[k]; }
             // ensure proper types
             if (data.createdOn) data.createdOn = new Date(data.createdOn);
             if (Object.prototype.hasOwnProperty.call(data, 'companyCode')) data.companyCode = normalizeCompanyCodes(data.companyCode);
@@ -630,7 +632,9 @@ async function startServer() {
 
     app.put('/api/buyers/:id', async (req, res) => {
         try {
-            const { contracts, dispatches, id, ...data } = req.body;
+            const allowedKeys = ['name','companyCode','phoneNumber','country','addressLine1','addressLine2','createdOn'] as const;
+            const data: Record<string, any> = {};
+            for (const k of allowedKeys) { if (Object.prototype.hasOwnProperty.call(req.body, k)) data[k] = req.body[k]; }
             if (Object.prototype.hasOwnProperty.call(data, 'companyCode')) data.companyCode = normalizeCompanyCodes(data.companyCode);
             if (Object.prototype.hasOwnProperty.call(data, 'createdOn')) data.createdOn = data.createdOn != null ? new Date(data.createdOn) : null;
             await prisma.buyer.update({ where: { id: req.params.id }, data });
@@ -667,11 +671,13 @@ async function startServer() {
 
     app.put('/api/contracts/:id', async (req, res) => {
         try {
-            const data = { ...req.body };
+            const allowedKeys = ['contractNumber','pricePerKg','agreedAmountKg','startDate','endDate','buyerId','productId'] as const;
+            const data: Record<string, any> = {};
+            for (const k of allowedKeys) { if (Object.prototype.hasOwnProperty.call(req.body, k)) data[k] = req.body[k]; }
             if (data.startDate) data.startDate = new Date(data.startDate);
             if (data.endDate) data.endDate = new Date(data.endDate);
             const updated = await prisma.buyerContract.update({ where: { id: req.params.id }, data });
-            res.json(updated);
+            res.json({ ...updated, startDate: mapDate(updated.startDate), endDate: mapDate(updated.endDate) });
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
 
@@ -1041,14 +1047,14 @@ async function startServer() {
 
     app.put('/api/dispatch-entries/:id', async (req, res) => {
         try {
-            const data = { ...req.body };
+            const allowedKeys = ['date','buyerId','buyerName','buyerCompanyCode','contractNumber','productId','quantityKg','orderedQuantityKg','batchRefId','packagingString','pallets','bigBags','tanks','totalWeight','salesPricePerKg','totalRevenue','status'] as const;
+            const data: Record<string, any> = {};
+            for (const k of allowedKeys) { if (Object.prototype.hasOwnProperty.call(req.body, k)) data[k] = req.body[k]; }
+            // Also support legacy 'buyer' key mapped to buyerName
+            if (Object.prototype.hasOwnProperty.call(req.body, 'buyer')) data.buyerName = req.body.buyer;
             const existing = await prisma.dispatchEntry.findUnique({ where: { id: req.params.id } });
             if (!existing) return res.status(404).json({ error: 'Not found' });
             if (data.date) data.date = new Date(data.date);
-            if (Object.prototype.hasOwnProperty.call(data, 'buyer')) {
-                data.buyerName = data.buyer;
-                delete data.buyer;
-            }
             if (Object.prototype.hasOwnProperty.call(data, 'buyerCompanyCode')) {
                 data.buyerCompanyCode = normalizeCompanyCodes(data.buyerCompanyCode) ?? null;
             }

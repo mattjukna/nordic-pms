@@ -4,6 +4,7 @@ import App from "./App";
 import { MsalProvider } from "@azure/msal-react";
 import { initMsal } from "./auth/msalInstance";
 import { installLogoutDebug } from './src/auth/logoutDebug';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Could not find root element");
@@ -22,9 +23,11 @@ if (!rootElement) throw new Error("Could not find root element");
 
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <MsalProvider instance={msalInstance}>
-        <App />
-      </MsalProvider>
+      <ErrorBoundary>
+        <MsalProvider instance={msalInstance}>
+          <App />
+        </MsalProvider>
+      </ErrorBoundary>
     </React.StrictMode>
   );
 })();

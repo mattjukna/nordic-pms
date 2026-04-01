@@ -21,7 +21,10 @@ export async function initMsal(): Promise<PublicClientApplication> {
 			// non-fatal
 		}
 		return pca;
-	})();
+	})().catch((err) => {
+		pcaPromise = null; // allow retry on next call
+		throw err;
+	});
 	return pcaPromise;
 }
 
