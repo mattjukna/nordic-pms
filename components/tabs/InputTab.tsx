@@ -370,6 +370,8 @@ export const InputTab: React.FC = () => {
   // Bulk selection state
   const [selectedIntakeIds, setSelectedIntakeIds] = useState<Set<string>>(new Set());
   const [selectedOutputIds, setSelectedOutputIds] = useState<Set<string>>(new Set());
+  const [showBulkIntake, setShowBulkIntake] = useState(false);
+  const [showBulkOutput, setShowBulkOutput] = useState(false);
 
   // Set default supplier when list loads
   useEffect(() => {
@@ -788,7 +790,7 @@ export const InputTab: React.FC = () => {
     const item = outputEntries.find(e => e.id === id);
     if (!item) return;
     undoableDelete({
-      label: `${item.productId} output (${item.totalWeight.toLocaleString()} kg)`,
+      label: `${item.productId} output (${item.parsed.totalWeight.toLocaleString()} kg)`,
       removeFromState: () => useStore.setState((s) => ({ outputEntries: s.outputEntries.filter(e => e.id !== id) })),
       restoreToState: () => useStore.setState((s) => ({ outputEntries: [item, ...s.outputEntries] })),
       apiEndpoint: `/api/output-entries/${id}`,
@@ -1182,9 +1184,9 @@ export const InputTab: React.FC = () => {
             filterOptions={intakeFilterOptions}
           />
 
-          <div className="space-y-2">
-            {displayedIntake.length > 0 && (
-              <div className="flex items-center gap-2 px-1">
+          <div className="space-y-2" onDoubleClick={() => { setShowBulkIntake(prev => !prev); if (showBulkIntake) { setSelectedIntakeIds(new Set()); } }}>
+            {showBulkIntake && displayedIntake.length > 0 && (
+              <div className="flex items-center gap-2 px-1" onDoubleClick={(e) => e.stopPropagation()}>
                 <input type="checkbox"
                   checked={displayedIntake.length > 0 && displayedIntake.every(e => selectedIntakeIds.has(e.id))}
                   onChange={(e) => {
@@ -1208,7 +1210,7 @@ export const InputTab: React.FC = () => {
             )}
             {displayedIntake.map(entry => (
               <div key={entry.id} className={`group flex items-center justify-between p-3 border rounded-lg transition-all shadow-sm ${entry.isDiscarded ? 'bg-red-50 border-red-200 opacity-75' : editingIntakeId === entry.id ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
-                <input type="checkbox" checked={selectedIntakeIds.has(entry.id)} onChange={() => setSelectedIntakeIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />
+                {showBulkIntake && <input type="checkbox" checked={selectedIntakeIds.has(entry.id)} onChange={() => setSelectedIntakeIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-semibold flex flex-wrap items-center gap-2 ${entry.isDiscarded ? 'text-red-800' : entry.isEcological ? 'text-red-600' : 'text-slate-800'}`}>
                     <span className="truncate">{entry.supplierName}</span>
@@ -1425,9 +1427,9 @@ export const InputTab: React.FC = () => {
             filterOptions={outputFilterOptions}
           />
 
-          <div className="space-y-2">
-            {displayedOutput.length > 0 && (
-              <div className="flex items-center gap-2 px-1">
+          <div className="space-y-2" onDoubleClick={() => { setShowBulkOutput(prev => !prev); if (showBulkOutput) { setSelectedOutputIds(new Set()); } }}>
+            {showBulkOutput && displayedOutput.length > 0 && (
+              <div className="flex items-center gap-2 px-1" onDoubleClick={(e) => e.stopPropagation()}>
                 <input type="checkbox"
                   checked={displayedOutput.length > 0 && displayedOutput.every(e => selectedOutputIds.has(e.id))}
                   onChange={(e) => {
@@ -1451,7 +1453,7 @@ export const InputTab: React.FC = () => {
             )}
             {displayedOutput.map(entry => (
               <div key={entry.id} className={`group flex items-center justify-between p-3 border rounded-lg transition-all shadow-sm ${editingOutputId === entry.id ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
-                <input type="checkbox" checked={selectedOutputIds.has(entry.id)} onChange={() => setSelectedOutputIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />
+                {showBulkOutput && <input type="checkbox" checked={selectedOutputIds.has(entry.id)} onChange={() => setSelectedOutputIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />}
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
                     {entry.productId}

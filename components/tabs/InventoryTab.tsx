@@ -85,6 +85,7 @@ export const InventoryTab: React.FC = () => {
 
   // Bulk selection state
   const [selectedDispatchIds, setSelectedDispatchIds] = useState<Set<string>>(new Set());
+  const [showBulkDispatch, setShowBulkDispatch] = useState(false);
 
   // Filter State
   const [showFilter, setShowFilter] = useState(false);
@@ -646,6 +647,19 @@ export const InventoryTab: React.FC = () => {
       restoreToState: () => useStore.setState((s) => ({ dispatchEntries: [item, ...s.dispatchEntries] })),
       apiEndpoint: `/api/dispatch-entries/${id}`,
     });
+  };
+
+  const bulkDeleteDispatches = () => {
+    if (selectedDispatchIds.size === 0) return;
+    const items = dispatchEntries.filter(e => selectedDispatchIds.has(e.id));
+    const ids = [...selectedDispatchIds];
+    undoableDelete({
+      label: `${ids.length} dispatch ${ids.length === 1 ? 'entry' : 'entries'}`,
+      removeFromState: () => useStore.setState((s) => ({ dispatchEntries: s.dispatchEntries.filter(e => !selectedDispatchIds.has(e.id)) })),
+      restoreToState: () => useStore.setState((s) => ({ dispatchEntries: [...items, ...s.dispatchEntries] })),
+      apiDelete: () => Promise.all(ids.map(id => apiFetch(`/api/dispatch-entries/${id}`, { method: 'DELETE' }))).then(() => {}),
+    });
+    setSelectedDispatchIds(new Set());
   };
 
   const handleConfirmModal = () => {
@@ -1752,7 +1766,7 @@ export const InventoryTab: React.FC = () => {
             {!showFilter && <div className="text-[10px] text-slate-400 pl-6">{t('inventory.showingRecentDispatches')}</div>}
           </div>
 
-          {selectedDispatchIds.size > 0 && (
+          {showBulkDispatch && selectedDispatchIds.size > 0 && (
             <div className="flex items-center gap-3 mb-2 px-2">
               <button
                 onClick={bulkDeleteDispatches}
@@ -1764,11 +1778,11 @@ export const InventoryTab: React.FC = () => {
             </div>
           )}
 
-          <div className="w-full overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
+          <div className="w-full overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm" onDoubleClick={() => { setShowBulkDispatch(prev => !prev); if (showBulkDispatch) { setSelectedDispatchIds(new Set()); } }}>
             <table className="w-full text-left text-sm relative">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
                 <tr>
-                  <th className="p-3 w-8">
+                  {showBulkDispatch && <th className="p-3 w-8">
                     <input
                       type="checkbox"
                       checked={displayedDispatches.length > 0 && displayedDispatches.every(e => selectedDispatchIds.has(e.id))}
@@ -1781,7 +1795,7 @@ export const InventoryTab: React.FC = () => {
                       }}
                       className="rounded border-slate-300"
                     />
-                  </th>
+                  </th>}
                   <th className="p-3">{t('common.date')}</th>
                   <th className="p-3">{t('common.buyer')}</th>
                   <th className="p-3">{t('common.details')}</th>
@@ -1798,7 +1812,7 @@ export const InventoryTab: React.FC = () => {
                 ) : (
                   displayedDispatches.map(entry => (
                     <tr key={entry.id} className={`hover:bg-slate-50 transition-colors ${entry.status === 'planned' ? 'bg-amber-50/30' : ''} ${selectedDispatchIds.has(entry.id) ? 'bg-blue-50' : ''}`}>
-                      <td className="p-3">
+                      {showBulkDispatch && <td className="p-3">
                         <input
                           type="checkbox"
                           checked={selectedDispatchIds.has(entry.id)}
@@ -1812,7 +1826,7 @@ export const InventoryTab: React.FC = () => {
                           }}
                           className="rounded border-slate-300"
                         />
-                      </td>
+                      </td>}
                       <td className="p-3 text-slate-500 font-mono text-xs whitespace-nowrap">{new Date(entry.date).toLocaleDateString()}</td>
                       <td className="p-3 font-medium text-slate-700">{entry.buyer}</td>
                       <td className="p-3 text-slate-600">
