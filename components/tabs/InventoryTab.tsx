@@ -393,21 +393,29 @@ export const InventoryTab: React.FC = () => {
 
       const looseWarning = unmappedKgForUnits > 0 || Math.abs(looseKgEstimate) > 50 || unmappedDispatches.length > 0 || problematicShipments.length > 0;
 
-      // FIFO aging: only flag if stock > 0 and the oldest remaining batch is old
+      // FIFO aging: only consider batches produced AFTER the latest initial_balance
+      // adjustment, since that represents a verified stock reset point.
       let ageStatus: 'green' | 'yellow' | 'red' = 'green';
-      if (currentStockKg > 0 && batchKgs.length > 0) {
-        batchKgs.sort((a, b) => a.timestamp - b.timestamp);
-        let consumed = producedKg - currentStockKg; // total kg that has left the warehouse
-        for (const batch of batchKgs) {
-          if (consumed >= batch.kg) {
-            consumed -= batch.kg;
-            continue; // entire batch consumed
+      if (currentStockKg > 50) {
+        const initialBalances = productAdjustments.filter(a => a.type === 'initial_balance');
+        const latestResetTs = initialBalances.length > 0
+          ? Math.max(...initialBalances.map(a => new Date(a.timestamp).getTime()))
+          : 0;
+        const recentBatches = batchKgs
+          .filter(b => b.timestamp > latestResetTs)
+          .sort((a, b) => a.timestamp - b.timestamp);
+
+        if (recentBatches.length > 0) {
+          // FIFO within post-reset batches only
+          const postResetProducedKg = recentBatches.reduce((sum, b) => sum + b.kg, 0);
+          let consumed = Math.max(0, postResetProducedKg - currentStockKg);
+          for (const batch of recentBatches) {
+            if (consumed >= batch.kg) { consumed -= batch.kg; continue; }
+            const ageDays = (Date.now() - batch.timestamp) / (1000 * 60 * 60 * 24);
+            if (ageDays > 60) ageStatus = 'red';
+            else if (ageDays > 30) ageStatus = 'yellow';
+            break;
           }
-          // This batch still has remaining stock — its age determines the status
-          const ageDays = (Date.now() - batch.timestamp) / (1000 * 60 * 60 * 24);
-          if (ageDays > 60) ageStatus = 'red';
-          else if (ageDays > 30) ageStatus = 'yellow';
-          break;
         }
       }
 
