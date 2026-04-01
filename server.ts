@@ -685,6 +685,8 @@ async function startServer() {
         const product = normalizeProductPayload(req.body);
         if (!product.id || !product.name) return res.status(400).json({ error: 'Missing product id or name' });
         try {
+            const existing = await prisma.product.findUnique({ where: { id: product.id } });
+            if (existing) return res.status(409).json({ error: `Product "${product.id}" already exists. Refresh the page to see it.` });
             const maxSortOrder = await prisma.product.aggregate({ _max: { sortOrder: true } });
             const created = await prisma.product.create({ data: { ...product, sortOrder: (maxSortOrder._max.sortOrder ?? -1) + 1 } });
             res.json(created);
