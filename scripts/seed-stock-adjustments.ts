@@ -132,15 +132,30 @@ async function main() {
     console.log('');
   }
 
-  // For products NOT in REAL_STOCK that have negative or positive stock, optionally zero them out
+  // For products NOT in REAL_STOCK that have non-zero stock, zero them out
   for (const product of products) {
     if (REAL_STOCK[product.id]) continue;
     const l = ledger[product.id];
     if (!l) continue;
     const currentStockKg = l.producedKg - l.shippedKg + l.adjustedKg;
-    if (Math.abs(currentStockKg) > 1) {
-      console.log(`${product.name} (${product.id}): current ledger ${currentStockKg.toLocaleString()} kg — no real stock data provided, leaving as-is.`);
-    }
+    if (Math.abs(currentStockKg) < 1) continue;
+
+    const diffKg = -currentStockKg;
+    console.log(`${product.name} (${product.id}):`);
+    console.log(`  Current ledger: ${currentStockKg.toLocaleString()} kg`);
+    console.log(`  Zeroing out: ${diffKg.toLocaleString()} kg`);
+
+    adjustmentsToCreate.push({
+      productId: product.id,
+      adjustmentKg: diffKg,
+      pallets: 0,
+      bigBags: 0,
+      tanks: 0,
+      looseKg: 0,
+      reason: `Zero-out: product has no real warehouse stock`,
+      type: 'initial_balance',
+      note: `Auto-seeded — warehouse confirmed 0 stock`,
+    });
   }
 
   console.log(`\n${adjustmentsToCreate.length} adjustment(s) to create.`);
