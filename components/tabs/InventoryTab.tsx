@@ -22,7 +22,7 @@ const DISPATCH_DRAFT_KEY = 'nordic-pms-draft-dispatch';
 const INVALID_FIELD_CLASS = 'border-red-300 bg-red-50/40 focus:border-red-400 focus:ring-red-500/10';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating } = useStore();
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating, stockAdjustments, addStockAdjustment, removeStockAdjustment } = useStore();
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState<boolean>(() => (userSettings?.defaultStockView === 'pallets'));
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);
@@ -65,6 +65,19 @@ export const InventoryTab: React.FC = () => {
   const [localFilterSearch, setLocalFilterSearch] = useState('');
   const filterDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showArchivedContracts, setShowArchivedContracts] = useState(false);
+
+  // Stock Correction state
+  const [showCorrectionForm, setShowCorrectionForm] = useState(false);
+  const [corrProductId, setCorrProductId] = useState('');
+  const [corrPallets, setCorrPallets] = useState('');
+  const [corrBigBags, setCorrBigBags] = useState('');
+  const [corrTanks, setCorrTanks] = useState('');
+  const [corrLooseKg, setCorrLooseKg] = useState('');
+  const [corrReason, setCorrReason] = useState<'initial_balance' | 'audit' | 'correction'>('correction');
+  const [corrNote, setCorrNote] = useState('');
+  const [corrSubmitting, setCorrSubmitting] = useState(false);
+  const [corrError, setCorrError] = useState('');
+  const [showAdjustmentHistory, setShowAdjustmentHistory] = useState(false);
 
   useEffect(() => {
     if (buyers.length === 0) {
@@ -238,6 +251,7 @@ export const InventoryTab: React.FC = () => {
   const stockLevels = useMemo(() => {
     return products.map(product => {
       const productOutputs = outputEntries.filter(e => e.productId === product.id);
+      const productAdjustments = stockAdjustments.filter(a => a.productId === product.id);
 
       // Produced aggregates (from explicit segments or parsed totals)
       let producedKg = 0;
@@ -341,13 +355,27 @@ export const InventoryTab: React.FC = () => {
         }
       }
 
-      const realStockKg = producedKg - shippedKg;
+      // Stock adjustments (initial balances, audits, corrections)
+      let adjKg = 0;
+      let adjPallets = 0;
+      let adjBigBags = 0;
+      let adjTanks = 0;
+      let adjLooseKg = 0;
+      for (const a of productAdjustments) {
+        adjKg += a.adjustmentKg || 0;
+        adjPallets += a.pallets || 0;
+        adjBigBags += a.bigBags || 0;
+        adjTanks += a.tanks || 0;
+        adjLooseKg += a.looseKg || 0;
+      }
+
+      const realStockKg = producedKg - shippedKg + adjKg;
       const currentStockKg = Math.max(0, realStockKg);
 
       // Ledgered units (integer counts)
-      const currentStockPallets = Math.max(0, Math.round(producedPallets) - Math.round(shippedPallets));
-      const currentStockBigBags = Math.max(0, Math.round(producedBigBags) - Math.round(shippedBigBags));
-      const currentStockTanks = Math.max(0, Math.round(producedTanks) - Math.round(shippedTanks));
+      const currentStockPallets = Math.max(0, Math.round(producedPallets) - Math.round(shippedPallets) + Math.round(adjPallets));
+      const currentStockBigBags = Math.max(0, Math.round(producedBigBags) - Math.round(shippedBigBags) + Math.round(adjBigBags));
+      const currentStockTanks = Math.max(0, Math.round(producedTanks) - Math.round(shippedTanks) + Math.round(adjTanks));
 
       // Compute average unit weights from produced data when available
       const avgPadKg = producedPallets > 0 ? (producedPadKg / Math.max(1, producedPallets)) : (product.defaultPalletWeight || 0);
@@ -388,7 +416,7 @@ export const InventoryTab: React.FC = () => {
         looseWarning
       };
     });
-  }, [outputEntries, dispatchEntries, products]);
+  }, [outputEntries, dispatchEntries, products, stockAdjustments]);
 
   // Auto-map helpers
   const autoMapShipment = async (dispatchId: string, shipmentId: string, kg: number) => {
@@ -973,6 +1001,11 @@ export const InventoryTab: React.FC = () => {
                    {Math.abs(item.looseKgEstimate || 0) > 50 && (
                      <div className="text-[11px] text-slate-600 mt-1">Variance: {Math.round(item.looseKgEstimate).toLocaleString()} kg</div>
                    )}
+                   {item.looseKgEstimate > 0 && item.defaultPalletWeight > 0 && item.looseKgEstimate >= item.defaultPalletWeight && (
+                     <div className="text-[10px] text-emerald-600 font-bold mt-1">
+                       ↑ {Math.floor(item.looseKgEstimate / item.defaultPalletWeight)} loose pallet(s) can be consolidated
+                     </div>
+                   )}
                    {item.currentStockPallets > 0 && item.currentStockPallets > 0 && (
                      <div className="text-[10px] text-slate-500 mt-1">
                        {item.currentStockPallets > 0 && item.expectedKgFromUnits && item.currentStockPallets > 0 ? `Avg pad: ${Math.round((item.expectedKgFromUnits || 0) / Math.max(1, item.currentStockPallets))} kg` : ''}
@@ -996,6 +1029,157 @@ export const InventoryTab: React.FC = () => {
             </div>
           </GlassCard>
         ))}
+      </div>
+
+      {/* Stock Adjustments Section */}
+      <div className="flex flex-col gap-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+            <Calculator size={16}/> Stock Corrections
+          </h2>
+          <div className="flex gap-2">
+            <button onClick={() => setShowAdjustmentHistory(!showAdjustmentHistory)} className="px-3 py-1 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
+              {showAdjustmentHistory ? 'Hide History' : 'History'} ({stockAdjustments.length})
+            </button>
+            <button onClick={() => { setShowCorrectionForm(!showCorrectionForm); setCorrError(''); }} className="px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all flex items-center gap-1">
+              <Plus size={12}/> New Correction
+            </button>
+          </div>
+        </div>
+
+        {showCorrectionForm && (
+          <GlassCard className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="col-span-2 md:col-span-1">
+                <label className="block text-xs font-bold text-slate-500 mb-1">Product</label>
+                <select value={corrProductId} onChange={e => setCorrProductId(e.target.value)} className="w-full p-2 text-sm border rounded-lg bg-white">
+                  <option value="">Select product…</option>
+                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Reason</label>
+                <select value={corrReason} onChange={e => setCorrReason(e.target.value as any)} className="w-full p-2 text-sm border rounded-lg bg-white">
+                  <option value="correction">Correction</option>
+                  <option value="audit">Physical Audit</option>
+                  <option value="initial_balance">Initial Balance</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Pallets (+/-)</label>
+                <input type="number" value={corrPallets} onChange={e => setCorrPallets(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Big Bags (+/-)</label>
+                <input type="number" value={corrBigBags} onChange={e => setCorrBigBags(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Tanks (+/-)</label>
+                <input type="number" value={corrTanks} onChange={e => setCorrTanks(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Loose Kg (+/-)</label>
+                <input type="number" value={corrLooseKg} onChange={e => setCorrLooseKg(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-slate-500 mb-1">Note</label>
+                <input type="text" value={corrNote} onChange={e => setCorrNote(e.target.value)} placeholder="Reason for correction…" className="w-full p-2 text-sm border rounded-lg" />
+              </div>
+            </div>
+            {corrProductId && (
+              <div className="mt-2 text-xs text-slate-500">
+                {(() => {
+                  const prod = products.find(p => p.id === corrProductId);
+                  if (!prod) return null;
+                  const pads = Number(corrPallets) || 0;
+                  const bbs = Number(corrBigBags) || 0;
+                  const tnks = Number(corrTanks) || 0;
+                  const loose = Number(corrLooseKg) || 0;
+                  const totalKg = (pads * (prod.defaultPalletWeight || 0)) + (bbs * (prod.defaultBagWeight || 0)) + (tnks * 25000) + loose;
+                  return <span>Total adjustment: <strong>{totalKg >= 0 ? '+' : ''}{totalKg.toLocaleString()} kg</strong></span>;
+                })()}
+              </div>
+            )}
+            {corrError && <div className="mt-2 text-xs text-red-600 font-bold">{corrError}</div>}
+            <div className="flex gap-2 mt-3">
+              <button
+                disabled={corrSubmitting || !corrProductId}
+                onClick={async () => {
+                  const prod = products.find(p => p.id === corrProductId);
+                  if (!prod) return;
+                  const pads = Number(corrPallets) || 0;
+                  const bbs = Number(corrBigBags) || 0;
+                  const tnks = Number(corrTanks) || 0;
+                  const loose = Number(corrLooseKg) || 0;
+                  const totalKg = (pads * (prod.defaultPalletWeight || 0)) + (bbs * (prod.defaultBagWeight || 0)) + (tnks * 25000) + loose;
+                  if (totalKg === 0 && pads === 0 && bbs === 0 && tnks === 0) { setCorrError('Enter at least one adjustment value.'); return; }
+                  setCorrSubmitting(true);
+                  setCorrError('');
+                  try {
+                    await addStockAdjustment({
+                      productId: corrProductId,
+                      adjustmentKg: totalKg,
+                      pallets: pads,
+                      bigBags: bbs,
+                      tanks: tnks,
+                      looseKg: loose,
+                      reason: corrNote || corrReason,
+                      type: corrReason,
+                    });
+                    setCorrProductId(''); setCorrPallets(''); setCorrBigBags(''); setCorrTanks(''); setCorrLooseKg(''); setCorrNote('');
+                    setShowCorrectionForm(false);
+                  } catch (err: any) {
+                    setCorrError(err?.message || 'Failed to save correction');
+                  } finally {
+                    setCorrSubmitting(false);
+                  }
+                }}
+                className="px-4 py-2 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
+              >
+                {corrSubmitting ? 'Saving…' : 'Save Correction'}
+              </button>
+              <button onClick={() => setShowCorrectionForm(false)} className="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">Cancel</button>
+            </div>
+          </GlassCard>
+        )}
+
+        {showAdjustmentHistory && stockAdjustments.length > 0 && (
+          <GlassCard className="p-4 max-h-64 overflow-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-slate-500 border-b">
+                  <th className="p-1">Date</th>
+                  <th className="p-1">Product</th>
+                  <th className="p-1">Type</th>
+                  <th className="p-1 text-right">Pallets</th>
+                  <th className="p-1 text-right">Big Bags</th>
+                  <th className="p-1 text-right">Loose Kg</th>
+                  <th className="p-1 text-right">Total Kg</th>
+                  <th className="p-1">Note</th>
+                  <th className="p-1 w-8"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {stockAdjustments.map(adj => {
+                  const prod = products.find(p => p.id === adj.productId);
+                  return (
+                    <tr key={adj.id} className="hover:bg-slate-50">
+                      <td className="p-1">{adj.timestamp ? formatDate(adj.timestamp) : '—'}</td>
+                      <td className="p-1 font-bold">{prod?.name || adj.productId}</td>
+                      <td className="p-1"><span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${adj.type === 'initial_balance' ? 'bg-blue-100 text-blue-700' : adj.type === 'audit' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{adj.type.replace('_', ' ')}</span></td>
+                      <td className="p-1 text-right font-mono">{adj.pallets !== 0 ? (adj.pallets > 0 ? '+' : '') + adj.pallets : '—'}</td>
+                      <td className="p-1 text-right font-mono">{adj.bigBags !== 0 ? (adj.bigBags > 0 ? '+' : '') + adj.bigBags : '—'}</td>
+                      <td className="p-1 text-right font-mono">{adj.looseKg !== 0 ? (adj.looseKg > 0 ? '+' : '') + adj.looseKg : '—'}</td>
+                      <td className="p-1 text-right font-mono font-bold">{adj.adjustmentKg >= 0 ? '+' : ''}{adj.adjustmentKg.toLocaleString()}</td>
+                      <td className="p-1 text-slate-500 truncate max-w-[120px]" title={adj.reason}>{adj.reason}</td>
+                      <td className="p-1"><button onClick={() => { setConfirmState({ isOpen: true, type: 'delete', message: `Delete this ${adj.type.replace('_', ' ')} adjustment of ${adj.adjustmentKg.toLocaleString()} kg for ${prod?.name || adj.productId}?`, pendingAction: () => removeStockAdjustment(adj.id) }); }} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </GlassCard>
+        )}
       </div>
 
       <div className="flex flex-col md:flex-row gap-6">

@@ -68,6 +68,21 @@ export interface Product {
   yieldFactor: number; // e.g., 0.125 for 12.5% yield from milk
 }
 
+export interface StockAdjustment {
+  id: string;
+  productId: string;
+  adjustmentKg: number;
+  pallets: number;
+  bigBags: number;
+  tanks: number;
+  looseKg: number;
+  reason: string;
+  type: 'initial_balance' | 'audit' | 'correction';
+  performedBy?: string;
+  note?: string;
+  timestamp: number | null;
+}
+
 export interface IntakeEntry {
   id: string;
   supplierId: string;

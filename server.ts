@@ -523,14 +523,15 @@ async function startServer() {
     // Bootstrap: load all domain data needed by frontend
     app.get('/api/bootstrap', async (req, res) => {
         try {
-            const [suppliers, buyers, products, milkTypes, intakeEntries, outputEntries, dispatchEntries] = await Promise.all([
+            const [suppliers, buyers, products, milkTypes, intakeEntries, outputEntries, dispatchEntries, stockAdjustments] = await Promise.all([
                 prisma.supplier.findMany(),
                 prisma.buyer.findMany({ include: { contracts: true } }),
                 prisma.product.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
                 prisma.milkType.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
                 prisma.intakeEntry.findMany({ include: { tags: true }, orderBy: { timestamp: 'desc' } }),
                 prisma.outputEntry.findMany({ orderBy: { timestamp: 'desc' } }),
-                prisma.dispatchEntry.findMany({ include: { shipments: true }, orderBy: { date: 'desc' } })
+                prisma.dispatchEntry.findMany({ include: { shipments: true }, orderBy: { date: 'desc' } }),
+                prisma.stockAdjustment.findMany({ orderBy: { timestamp: 'desc' } })
             ]);
 
             const mapSuppliers = suppliers.map(s => toClientSupplier(s));
@@ -544,8 +545,9 @@ async function startServer() {
             const mapIntakes = intakeEntries.map(i => toClientIntake(i));
             const mapOutputs = outputEntries.map(o => toClientOutput(o));
             const mapDispatches = dispatchEntries.map(d => toClientDispatch(d));
+            const mapStockAdj = stockAdjustments.map(a => ({ ...a, timestamp: mapDate(a.timestamp) }));
 
-            res.json({ suppliers: mapSuppliers, buyers: mapBuyers, products: mapProducts, milkTypes: mapMilkTypes, intakeEntries: mapIntakes, outputEntries: mapOutputs, dispatchEntries: mapDispatches });
+            res.json({ suppliers: mapSuppliers, buyers: mapBuyers, products: mapProducts, milkTypes: mapMilkTypes, intakeEntries: mapIntakes, outputEntries: mapOutputs, dispatchEntries: mapDispatches, stockAdjustments: mapStockAdj });
                } catch (err: any) {
             const diagnostic = classifyBootstrapError(err);
             console.error('[BOOTSTRAP] database failure', {
@@ -716,6 +718,7 @@ async function startServer() {
                     await tx.outputEntry.updateMany({ where: { productId: currentId }, data: { productId: nextId } });
                     await tx.dispatchEntry.updateMany({ where: { productId: currentId }, data: { productId: nextId } });
                     await tx.buyerContract.updateMany({ where: { productId: currentId }, data: { productId: nextId } });
+                    await tx.stockAdjustment.updateMany({ where: { productId: currentId }, data: { productId: nextId } });
                     await tx.product.delete({ where: { id: currentId } });
                     return created;
                 });
@@ -1220,6 +1223,66 @@ async function startServer() {
             const fetched = await prisma.dispatchEntry.findUnique({ where: { id }, include: { shipments: true } });
             void logAudit(req, { action: 'UPDATE', tableName: 'DispatchEntry', recordId: id, details: JSON.stringify(toClientDispatch(fetched)) });
             res.json(toClientDispatch(fetched));
+        } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
+    // Stock Adjustments
+    app.get('/api/stock-adjustments', async (req, res) => {
+        try {
+            const adjustments = await prisma.stockAdjustment.findMany({ orderBy: { timestamp: 'desc' } });
+            res.json(adjustments.map(a => ({ ...a, timestamp: mapDate(a.timestamp) })));
+        } catch (err: any) { res.status(500).json({ error: err.message }); }
+    });
+
+    app.post('/api/stock-adjustments', async (req, res) => {
+        const body = req.body;
+        if (!body.productId) return res.status(400).json({ error: 'Missing productId' });
+        if (typeof body.adjustmentKg !== 'number') return res.status(400).json({ error: 'Missing adjustmentKg' });
+        try {
+            const created = await prisma.stockAdjustment.create({ data: {
+                productId: body.productId,
+                adjustmentKg: body.adjustmentKg,
+                pallets: body.pallets ?? 0,
+                bigBags: body.bigBags ?? 0,
+                tanks: body.tanks ?? 0,
+                looseKg: body.looseKg ?? 0,
+                reason: body.reason || '',
+                type: body.type || 'correction',
+                performedBy: body.performedBy ?? null,
+                note: body.note ?? null,
+            }});
+            void logAudit(req, { action: 'CREATE', tableName: 'StockAdjustment', recordId: created.id, details: JSON.stringify(created) });
+            res.json({ ...created, timestamp: mapDate(created.timestamp) });
+        } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
+    app.put('/api/stock-adjustments/:id', async (req, res) => {
+        const { id } = req.params;
+        const body = req.body;
+        try {
+            const existing = await prisma.stockAdjustment.findUnique({ where: { id } });
+            if (!existing) return res.status(404).json({ error: 'Not found' });
+            const updated = await prisma.stockAdjustment.update({ where: { id }, data: {
+                adjustmentKg: body.adjustmentKg ?? existing.adjustmentKg,
+                pallets: body.pallets ?? existing.pallets,
+                bigBags: body.bigBags ?? existing.bigBags,
+                tanks: body.tanks ?? existing.tanks,
+                looseKg: body.looseKg ?? existing.looseKg,
+                reason: body.reason ?? existing.reason,
+                type: body.type ?? existing.type,
+                note: body.note ?? existing.note,
+                performedBy: body.performedBy ?? existing.performedBy,
+            }});
+            void logAudit(req, { action: 'UPDATE', tableName: 'StockAdjustment', recordId: updated.id, details: JSON.stringify(updated) });
+            res.json({ ...updated, timestamp: mapDate(updated.timestamp) });
+        } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
+    app.delete('/api/stock-adjustments/:id', async (req, res) => {
+        try {
+            await prisma.stockAdjustment.delete({ where: { id: req.params.id } });
+            void logAudit(req, { action: 'DELETE', tableName: 'StockAdjustment', recordId: req.params.id, details: '{}' });
+            res.json({ ok: true });
         } catch (err: any) { res.status(400).json({ error: err.message }); }
     });
 

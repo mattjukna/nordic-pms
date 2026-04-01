@@ -64,6 +64,7 @@ model Product {
   outputs    OutputEntry[]
   contracts  BuyerContract[]
   dispatches DispatchEntry[]
+  adjustments StockAdjustment[]
 }
 
 model Buyer {
@@ -221,4 +222,25 @@ model AuditLog {
 
   @@index([timestamp])
   @@index([userEmail])
+}
+
+model StockAdjustment {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: NoAction)
+
+  adjustmentKg Float
+  pallets      Float   @default(0)
+  bigBags      Float   @default(0)
+  tanks        Float   @default(0)
+  looseKg      Float   @default(0)
+
+  reason      String
+  type        String   // 'initial_balance' | 'audit' | 'correction'
+  performedBy String?
+  note        String?
+  timestamp   DateTime @default(now())
+
+  @@index([productId])
+  @@index([timestamp])
 }

@@ -1,7 +1,7 @@
 
 import { create } from 'zustand';
 import { apiFetch, AuthError } from './services/apiFetch';
-import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract } from './types';
+import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract, StockAdjustment } from './types';
 import { DEFAULT_CONFIG } from './constants';
 import { getEffectiveIntakeQuantityKg } from './utils/intakeCoefficient';
 
@@ -38,6 +38,7 @@ interface AppState {
   intakeEntries: IntakeEntry[];
   outputEntries: OutputEntry[];
   dispatchEntries: DispatchEntry[];
+  stockAdjustments: StockAdjustment[];
   alerts: Alert[];
   // Analytics cache
   analytics: {
@@ -109,6 +110,11 @@ interface AppState {
   removeDispatchShipment: (dispatchId: string, shipmentId: string) => Promise<void>;
   updateDispatchShipment: (dispatchId: string, shipmentId: string, payload: any) => Promise<void>;
 
+  // Stock Adjustments
+  addStockAdjustment: (adjustment: Omit<StockAdjustment, 'id' | 'timestamp'>) => Promise<void>;
+  updateStockAdjustment: (id: string, updates: Partial<StockAdjustment>) => Promise<void>;
+  removeStockAdjustment: (id: string) => Promise<void>;
+
   generateAIInsights: () => Promise<string>;
 }
 
@@ -163,6 +169,11 @@ const parseDispatchEntry = (d: any): DispatchEntry => ({
   ...d,
   date: parseDate(d?.date),
   shipments: Array.isArray(d.shipments) ? d.shipments.map(parseDispatchShipment) : []
+});
+
+const parseStockAdjustment = (a: any): StockAdjustment => ({
+  ...a,
+  timestamp: parseDate(a?.timestamp),
 });
 
 const reorderByIds = <T extends { id: string }>(items: T[], orderedIds: string[]) => {
@@ -259,6 +270,7 @@ export const useStore = create<AppState>((set, get) => ({
           intakeEntries: (data.intakeEntries || []).map((i: any) => parseIntakeEntry(i)),
           outputEntries: (data.outputEntries || []).map((o: any) => parseOutputEntry(o)),
           dispatchEntries: (data.dispatchEntries || []).map((d: any) => parseDispatchEntry(d)),
+          stockAdjustments: (data.stockAdjustments || []).map((a: any) => parseStockAdjustment(a)),
           isHydrating: false,
           hydrateRetryCount: 0,
         }));
@@ -290,6 +302,7 @@ export const useStore = create<AppState>((set, get) => ({
   intakeEntries: [],
   outputEntries: [],
   dispatchEntries: [],
+  stockAdjustments: [],
   alerts: [],
 
   analytics: { milkSpend: null },
@@ -499,6 +512,21 @@ export const useStore = create<AppState>((set, get) => ({
   updateDispatchShipment: async (dispatchId, shipmentId, payload) => {
     const updated = await api<DispatchEntry>(`/api/dispatch-entries/${dispatchId}/shipments/${shipmentId}`, { method: 'PUT', body: JSON.stringify(payload) });
     set((s) => ({ dispatchEntries: s.dispatchEntries.map(d => d.id === dispatchId ? parseDispatchEntry(updated) : d) }));
+  },
+
+  addStockAdjustment: async (adjustment) => {
+    const created = await api<StockAdjustment>('/api/stock-adjustments', { method: 'POST', body: JSON.stringify(adjustment) });
+    set((s) => ({ stockAdjustments: [parseStockAdjustment(created), ...s.stockAdjustments] }));
+  },
+
+  updateStockAdjustment: async (id, updates) => {
+    const updated = await api<StockAdjustment>(`/api/stock-adjustments/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+    set((s) => ({ stockAdjustments: s.stockAdjustments.map(a => a.id === id ? { ...a, ...parseStockAdjustment(updated) } : a) }));
+  },
+
+  removeStockAdjustment: async (id) => {
+    await api(`/api/stock-adjustments/${id}`, { method: 'DELETE' });
+    set((s) => ({ stockAdjustments: s.stockAdjustments.filter(a => a.id !== id) }));
   },
 
   generateAIInsights: async () => {
