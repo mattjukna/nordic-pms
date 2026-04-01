@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { GlassCard } from './GlassCard';
 import apiFetchBlob from '../../services/apiFetchBlob';
+import { useTranslation } from '../../i18n/useTranslation';
 
 type ReportKind = 'full' | 'accounting' | 'intake' | 'production' | 'dispatch' | 'quality';
 
@@ -12,6 +13,7 @@ export default function ReportExportModal({ open, onClose }: { open: boolean; on
   const [report, setReport] = useState<ReportKind>('full');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   const url = useMemo(() => `/api/reports/monthly?month=${encodeURIComponent(month)}&report=${encodeURIComponent(report)}`, [month, report]);
 
@@ -41,25 +43,25 @@ export default function ReportExportModal({ open, onClose }: { open: boolean; on
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30 p-4">
       <GlassCard className="w-full max-w-lg p-5">
         <div className="flex items-center justify-between mb-4">
-          <div className="font-bold text-lg">Export monthly report</div>
+          <div className="font-bold text-lg">{t('reportExport.title')}</div>
           <button className="text-slate-500 hover:text-slate-700" onClick={onClose}>✕</button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <label className="text-sm">
-            <div className="mb-1 text-slate-600">Month</div>
+            <div className="mb-1 text-slate-600">{t('reportExport.month')}</div>
             <input className="w-full border rounded p-2" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
           </label>
 
           <label className="text-sm">
-            <div className="mb-1 text-slate-600">Report type</div>
+            <div className="mb-1 text-slate-600">{t('reportExport.reportType')}</div>
             <select className="w-full border rounded p-2" value={report} onChange={(e) => setReport(e.target.value as ReportKind)}>
-              <option value="full">Full workbook (all sheets)</option>
-              <option value="accounting">Accounting (monthly overview)</option>
-              <option value="intake">Intake (detailed)</option>
-              <option value="production">Production (detailed)</option>
-              <option value="dispatch">Dispatch (detailed)</option>
-              <option value="quality">Quality (detailed)</option>
+              <option value="full">{t('reportExport.fullWorkbook')}</option>
+              <option value="accounting">{t('reportExport.accounting')}</option>
+              <option value="intake">{t('reportExport.intakeDetailed')}</option>
+              <option value="production">{t('reportExport.productionDetailed')}</option>
+              <option value="dispatch">{t('reportExport.dispatchDetailed')}</option>
+              <option value="quality">{t('reportExport.qualityDetailed')}</option>
             </select>
           </label>
         </div>
@@ -67,9 +69,9 @@ export default function ReportExportModal({ open, onClose }: { open: boolean; on
         {err ? <div className="mt-3 text-sm text-red-700 whitespace-pre-wrap">{err}</div> : null}
 
         <div className="mt-5 flex justify-end gap-2">
-          <button className="px-4 py-2 rounded border" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="px-4 py-2 rounded border" onClick={onClose} disabled={loading}>{t('reportExport.cancel')}</button>
           <button className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-60" onClick={onGenerate} disabled={loading}>
-            {loading ? 'Generating...' : 'Generate Excel'}
+            {loading ? t('reportExport.generating') : t('reportExport.generateExcel')}
           </button>
         </div>
       </GlassCard>

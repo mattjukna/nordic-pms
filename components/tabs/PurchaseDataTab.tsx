@@ -5,6 +5,7 @@ import { SmartSelect } from '../ui/SmartSelect';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
 import { Search, Calendar, CheckSquare, Square, FileText, AlertCircle, Check, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import type { IntakeEntry, IntakePricingMode, IntakeUnitPriceBasis } from '../../types';
+import { useTranslation } from '../../i18n/useTranslation';
 
 type PricingStatus = 'all' | 'unpriced' | 'priced';
 
@@ -28,6 +29,7 @@ function isUnpriced(e: IntakeEntry): boolean {
 
 export const PurchaseDataTab: React.FC = () => {
   const { intakeEntries, suppliers, updateIntakeEntry } = useStore();
+  const { t } = useTranslation();
 
   // ─── Filters ──────────────────────────────────────────────────────
   const [supplierFilter, setSupplierFilter] = useState('');
@@ -209,8 +211,8 @@ export const PurchaseDataTab: React.FC = () => {
   const confirmApply = () => {
     setConfirmModal({
       isOpen: true,
-      title: 'Apply Invoice Pricing',
-      message: `Assign pricing to ${selectedEntries.length} intake ${selectedEntries.length === 1 ? 'entry' : 'entries'} (${totalSelectedKg.toLocaleString()} kg total) for €${previewTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}?`,
+      title: t('purchase.applyInvoicePricing'),
+      message: t('purchase.confirmAssign', { count: String(selectedEntries.length), entries: selectedEntries.length === 1 ? t('purchase.entry') : t('purchase.entries'), kg: totalSelectedKg.toLocaleString(), amount: previewTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }),
       action: () => { void applyPricing(); },
     });
   };
@@ -245,8 +247,8 @@ export const PurchaseDataTab: React.FC = () => {
             : 'bg-emerald-50 border-emerald-200 text-emerald-800'
         }`}>
           <Check size={16} />
-          {applyResult.ok > 0 && <span>Pricing applied to {applyResult.ok} {applyResult.ok === 1 ? 'entry' : 'entries'}.</span>}
-          {applyResult.fail > 0 && <span className="text-red-600">{applyResult.fail} failed.</span>}
+          {applyResult.ok > 0 && <span>{t('purchase.pricingApplied', { count: String(applyResult.ok), entries: applyResult.ok === 1 ? t('purchase.entry') : t('purchase.entries') })}</span>}
+          {applyResult.fail > 0 && <span className="text-red-600">{t('purchase.pricingFailed', { count: String(applyResult.fail) })}</span>}
         </div>
       )}
 
@@ -254,10 +256,10 @@ export const PurchaseDataTab: React.FC = () => {
       <div className="flex flex-wrap gap-2">
         <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 px-3 py-1 rounded-full text-xs font-bold">
           <AlertCircle size={12} />
-          {unpricedCount} unpriced {unpricedCount === 1 ? 'delivery' : 'deliveries'}
+          {unpricedCount} {t('purchase.unpricedCount', { count: '' }).trim()} {unpricedCount === 1 ? t('purchase.delivery') : t('purchase.deliveries')}
         </div>
         <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-slate-600 px-3 py-1 rounded-full text-xs font-medium">
-          {intakeEntries.filter(e => !e.isDiscarded).length} total intake entries
+          {t('purchase.totalIntakeEntries', { count: String(intakeEntries.filter(e => !e.isDiscarded).length) })}
         </div>
       </div>
 
@@ -266,7 +268,7 @@ export const PurchaseDataTab: React.FC = () => {
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowFilters(!showFilters)}>
           <div className="text-xs font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
             <Search size={14} className={showFilters ? 'text-blue-600' : 'text-slate-400'} />
-            Find Deliveries
+            {t('purchase.findDeliveries')}
           </div>
           <button className="text-slate-400 hover:text-blue-600">
             {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -278,9 +280,9 @@ export const PurchaseDataTab: React.FC = () => {
             {/* Supplier */}
             <div className="col-span-12 md:col-span-4">
               <SmartSelect
-                label="Supplier"
-                placeholder="All suppliers"
-                options={[{ id: '', label: 'All suppliers', subLabel: '', tags: [], data: null }, ...supplierOptions]}
+                label={t('purchase.supplier')}
+                placeholder={t('purchase.allSuppliers')}
+                options={[{ id: '', label: t('purchase.allSuppliers'), subLabel: '', tags: [], data: null }, ...supplierOptions]}
                 value={supplierFilter}
                 onChange={setSupplierFilter}
               />
@@ -288,22 +290,22 @@ export const PurchaseDataTab: React.FC = () => {
 
             {/* Date range */}
             <div className="col-span-6 md:col-span-2">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">From</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('purchase.from')}</label>
               <InputField type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} />
             </div>
             <div className="col-span-6 md:col-span-2">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">To</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('purchase.to')}</label>
               <InputField type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} />
             </div>
 
             {/* Search */}
             <div className="col-span-12 md:col-span-4">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Search</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('purchase.search')}</label>
               <div className="relative">
                 <Search size={14} className="absolute left-2.5 top-3 text-slate-400" />
                 <InputField
                   type="text"
-                  placeholder="Note, invoice #..."
+                  placeholder={t('purchase.searchPlaceholder')}
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="pl-8"
@@ -314,9 +316,9 @@ export const PurchaseDataTab: React.FC = () => {
             {/* Status filter */}
             <div className="col-span-12 flex flex-wrap gap-2">
               {([
-                { id: 'unpriced', label: 'Unpriced', count: intakeEntries.filter(e => !e.isDiscarded && isUnpriced(e)).length },
-                { id: 'all', label: 'All', count: intakeEntries.filter(e => !e.isDiscarded).length },
-                { id: 'priced', label: 'Priced', count: intakeEntries.filter(e => !e.isDiscarded && !isUnpriced(e)).length },
+                { id: 'unpriced', label: t('purchase.unpriced'), count: intakeEntries.filter(e => !e.isDiscarded && isUnpriced(e)).length },
+                { id: 'all', label: t('purchase.all'), count: intakeEntries.filter(e => !e.isDiscarded).length },
+                { id: 'priced', label: t('purchase.priced'), count: intakeEntries.filter(e => !e.isDiscarded && !isUnpriced(e)).length },
               ] as const).map(opt => (
                 <button
                   key={opt.id}
@@ -335,11 +337,11 @@ export const PurchaseDataTab: React.FC = () => {
             {/* Date presets */}
             <div className="col-span-12 flex gap-1">
               {[
-                { l: 'Today', d: 0 },
-                { l: 'Week', d: 7 },
-                { l: '2 Weeks', d: 14 },
-                { l: 'Month', d: 30 },
-                { l: 'Quarter', d: 90 },
+                { l: t('purchase.today'), d: 0 },
+                { l: t('purchase.week'), d: 7 },
+                { l: t('purchase.twoWeeks'), d: 14 },
+                { l: t('purchase.month'), d: 30 },
+                { l: t('purchase.quarter'), d: 90 },
               ].map(p => (
                 <button
                   key={p.l}
@@ -353,7 +355,7 @@ export const PurchaseDataTab: React.FC = () => {
                 onClick={() => { setDateStart(''); setDateEnd(''); setSupplierFilter(''); setSearchQuery(''); setStatusFilter('unpriced'); }}
                 className="flex-1 bg-white border border-slate-200 text-red-400 hover:text-red-600 hover:border-red-200 text-[10px] py-1 rounded transition-colors uppercase font-semibold"
               >
-                Clear
+                {t('purchase.clear')}
               </button>
             </div>
           </div>
@@ -370,12 +372,12 @@ export const PurchaseDataTab: React.FC = () => {
                 ? <CheckSquare size={16} className="text-blue-600" />
                 : <Square size={16} className="text-slate-400" />
               }
-              {allFilteredSelected ? 'Deselect all' : 'Select all'}
+              {allFilteredSelected ? t('purchase.deselectAll') : t('purchase.selectAll')}
             </button>
             <div className="text-xs text-slate-500">
-              {filteredEntries.length} {filteredEntries.length === 1 ? 'entry' : 'entries'}
+              {filteredEntries.length} {filteredEntries.length === 1 ? t('purchase.entry') : t('purchase.entries')}
               {selectedEntries.length > 0 && (
-                <span className="ml-2 text-blue-600 font-bold">{selectedEntries.length} selected • {totalSelectedKg.toLocaleString()} kg</span>
+                <span className="ml-2 text-blue-600 font-bold">{t('purchase.selected', { count: String(selectedEntries.length) })} • {totalSelectedKg.toLocaleString()} kg</span>
               )}
             </div>
           </div>
@@ -386,8 +388,8 @@ export const PurchaseDataTab: React.FC = () => {
           {filteredEntries.length === 0 && (
             <div className="text-center py-8 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
               {statusFilter === 'unpriced'
-                ? 'No unpriced intake entries found. All deliveries have pricing data.'
-                : 'No intake entries match the current filters.'}
+                ? t('purchase.noUnpriced')
+                : t('purchase.noMatching')}
             </div>
           )}
           {filteredEntries.map(entry => {
@@ -419,9 +421,9 @@ export const PurchaseDataTab: React.FC = () => {
                     <span className="truncate">{entry.supplierName}</span>
                     <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">{entry.milkType}</span>
                     {priced ? (
-                      <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">✓ Priced</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">{t('purchase.pricedBadge')}</span>
                     ) : (
-                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">⚠ Unpriced</span>
+                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">{t('purchase.unpricedBadge')}</span>
                     )}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-2">
@@ -464,23 +466,23 @@ export const PurchaseDataTab: React.FC = () => {
         <GlassCard className="p-4 md:p-5 bg-blue-50/50 border-blue-200 animate-slide-up">
           <div className="text-xs font-bold uppercase tracking-widest text-blue-700 flex items-center gap-2 mb-3">
             <FileText size={14} />
-            Assign Pricing — {selectedEntries.length} {selectedEntries.length === 1 ? 'entry' : 'entries'} • {totalSelectedKg.toLocaleString()} kg
+            {t('purchase.assignPricingTitle', { count: String(selectedEntries.length), entries: selectedEntries.length === 1 ? t('purchase.entry') : t('purchase.entries'), kg: totalSelectedKg.toLocaleString() })}
           </div>
 
           <div className="grid grid-cols-12 gap-3">
             {/* Invoice number */}
             <div className="col-span-12 md:col-span-4">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Invoice number</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('purchase.invoiceNumber')}</label>
               <InputField
                 value={invoiceNumber}
                 onChange={e => setInvoiceNumber(e.target.value)}
-                placeholder="e.g. INV-2026-0315"
+                placeholder={t('purchase.invoicePlaceholder')}
               />
             </div>
 
             {/* Pricing mode */}
             <div className="col-span-12 md:col-span-8">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Pricing mode</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('purchase.pricingMode')}</label>
               <div className="flex gap-2">
                 <button
                   onClick={() => setAssignMode('invoice_total')}
@@ -488,7 +490,7 @@ export const PurchaseDataTab: React.FC = () => {
                     assignMode === 'invoice_total' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  Invoice total (€)
+                  {t('purchase.invoiceTotalMode')}
                 </button>
                 <button
                   onClick={() => setAssignMode('unit_price')}
@@ -496,7 +498,7 @@ export const PurchaseDataTab: React.FC = () => {
                     assignMode === 'unit_price' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  Unit price (€/kg)
+                  {t('purchase.unitPriceMode')}
                 </button>
               </div>
             </div>
@@ -505,7 +507,7 @@ export const PurchaseDataTab: React.FC = () => {
             {assignMode === 'invoice_total' ? (
               <div className="col-span-12 md:col-span-6">
                 <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                  Invoice total (€) — split across {selectedEntries.length} entries by kg
+                  {t('purchase.invoiceTotalLabel', { count: String(selectedEntries.length) })}
                 </label>
                 <InputField
                   type="number"
@@ -518,7 +520,7 @@ export const PurchaseDataTab: React.FC = () => {
             ) : (
               <>
                 <div className="col-span-6 md:col-span-3">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Unit price (€/kg)</label>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('purchase.unitPriceLabel')}</label>
                   <InputField
                     type="number"
                     step="0.0001"
@@ -528,10 +530,10 @@ export const PurchaseDataTab: React.FC = () => {
                   />
                 </div>
                 <div className="col-span-6 md:col-span-3">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Pricing basis</label>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('purchase.pricingBasis')}</label>
                   <SelectField value={priceBasis} onChange={e => setPriceBasis(e.target.value as IntakeUnitPriceBasis)}>
-                    <option value="received_kg">Received kg</option>
-                    <option value="effective_kg">Lab-adjusted kg</option>
+                    <option value="received_kg">{t('purchase.receivedKg')}</option>
+                    <option value="effective_kg">{t('purchase.labAdjustedKg')}</option>
                   </SelectField>
                 </div>
               </>
@@ -540,7 +542,7 @@ export const PurchaseDataTab: React.FC = () => {
             {/* Preview */}
             {canApply && costPreview.length > 0 && (
               <div className="col-span-12 rounded-lg border border-blue-200 bg-white p-3">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Preview</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">{t('purchase.preview')}</div>
                 <div className="space-y-1 max-h-[150px] overflow-y-auto">
                   {costPreview.map(p => {
                     const entry = selectedEntries.find(e => e.id === p.id);
@@ -559,7 +561,7 @@ export const PurchaseDataTab: React.FC = () => {
                   })}
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-sm font-bold">
-                  <span className="text-slate-700">Total</span>
+                  <span className="text-slate-700">{t('purchase.total')}</span>
                   <span className="text-blue-700">€{previewTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
@@ -577,9 +579,9 @@ export const PurchaseDataTab: React.FC = () => {
                 }`}
               >
                 {isApplying ? (
-                  <><Loader2 size={18} className="animate-spin" /> Applying…</>
+                  <><Loader2 size={18} className="animate-spin" /> {t('purchase.applying')}</>
                 ) : (
-                  <><Check size={18} /> Apply Pricing to {selectedEntries.length} {selectedEntries.length === 1 ? 'Entry' : 'Entries'}</>
+                  <><Check size={18} /> {t('purchase.applyPricingTo', { count: `${selectedEntries.length} ${selectedEntries.length === 1 ? t('purchase.entry') : t('purchase.entries')}` })}</>
                 )}
               </button>
             </div>

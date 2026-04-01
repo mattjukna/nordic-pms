@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { useToastStore } from '../toastStore';
 import { apiFetch } from '../services/apiFetch';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface UndoDeleteOptions {
   /** Human-readable label, e.g. "Supplier 'Nordic Dairy'" */
@@ -21,6 +22,7 @@ interface UndoDeleteOptions {
  * and schedules the real API call after 5 seconds.
  */
 export function useUndoDelete() {
+  const { t } = useTranslation();
   const addToast = useToastStore((s) => s.addToast);
   const removeToast = useToastStore((s) => s.removeToast);
   const pendingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -34,7 +36,7 @@ export function useUndoDelete() {
     let cancelled = false;
 
     const toastId = addToast({
-      message: `${label} deleted`,
+      message: t('toast.deleted', { label }),
       type: 'info',
       duration: 5500,
       action: {
@@ -60,12 +62,12 @@ export function useUndoDelete() {
       } catch (err: any) {
         // API call failed — restore item and show error
         restoreToState();
-        addToast({ message: `Failed to delete: ${err?.message || 'Unknown error'}`, type: 'error', duration: 5000 });
+        addToast({ message: t('toast.failedDelete', { error: err?.message || 'Unknown error' }), type: 'error', duration: 5000 });
       }
     }, 5000);
 
     pendingTimers.current.set(toastId, timer);
-  }, [addToast, removeToast]);
+  }, [addToast, removeToast, t]);
 
   return undoableDelete;
 }

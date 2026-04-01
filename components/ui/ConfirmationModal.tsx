@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { AlertTriangle, Lock, CheckCircle, X } from 'lucide-react';
+import { useTranslation } from '../../i18n/useTranslation';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   if (!isOpen) return null;
 
@@ -31,7 +33,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     if (requireAuth) {
       const expected = (import.meta as any).env?.VITE_ADMIN_PASSWORD;
       if (!expected || password !== expected) {
-        setError('Incorrect Admin Password');
+        setError(t('confirmModal.incorrectPassword'));
         return;
       }
     }
@@ -41,7 +43,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       await onConfirm();
       resetAndClose();
     } catch (err: any) {
-      setError(err?.message || 'An error occurred. Please try again.');
+      setError(err?.message || t('confirmModal.errorOccurred'));
     } finally {
       setLoading(false);
     }
@@ -71,11 +73,11 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           
           {requireAuth && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">Admin Password</label>
+              <label className="text-xs font-bold text-slate-500 uppercase">{t('confirmModal.adminPassword')}</label>
               <input 
                 type="password" 
                 className="w-full border border-slate-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Enter password to override..."
+                placeholder={t('confirmModal.enterPassword')}
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError(''); }}
                 autoFocus
@@ -91,7 +93,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             onClick={resetAndClose}
             className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
           >
-            Cancel
+            {t('confirmModal.cancel')}
           </button>
           <button 
             onClick={handleConfirm}
@@ -101,7 +103,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               isDanger || requireAuth ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {loading ? 'Saving…' : requireAuth ? 'Authorize & Proceed' : 'Confirm'}
+            {loading ? t('confirmModal.saving') : requireAuth ? t('confirmModal.authorizeAndProceed') : t('confirmModal.confirm')}
           </button>
         </div>
       </div>

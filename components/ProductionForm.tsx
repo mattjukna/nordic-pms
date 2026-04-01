@@ -3,6 +3,7 @@ import { Package, Truck, Trash2, CheckCircle, Loader2, Scale } from 'lucide-reac
 import { useStore } from '../store';
 import { GlassCard } from './ui/GlassCard';
 import { Product, ProductionLogEntry } from '../types';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface ProductionFormProps {
   onSubmit: (entry: Omit<ProductionLogEntry, 'id' | 'timestamp' | 'batchId'>) => void;
@@ -10,6 +11,7 @@ interface ProductionFormProps {
 
 const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
   const { products } = useStore();
+  const { t } = useTranslation();
   const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(products[0]);
   
   // Form State
@@ -125,14 +127,14 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
   );
 
   return (
-    !products || products.length === 0 ? <div className="p-6 text-center">Loading products…</div> :
+    !products || products.length === 0 ? <div className="p-6 text-center">{t('productionForm.loadingProducts')}</div> :
     <div className="w-full h-full relative flex flex-col gap-6 animate-fade-in pb-24 md:pb-0">
       
       {/* Success Overlay */}
       {showSuccess && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm rounded-3xl animate-fade-in">
           <CheckCircle size={80} className="text-emerald-500 mb-4 drop-shadow-sm" />
-          <h2 className="text-3xl font-bold text-slate-800 tracking-wide">Batch Logged</h2>
+          <h2 className="text-3xl font-bold text-slate-800 tracking-wide">{t('productionForm.batchLogged')}</h2>
         </div>
       )}
 
@@ -169,19 +171,19 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
           </div>
           <div className="flex-1 grid grid-cols-2 gap-4 w-full">
             <GlassInput 
-              label="Pallet Count" 
+              label={t('productionForm.palletCount')} 
               value={palletCount} 
               onChange={setPalletCount} 
               placeholder="0" 
             />
             <GlassInput 
-              label="Unit Weight (kg)" 
+              label={t('productionForm.unitWeightKg')} 
               value={palletWeight} 
               onChange={setPalletWeight} 
             />
           </div>
           <div className="w-full md:w-32 text-right md:text-center pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1 font-bold">Subtotal</div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1 font-bold">{t('productionForm.subtotal')}</div>
             <div className="text-2xl font-bold text-slate-800 font-mono">{formatNumber(calcPallets)}</div>
           </div>
         </GlassCard>
@@ -193,19 +195,19 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
           </div>
           <div className="flex-1 grid grid-cols-2 gap-4 w-full">
             <GlassInput 
-              label="Big Bags" 
+              label={t('productionForm.bigBags')} 
               value={bagCount} 
               onChange={setBagCount} 
               placeholder="0"
             />
             <GlassInput 
-              label="Unit Weight (kg)" 
+              label={t('productionForm.unitWeightKg')} 
               value={bagWeight} 
               onChange={setBagWeight} 
             />
           </div>
           <div className="w-full md:w-32 text-right md:text-center pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1 font-bold">Subtotal</div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1 font-bold">{t('productionForm.subtotal')}</div>
             <div className="text-2xl font-bold text-slate-800 font-mono">{formatNumber(calcBags)}</div>
           </div>
         </GlassCard>
@@ -217,14 +219,14 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
           </div>
           <div className="flex-1 w-full">
             <GlassInput 
-              label="Loose / Sweepings (Total Kg)" 
+              label={t('productionForm.looseSweepings')} 
               value={looseKg} 
               onChange={setLooseKg}
               placeholder="0"
             />
           </div>
           <div className="w-full md:w-32 text-right md:text-center pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1 font-bold">Subtotal</div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1 font-bold">{t('productionForm.subtotal')}</div>
             <div className="text-2xl font-bold text-slate-800 font-mono">{formatNumber(calcLoose)}</div>
           </div>
         </GlassCard>
@@ -235,7 +237,7 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="text-center md:text-left">
             <div className="text-sm text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-2 font-bold">
-              <Scale size={16} /> Total Batch Weight
+              <Scale size={16} /> {t('productionForm.totalBatchWeight')}
             </div>
             <div className="text-4xl md:text-5xl font-bold text-white font-mono tracking-tight">
               {formatNumber(grandTotal)} <span className="text-2xl text-slate-500">kg</span>
@@ -253,7 +255,7 @@ const ProductionForm: React.FC<ProductionFormProps> = ({ onSubmit }) => {
                 : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'}
             `}
           >
-            {isSubmitting ? <Loader2 className="animate-spin" /> : 'Submit Batch'}
+            {isSubmitting ? <Loader2 className="animate-spin" /> : t('productionForm.submitBatch')}
           </button>
         </div>
       </GlassCard>

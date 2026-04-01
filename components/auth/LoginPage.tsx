@@ -3,6 +3,7 @@ import { GlassCard } from '../ui/GlassCard';
 import { useMsal } from '@azure/msal-react';
 import { getAuthConfigErrors } from '../../auth/msalConfig';
 import { loadRuntimeAuthConfig, RuntimeAuthConfig } from '../../auth/runtimeConfig';
+import { useTranslation } from '../../i18n/useTranslation';
 
 export const LoginPage: React.FC<{
   unauthorizedInfo?: { email?: string; userDomain?: string; allowed?: string };
@@ -35,20 +36,21 @@ export const LoginPage: React.FC<{
 
   const loginRequest = { scopes: [(cfg?.apiScope || ''), 'openid', 'profile', 'email'].filter(Boolean) as string[] };
   const { instance } = useMsal();
+  const { t } = useTranslation();
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4">
       <GlassCard className="p-8 max-w-sm text-center">
         <img src="/logo.png" alt="Nordic Insights" className="h-10 mx-auto mb-2" />
-        <p className="text-sm text-slate-500 mb-6">Please sign in with your Microsoft account to continue.</p>
+        <p className="text-sm text-slate-500 mb-6">{t('login.signInPrompt')}</p>
 
         {loading ? (
-          <div className="mb-4 text-sm text-slate-600">Loading configuration…</div>
+          <div className="mb-4 text-sm text-slate-600">{t('login.loadingConfig')}</div>
         ) : null}
 
         {!loading && configErrors.length > 0 ? (
           <div className="mb-4 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800 text-left">
-            <strong>Configuration missing:</strong>
+            <strong>{t('login.configMissing')}</strong>
             <ul className="mt-2 list-disc list-inside">
               {configErrors.map((e) => (
                 <li key={e}>{e}</li>
@@ -59,12 +61,12 @@ export const LoginPage: React.FC<{
 
         {unauthorizedInfo ? (
           <div className="mb-4 text-red-600 text-left">
-            <div className="font-bold">Unauthorized domain: {unauthorizedInfo.email || '(unknown email)'}</div>
-            <div className="text-xs mt-2">Details:</div>
+            <div className="font-bold">{t('login.unauthorizedDomain', { email: unauthorizedInfo.email || '(unknown email)' })}</div>
+            <div className="text-xs mt-2">{t('login.detailsLabel')}</div>
             <ul className="text-xs list-disc list-inside">
-              <li>Allowed: {unauthorizedInfo.allowed || '(no restriction set)'}</li>
-              <li>Extracted email: {unauthorizedInfo.email || '(none)'}</li>
-              <li>Extracted domain: {unauthorizedInfo.userDomain || '(none)'}</li>
+              <li>{t('login.allowedLabel', { allowed: unauthorizedInfo.allowed || '(no restriction set)' })}</li>
+              <li>{t('login.extractedEmail', { email: unauthorizedInfo.email || '(none)' })}</li>
+              <li>{t('login.extractedDomain', { domain: unauthorizedInfo.userDomain || '(none)' })}</li>
             </ul>
           </div>
         ) : null}
@@ -74,11 +76,11 @@ export const LoginPage: React.FC<{
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-bold"
           disabled={loading || configErrors.length > 0}
         >
-          Sign in with Microsoft
+          {t('login.signInButton')}
         </button>
 
         {unauthorizedInfo ? (
-          <div className="text-xs text-slate-500 mt-3">If you believe this is an error, sign out and try with an allowed account.</div>
+          <div className="text-xs text-slate-500 mt-3">{t('login.signInError')}</div>
         ) : null}
       </GlassCard>
     </div>

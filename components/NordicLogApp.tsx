@@ -12,6 +12,7 @@ import { SettingsTab } from './tabs/SettingsTab';
 import { clearSessionEvent, readSessionEvent, SessionEvent, subscribeSessionEvent } from '../services/sessionEvents';
 import ToastContainer from './ui/ToastContainer';
 import OfflineBanner from './ui/OfflineBanner';
+import { useTranslation } from '../i18n/useTranslation';
 
 const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) => {
   const activeTab = useStore((state) => state.activeTab);
@@ -22,6 +23,7 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
   const userSettings = useStore((state) => state.userSettings);
   const hydrateFromApi = useStore((state) => state.hydrateFromApi);
   const [sessionEvent, setSessionEvent] = useState<SessionEvent | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     setSessionEvent(readSessionEvent());
@@ -52,12 +54,12 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
           <div className="w-full md:w-auto mt-2 md:mt-0 overflow-x-auto pb-1 md:pb-0 -mx-1 px-1 scrollbar-hide">
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 w-max md:w-auto">
               {[
-                { id: 'input', label: 'Input', icon: FileInput },
-                { id: 'preview', label: 'Live View', icon: LayoutDashboard },
-                { id: 'inventory', label: 'Stock', icon: Package },
-                { id: 'trends', label: 'Analytics', icon: BarChart3 },
-                { id: 'ai', label: 'Insights', icon: Bot },
-                { id: 'settings', label: 'Master Data', icon: Settings },
+                { id: 'input', label: t('nav.input'), icon: FileInput },
+                { id: 'preview', label: t('nav.liveView'), icon: LayoutDashboard },
+                { id: 'inventory', label: t('nav.stock'), icon: Package },
+                { id: 'trends', label: t('nav.analytics'), icon: BarChart3 },
+                { id: 'ai', label: t('nav.insights'), icon: Bot },
+                { id: 'settings', label: t('nav.masterData'), icon: Settings },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -95,7 +97,7 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
               }}
               className="text-xs font-semibold underline"
             >
-              Dismiss
+              {t('common.dismiss')}
             </button>
           </div>
         )}
@@ -107,36 +109,35 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
             </div>
             {hydrateRetryCount > 0 ? (
               <>
-                <p className="text-slate-700 font-semibold text-lg">Database is waking up…</p>
+                <p className="text-slate-700 font-semibold text-lg">{t('hydration.dbWaking')}</p>
                 <p className="text-slate-500 text-sm max-w-md">
-                  The database goes to sleep after a period of inactivity. It usually takes up to a minute to resume.
-                  Retrying automatically — attempt {hydrateRetryCount}.
+                  {t('hydration.dbWakingDesc', { count: hydrateRetryCount })}
                 </p>
               </>
             ) : (
-              <p className="text-slate-600 font-medium">Loading data…</p>
+              <p className="text-slate-600 font-medium">{t('hydration.loadingData')}</p>
             )}
           </div>
           ) : hydrateError ? (
             <div className="p-12 text-center flex flex-col items-center gap-4">
               {hydrateError.startsWith('Authentication') ? (
                 <>
-                  <div className="text-red-600 font-semibold text-lg">Authentication failed</div>
+                  <div className="text-red-600 font-semibold text-lg">{t('hydration.authFailed')}</div>
                   <p className="text-slate-500 text-sm max-w-md">
-                    Your session could not be verified. Please sign in again to continue.
+                    {t('hydration.authFailedDesc')}
                   </p>
                   <button onClick={() => window.location.reload()} className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
-                    Reload &amp; sign in
+                    {t('hydration.reloadSignIn')}
                   </button>
                 </>
               ) : (
                 <>
-                  <div className="text-red-600 font-semibold text-lg">Unable to connect to the database</div>
+                  <div className="text-red-600 font-semibold text-lg">{t('hydration.dbError')}</div>
                   <p className="text-slate-500 text-sm max-w-md">
-                    The database did not respond after several attempts. Please check your connection or try again.
+                    {t('hydration.dbErrorDesc')}
                   </p>
                   <button onClick={hydrateFromApi} className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
-                    Try again
+                    {t('hydration.tryAgain')}
                   </button>
                 </>
               )}

@@ -20,6 +20,7 @@ import {
 import type { IntakeEntry, DispatchEntry } from '../../types';
 import { isShippedStatus, getShippedKg, getShippedRevenue } from '../../utils/dispatchMath';
 import { getEffectiveIntakeQuantityKg } from '../../utils/intakeCoefficient';
+import { useTranslation } from '../../i18n/useTranslation';
 
 const TARGET_YIELD = 12.5;
 const TEMP_MAX = 8;
@@ -88,6 +89,7 @@ const InsightCard: React.FC<{ insight: Insight }> = ({ insight }) => {
 
 /* ─── Trend card ─── */
 const TrendCard: React.FC<{ metric: string; current: string; delta: number; period: string }> = ({ metric, current, delta, period }) => {
+  const { t: tr } = useTranslation();
   const isUp = delta > 0;
   return (
     <GlassCard className="p-4 hover:shadow-md transition-shadow duration-200">
@@ -95,7 +97,7 @@ const TrendCard: React.FC<{ metric: string; current: string; delta: number; peri
       <div className="mt-1 text-lg font-extrabold text-slate-800">{current}</div>
       <div className="mt-1 flex items-center gap-1">
         {Math.abs(delta) < 0.5 ? (
-          <span className="text-[10px] text-slate-400">No change</span>
+          <span className="text-[10px] text-slate-400">{tr('ai.noChange')}</span>
         ) : (
           <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold ${isUp ? 'text-emerald-600' : 'text-red-500'}`}>
             {isUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
@@ -117,6 +119,7 @@ export const AITab: React.FC = () => {
   const products = useStore(s => s.products);
   const buyers = useStore(s => s.buyers);
   const alerts = useStore(s => s.alerts);
+  const { t: tr } = useTranslation();
 
   const [showAllInsights, setShowAllInsights] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ insights: true, suppliers: true, products: true, alerts: false });
@@ -169,19 +172,19 @@ export const AITab: React.FC = () => {
 
     const trends: { metric: string; current: string; delta: number; period: string }[] = [];
     if (lastWeekKg > 0 || thisWeekKg > 0) {
-      trends.push({ metric: 'Intake Volume', current: formatKg(thisWeekKg), delta: lastWeekKg > 0 ? ((thisWeekKg - lastWeekKg) / lastWeekKg) * 100 : 0, period: 'vs last week' });
+      trends.push({ metric: tr('ai.intakeVolume'), current: formatKg(thisWeekKg), delta: lastWeekKg > 0 ? ((thisWeekKg - lastWeekKg) / lastWeekKg) * 100 : 0, period: tr('ai.vsLastWeek') });
     }
     if (lastWeekRev > 0 || thisWeekRev > 0) {
-      trends.push({ metric: 'Revenue', current: formatEur(thisWeekRev), delta: lastWeekRev > 0 ? ((thisWeekRev - lastWeekRev) / lastWeekRev) * 100 : 0, period: 'vs last week' });
+      trends.push({ metric: tr('ai.revenue'), current: formatEur(thisWeekRev), delta: lastWeekRev > 0 ? ((thisWeekRev - lastWeekRev) / lastWeekRev) * 100 : 0, period: tr('ai.vsLastWeek') });
     }
     if (lastWeekOutput > 0 || thisWeekOutput > 0) {
-      trends.push({ metric: 'Output', current: formatKg(thisWeekOutput), delta: lastWeekOutput > 0 ? ((thisWeekOutput - lastWeekOutput) / lastWeekOutput) * 100 : 0, period: 'vs last week' });
+      trends.push({ metric: tr('ai.output'), current: formatKg(thisWeekOutput), delta: lastWeekOutput > 0 ? ((thisWeekOutput - lastWeekOutput) / lastWeekOutput) * 100 : 0, period: tr('ai.vsLastWeek') });
     }
     if (thisWeekIntake.length > 0) {
-      trends.push({ metric: 'Quality Compliance', current: `${thisWeekCompPct.toFixed(0)}%`, delta: lastWeekCompPct > 0 ? ((thisWeekCompPct - lastWeekCompPct) / lastWeekCompPct) * 100 : 0, period: 'vs last week' });
+      trends.push({ metric: tr('ai.qualityCompliance'), current: `${thisWeekCompPct.toFixed(0)}%`, delta: lastWeekCompPct > 0 ? ((thisWeekCompPct - lastWeekCompPct) / lastWeekCompPct) * 100 : 0, period: tr('ai.vsLastWeek') });
     }
     return trends;
-  }, [intakeEntries, outputEntries, dispatchEntries]);
+  }, [intakeEntries, outputEntries, dispatchEntries, tr]);
 
   /* ─── Computed insights ─── */
   const insights = useMemo(() => {
@@ -193,15 +196,15 @@ export const AITab: React.FC = () => {
     const totalRevenue = dispatchEntries.filter(d => isShippedStatus(d.status)).reduce((s, d) => s + getShippedRevenue(d), 0);
     const totalCost = intakeEntries.filter(e => !e.isDiscarded).reduce((s, e) => s + (e.calculatedCost || 0), 0);
     const margin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
-    if (totalRevenue > 0 && margin < 10) result.push({ id: id(), severity: 'danger', title: 'Low Gross Margin', description: `Margin is only ${margin.toFixed(1)}%. Review product pricing or reduce raw material costs.`, category: 'financial' });
-    else if (totalRevenue > 0 && margin >= 25) result.push({ id: id(), severity: 'info', title: 'Healthy Margins', description: `Gross margin is ${margin.toFixed(1)}%. Financial operations are performing well.`, category: 'financial' });
+    if (totalRevenue > 0 && margin < 10) result.push({ id: id(), severity: 'danger', title: tr('ai.lowGrossMargin'), description: `Margin is only ${margin.toFixed(1)}%. Review product pricing or reduce raw material costs.`, category: 'financial' });
+    else if (totalRevenue > 0 && margin >= 25) result.push({ id: id(), severity: 'info', title: tr('ai.healthyMargins'), description: `Gross margin is ${margin.toFixed(1)}%. Financial operations are performing well.`, category: 'financial' });
 
     // Revenue concentration by buyer
     const buyerRevenue: Record<string, number> = {};
     dispatchEntries.filter(d => isShippedStatus(d.status)).forEach(d => { buyerRevenue[d.buyer || 'Unknown'] = (buyerRevenue[d.buyer || 'Unknown'] || 0) + getShippedRevenue(d); });
     const topBuyer = Object.entries(buyerRevenue).sort((a, b) => b[1] - a[1])[0];
     if (topBuyer && totalRevenue > 0 && (topBuyer[1] / totalRevenue) > 0.5) {
-      result.push({ id: id(), severity: 'warning', title: 'Revenue Concentration Risk', description: `${topBuyer[0]} accounts for ${((topBuyer[1] / totalRevenue) * 100).toFixed(0)}% of total revenue. Single-buyer dependency is high.`, category: 'financial' });
+      result.push({ id: id(), severity: 'warning', title: tr('ai.revenueConcentration'), description: `${topBuyer[0]} accounts for ${((topBuyer[1] / totalRevenue) * 100).toFixed(0)}% of total revenue. Single-buyer dependency is high.`, category: 'financial' });
     }
 
     // Per-product stock
@@ -210,22 +213,22 @@ export const AITab: React.FC = () => {
       const shipped = dispatchEntries.filter(d => d.productId === p.id && isShippedStatus(d.status)).reduce((s, d) => s + getShippedKg(d), 0);
       const planned = dispatchEntries.filter(d => d.productId === p.id && d.status === 'planned').reduce((s, d) => s + d.quantityKg, 0);
       const stock = produced - shipped;
-      if (stock < 0) result.push({ id: id(), severity: 'danger', title: `${p.id} Over-Shipped`, description: `${formatKg(Math.abs(stock))} more shipped than produced. Verify inventory records immediately.`, category: 'inventory' });
-      else if (planned > stock && planned > 0) result.push({ id: id(), severity: 'warning', title: `${p.id} Stock at Risk`, description: `Planned shipments (${formatKg(planned)}) exceed current stock (${formatKg(stock)}). Schedule production.`, category: 'inventory' });
-      else if (stock > 0 && produced > 0 && stock > produced * 0.8) result.push({ id: id(), severity: 'info', title: `${p.id} Stock Building Up`, description: `Stock is ${formatKg(stock)} with only ${formatKg(shipped)} shipped. Consider new sales channels.`, category: 'inventory' });
+      if (stock < 0) result.push({ id: id(), severity: 'danger', title: tr('ai.overShipped', { product: p.id }), description: `${formatKg(Math.abs(stock))} more shipped than produced. Verify inventory records immediately.`, category: 'inventory' });
+      else if (planned > stock && planned > 0) result.push({ id: id(), severity: 'warning', title: tr('ai.stockAtRisk', { product: p.id }), description: `Planned shipments (${formatKg(planned)}) exceed current stock (${formatKg(stock)}). Schedule production.`, category: 'inventory' });
+      else if (stock > 0 && produced > 0 && stock > produced * 0.8) result.push({ id: id(), severity: 'info', title: tr('ai.stockBuildingUp', { product: p.id }), description: `Stock is ${formatKg(stock)} with only ${formatKg(shipped)} shipped. Consider new sales channels.`, category: 'inventory' });
     });
 
     // Quality: recent temperature violations
     const recent7d = intakeEntries.filter(e => e.timestamp >= Date.now() - 7 * 86400000 && !e.isDiscarded);
     const highTemp = recent7d.filter(e => (e.tempCelsius || 0) > TEMP_MAX);
-    if (highTemp.length > 0) result.push({ id: id(), severity: 'warning', title: `${highTemp.length} Temperature Violations`, description: `${highTemp.length} loads in the past 7 days exceeded ${TEMP_MAX}°C. Review cold chain logistics.`, category: 'quality' });
+    if (highTemp.length > 0) result.push({ id: id(), severity: 'warning', title: tr('ai.tempViolations', { count: String(highTemp.length) }), description: `${highTemp.length} loads in the past 7 days exceeded ${TEMP_MAX}°C. Review cold chain logistics.`, category: 'quality' });
 
     // Quality: recent discards
     const discarded7d = intakeEntries.filter(e => e.timestamp >= Date.now() - 7 * 86400000 && e.isDiscarded === true);
     if (discarded7d.length > 0) {
       const lossKg = discarded7d.reduce((s, e) => s + (e.quantityKg || 0), 0);
       const lossCost = discarded7d.reduce((s, e) => s + (e.calculatedCost || 0), 0);
-      result.push({ id: id(), severity: 'danger', title: 'Recent Discards', description: `${discarded7d.length} loads (${formatKg(lossKg)}, ${formatEur(lossCost)}) discarded in the past 7 days.`, category: 'quality' });
+      result.push({ id: id(), severity: 'danger', title: tr('ai.recentDiscards'), description: `${discarded7d.length} loads (${formatKg(lossKg)}, ${formatEur(lossCost)}) discarded in the past 7 days.`, category: 'quality' });
     }
 
     // Supplier concentration
@@ -235,7 +238,7 @@ export const AITab: React.FC = () => {
     const topSupplier = Object.entries(supplierVolumes).sort((a, b) => b[1] - a[1])[0];
     if (topSupplier && totalVolume > 0 && (topSupplier[1] / totalVolume) > 0.4) {
       const name = suppliers.find(s => s.id === topSupplier[0])?.name || topSupplier[0];
-      result.push({ id: id(), severity: 'warning', title: 'Supplier Concentration', description: `${name} accounts for ${((topSupplier[1] / totalVolume) * 100).toFixed(0)}% of all intake. Consider diversifying supply.`, category: 'operational' });
+      result.push({ id: id(), severity: 'warning', title: tr('ai.supplierConcentration'), description: `${name} accounts for ${((topSupplier[1] / totalVolume) * 100).toFixed(0)}% of all intake. Consider diversifying supply.`, category: 'operational' });
     }
 
     // Worst quality supplier (by compliance)
@@ -247,7 +250,7 @@ export const AITab: React.FC = () => {
     });
     const worstSupplier = Object.values(supplierQuality).filter(s => s.total >= 3).sort((a, b) => (a.ok / a.total) - (b.ok / b.total))[0];
     if (worstSupplier && (worstSupplier.ok / worstSupplier.total) < 0.7) {
-      result.push({ id: id(), severity: 'warning', title: 'Low Compliance Supplier', description: `${worstSupplier.name} has only ${((worstSupplier.ok / worstSupplier.total) * 100).toFixed(0)}% quality compliance (${worstSupplier.total} loads). Review supplier standards.`, category: 'quality' });
+      result.push({ id: id(), severity: 'warning', title: tr('ai.lowComplianceSupplier'), description: `${worstSupplier.name} has only ${((worstSupplier.ok / worstSupplier.total) * 100).toFixed(0)}% quality compliance (${worstSupplier.total} loads). Review supplier standards.`, category: 'quality' });
     }
 
     // Contract fulfillment risk
@@ -257,7 +260,7 @@ export const AITab: React.FC = () => {
         const shipped = dispatchEntries.filter(d => d.contractNumber === c.contractNumber && isShippedStatus(d.status)).reduce((s, d) => s + getShippedKg(d), 0);
         const pct = c.agreedAmountKg > 0 ? (shipped / c.agreedAmountKg) * 100 : 0;
         if (c.agreedAmountKg > 0 && pct < 50 && c.endDate && (c.endDate - Date.now()) < 30 * 86400000) {
-          result.push({ id: id(), severity: 'warning', title: `Contract ${c.contractNumber} Behind`, description: `Only ${pct.toFixed(0)}% of ${formatKg(c.agreedAmountKg)} fulfilled for ${b.name} with less than 30 days remaining.`, category: 'contracts' });
+          result.push({ id: id(), severity: 'warning', title: tr('ai.contractBehind', { number: c.contractNumber }), description: `Only ${pct.toFixed(0)}% of ${formatKg(c.agreedAmountKg)} fulfilled for ${b.name} with less than 30 days remaining.`, category: 'contracts' });
         }
       });
     });
@@ -266,13 +269,13 @@ export const AITab: React.FC = () => {
     const totalEffIntake = intakeEntries.filter(e => !e.isDiscarded).reduce((s, e) => s + getEffectiveIntakeQuantityKg(e), 0);
     const totalOutput = outputEntries.reduce((s, e) => s + (e.parsed?.totalWeight || 0), 0);
     const overallYield = totalEffIntake > 0 ? (totalOutput / totalEffIntake) * 100 : 0;
-    if (overallYield > 0 && overallYield < TARGET_YIELD * 0.8) result.push({ id: id(), severity: 'warning', title: 'Low Overall Yield', description: `Yield is ${overallYield.toFixed(1)}%, significantly below the ${TARGET_YIELD}% target. Investigate production efficiency.`, category: 'operational' });
-    else if (overallYield >= TARGET_YIELD) result.push({ id: id(), severity: 'info', title: 'Yield On Target', description: `Overall yield is ${overallYield.toFixed(1)}%, meeting the ${TARGET_YIELD}% target.`, category: 'operational' });
+    if (overallYield > 0 && overallYield < TARGET_YIELD * 0.8) result.push({ id: id(), severity: 'warning', title: tr('ai.lowOverallYield'), description: `Yield is ${overallYield.toFixed(1)}%, significantly below the ${TARGET_YIELD}% target. Investigate production efficiency.`, category: 'operational' });
+    else if (overallYield >= TARGET_YIELD) result.push({ id: id(), severity: 'info', title: tr('ai.yieldOnTarget'), description: `Overall yield is ${overallYield.toFixed(1)}%, meeting the ${TARGET_YIELD}% target.`, category: 'operational' });
 
     // Sort: danger first, then warning, then info
     const order: Record<InsightSeverity, number> = { danger: 0, warning: 1, info: 2 };
     return result.sort((a, b) => order[a.severity] - order[b.severity]);
-  }, [intakeEntries, outputEntries, dispatchEntries, suppliers, products, buyers]);
+  }, [intakeEntries, outputEntries, dispatchEntries, suppliers, products, buyers, tr]);
 
   /* ─── Supplier performance table ─── */
   const supplierPerformance = useMemo(() => {
@@ -314,11 +317,11 @@ export const AITab: React.FC = () => {
 
       {/* Health Scores */}
       <GlassCard className="p-6" hint="Three health gauges scored 0–100. Financial: based on gross margin (33%+ = 100). Efficiency: based on production yield vs 12.5% target. Quality: intake compliance rate over the last 30 days.">
-        <div className="text-sm font-extrabold text-slate-800 mb-4">Operations Health</div>
+        <div className="text-sm font-extrabold text-slate-800 mb-4">{tr('ai.operationsHealth')}</div>
         <div className="flex flex-wrap justify-center gap-8 md:gap-16">
-          <HealthGauge score={healthScores.financial} label="Financial" color={healthScores.financial >= 70 ? '#10b981' : healthScores.financial >= 40 ? '#f59e0b' : '#ef4444'} />
-          <HealthGauge score={healthScores.operational} label="Efficiency" color={healthScores.operational >= 70 ? '#10b981' : healthScores.operational >= 40 ? '#f59e0b' : '#ef4444'} />
-          <HealthGauge score={healthScores.quality} label="Quality" color={healthScores.quality >= 70 ? '#10b981' : healthScores.quality >= 40 ? '#f59e0b' : '#ef4444'} />
+          <HealthGauge score={healthScores.financial} label={tr('ai.financialHealth')} color={healthScores.financial >= 70 ? '#10b981' : healthScores.financial >= 40 ? '#f59e0b' : '#ef4444'} />
+          <HealthGauge score={healthScores.operational} label={tr('ai.efficiencyHealth')} color={healthScores.operational >= 70 ? '#10b981' : healthScores.operational >= 40 ? '#f59e0b' : '#ef4444'} />
+          <HealthGauge score={healthScores.quality} label={tr('ai.qualityHealth')} color={healthScores.quality >= 70 ? '#10b981' : healthScores.quality >= 40 ? '#f59e0b' : '#ef4444'} />
         </div>
       </GlassCard>
 
@@ -336,22 +339,22 @@ export const AITab: React.FC = () => {
         <button onClick={() => toggleSection('insights')} className="w-full flex items-center justify-between group">
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4 text-blue-500" />
-            <div className="text-sm font-extrabold text-slate-800">Key Insights</div>
-            {dangerCount > 0 && <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{dangerCount} critical</span>}
-            {warningCount > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{warningCount} warnings</span>}
+            <div className="text-sm font-extrabold text-slate-800">{tr('ai.keyInsights')}</div>
+            {dangerCount > 0 && <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{dangerCount} {tr('ai.critical')}</span>}
+            {warningCount > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{warningCount} {tr('ai.warnings')}</span>}
           </div>
           {expandedSections.insights ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
         </button>
         {expandedSections.insights && (
           <div className="mt-4 space-y-3">
             {insights.length === 0 ? (
-              <div className="text-sm text-slate-400 italic p-4 text-center">No notable insights at this time. All systems operating normally.</div>
+              <div className="text-sm text-slate-400 italic p-4 text-center">{tr('ai.noInsights')}</div>
             ) : (
               <>
                 {visibleInsights.map(insight => <InsightCard key={insight.id} insight={insight} />)}
                 {insights.length > 6 && (
                   <button onClick={() => setShowAllInsights(!showAllInsights)} className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors px-1">
-                    {showAllInsights ? 'Show fewer' : `Show all ${insights.length} insights`}
+                    {showAllInsights ? tr('ai.showFewer') : tr('ai.showAll', { count: String(insights.length) })}
                   </button>
                 )}
               </>
@@ -365,8 +368,8 @@ export const AITab: React.FC = () => {
         <button onClick={() => toggleSection('suppliers')} className="w-full flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-purple-500" />
-            <div className="text-sm font-extrabold text-slate-800">Supplier Performance</div>
-            <span className="text-xs text-slate-400">{supplierPerformance.length} suppliers</span>
+            <div className="text-sm font-extrabold text-slate-800">{tr('ai.supplierPerformance')}</div>
+            <span className="text-xs text-slate-400">{tr('ai.suppliers', { count: String(supplierPerformance.length) })}</span>
           </div>
           {expandedSections.suppliers ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
         </button>
@@ -375,12 +378,12 @@ export const AITab: React.FC = () => {
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold sticky top-0 z-10">
                 <tr>
-                  <th className="p-2">Supplier</th>
-                  <th className="p-2 text-right">Loads</th>
-                  <th className="p-2 text-right">Volume</th>
-                  <th className="p-2 text-right hidden md:table-cell">Total Cost</th>
-                  <th className="p-2 text-right hidden md:table-cell">€/kg</th>
-                  <th className="p-2 text-right">Compliance</th>
+                  <th className="p-2">{tr('ai.supplier')}</th>
+                  <th className="p-2 text-right">{tr('ai.loads')}</th>
+                  <th className="p-2 text-right">{tr('ai.volume')}</th>
+                  <th className="p-2 text-right hidden md:table-cell">{tr('ai.totalCost')}</th>
+                  <th className="p-2 text-right hidden md:table-cell">{tr('ai.eurPerKg')}</th>
+                  <th className="p-2 text-right">{tr('ai.compliance')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -409,8 +412,8 @@ export const AITab: React.FC = () => {
         <button onClick={() => toggleSection('products')} className="w-full flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-emerald-500" />
-            <div className="text-sm font-extrabold text-slate-800">Product Performance</div>
-            <span className="text-xs text-slate-400">{productPerformance.length} products</span>
+            <div className="text-sm font-extrabold text-slate-800">{tr('ai.productPerformance')}</div>
+            <span className="text-xs text-slate-400">{tr('ai.products', { count: String(productPerformance.length) })}</span>
           </div>
           {expandedSections.products ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
         </button>
@@ -419,12 +422,12 @@ export const AITab: React.FC = () => {
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold sticky top-0 z-10">
                 <tr>
-                  <th className="p-2">Product</th>
-                  <th className="p-2 text-right">Produced</th>
-                  <th className="p-2 text-right">Shipped</th>
-                  <th className="p-2 text-right">Revenue</th>
-                  <th className="p-2 text-right hidden md:table-cell">Avg €/kg</th>
-                  <th className="p-2 text-right">Stock</th>
+                  <th className="p-2">{tr('ai.product')}</th>
+                  <th className="p-2 text-right">{tr('ai.produced')}</th>
+                  <th className="p-2 text-right">{tr('ai.shipped')}</th>
+                  <th className="p-2 text-right">{tr('ai.revenue')}</th>
+                  <th className="p-2 text-right hidden md:table-cell">{tr('ai.avgEurPerKg')}</th>
+                  <th className="p-2 text-right">{tr('ai.stock')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

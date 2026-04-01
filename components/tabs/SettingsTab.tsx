@@ -10,6 +10,7 @@ import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
 import { findBuyerDuplicateWarning, findSupplierDuplicateWarning, validateBuyerForm, validateContractForm, validateMilkTypeName, validateProductForm, validateSupplierForm } from '../../utils/validation';
+import { useTranslation } from '../../i18n/useTranslation';
 
 const SETTINGS_DRAFT_KEY = 'nordic-pms-draft-settings';
 
@@ -106,6 +107,7 @@ export const SettingsTab: React.FC = () => {
     isHydrating
   } = useStore();
   const undoableDelete = useUndoDelete();
+  const { t } = useTranslation();
 
   // Search State
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -662,7 +664,7 @@ export const SettingsTab: React.FC = () => {
           className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeSubTab === 'products' ? 'bg-amber-100 text-amber-700' : 'text-slate-500 hover:bg-slate-100'}`}
         >
           <div className="flex items-center gap-2">
-            <Package size={16} /> Products & Milk Types
+            <Package size={16} /> {t('settings.productsAndMilkTypes')}
           </div>
         </button>
         <button 
@@ -681,20 +683,20 @@ export const SettingsTab: React.FC = () => {
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
-              <Users size={16} /> Suppliers Database
+              <Users size={16} /> {t('settings.suppliersDatabase')}
             </h3>
             <button 
               onClick={() => { resetSupplierForm(); setShowSupplierForm(true); }}
               className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-all shadow-sm flex items-center gap-1"
             >
-              <Plus size={14} /> Add New
+              <Plus size={14} /> {t('common.add')}
             </button>
           </div>
           <div className="relative">
             <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search suppliers..." 
+              placeholder={t('settings.searchSuppliers')} 
               value={supplierSearch}
               onChange={(e) => setSupplierSearch(e.target.value)}
               className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs focus:ring-2 focus:ring-blue-100 outline-none"
@@ -711,31 +713,31 @@ export const SettingsTab: React.FC = () => {
                </div>
              )}
              <div className="flex justify-between items-center mb-2">
-               <h4 className="text-xs font-bold uppercase text-slate-500">{editingSupplierId ? 'Edit Supplier' : 'New Supplier'}</h4>
+               <h4 className="text-xs font-bold uppercase text-slate-500">{editingSupplierId ? t('settings.editSupplier') : t('settings.addSupplier')}</h4>
                <button onClick={resetSupplierForm}><X size={14} className="text-slate-400 hover:text-red-500"/></button>
              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-              <InputField placeholder="Supplier Name*" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} />
-              <InputField placeholder="Route Group (e.g. Kupiškio)*" value={newSupplier.routeGroup} onChange={e => setNewSupplier({...newSupplier, routeGroup: e.target.value})} />
+              <InputField placeholder={t('settings.supplierNamePlaceholder')} value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} />
+              <InputField placeholder={t('settings.routeGroupPlaceholder')} value={newSupplier.routeGroup} onChange={e => setNewSupplier({...newSupplier, routeGroup: e.target.value})} />
               <div className="md:col-span-2">
-                <InputField placeholder="Company Code(s)* — separate multiple VAT codes with ; or ," value={newSupplier.companyCode} onChange={e => setNewSupplier({...newSupplier, companyCode: e.target.value})} />
-                <div className="mt-1 text-[11px] text-slate-400">Example: LT123456789; LT987654321</div>
+                <InputField placeholder={t('settings.companyCodePlaceholder')} value={newSupplier.companyCode} onChange={e => setNewSupplier({...newSupplier, companyCode: e.target.value})} />
+                <div className="mt-1 text-[11px] text-slate-400">{t('settings.companyCodeHintSupplier')}</div>
                 <InlineNotice message={supplierErrors.companyCode} />
               </div>
-              <InputField placeholder="Phone Number" value={newSupplier.phoneNumber} onChange={e => setNewSupplier({...newSupplier, phoneNumber: e.target.value})} />
-              <InputField placeholder="Country*" value={newSupplier.country} onChange={e => setNewSupplier({...newSupplier, country: e.target.value})} />
-              <InputField placeholder="Address Line 1*" value={newSupplier.addressLine1} onChange={e => setNewSupplier({...newSupplier, addressLine1: e.target.value})} />
-              <InputField placeholder="Address Line 2" value={newSupplier.addressLine2} onChange={e => setNewSupplier({...newSupplier, addressLine2: e.target.value})} />
-              <InputField type="number" placeholder="Monthly Quota (kg)" value={newSupplier.contractQuota} onChange={e => setNewSupplier({...newSupplier, contractQuota: e.target.value})} />
+              <InputField placeholder={t('settings.phonePlaceholder')} value={newSupplier.phoneNumber} onChange={e => setNewSupplier({...newSupplier, phoneNumber: e.target.value})} />
+              <InputField placeholder={t('settings.countryPlaceholder')} value={newSupplier.country} onChange={e => setNewSupplier({...newSupplier, country: e.target.value})} />
+              <InputField placeholder={t('settings.addressLine1Placeholder')} value={newSupplier.addressLine1} onChange={e => setNewSupplier({...newSupplier, addressLine1: e.target.value})} />
+              <InputField placeholder={t('settings.addressLine2Placeholder')} value={newSupplier.addressLine2} onChange={e => setNewSupplier({...newSupplier, addressLine2: e.target.value})} />
+              <InputField type="number" placeholder={t('settings.monthlyQuotaPlaceholder')} value={newSupplier.contractQuota} onChange={e => setNewSupplier({...newSupplier, contractQuota: e.target.value})} />
               <div className="col-span-2">
-                 <label className="text-xs text-slate-500 font-bold ml-1">Created On*</label>
+                 <label className="text-xs text-slate-500 font-bold ml-1">{t('settings.createdOn')}</label>
                  <InputField type="date" value={newSupplier.createdOn} onChange={e => setNewSupplier({...newSupplier, createdOn: e.target.value})} />
                   <InlineNotice message={supplierErrors.createdOn} />
               </div>
               
               <div className="col-span-2 grid grid-cols-2 gap-3">
                  <div>
-                    <label className="text-xs text-slate-500 font-bold ml-1">Default Milk Type</label>
+                    <label className="text-xs text-slate-500 font-bold ml-1">{t('settings.defaultMilkType')}</label>
                     <select 
                       className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                       value={newSupplier.defaultMilkType}
@@ -743,7 +745,7 @@ export const SettingsTab: React.FC = () => {
                       disabled={milkTypes.length === 0}
                     >
                        {milkTypes.length === 0 ? (
-                         <option value="">No milk types available</option>
+                         <option value="">{t('settings.noMilkTypes')}</option>
                        ) : (
                          milkTypes.map(type => <option key={type} value={type}>{type}</option>)
                        )}
@@ -757,16 +759,16 @@ export const SettingsTab: React.FC = () => {
                          onChange={e => setNewSupplier({...newSupplier, isEco: e.target.checked})}
                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                        />
-                       <span className="text-sm font-medium text-slate-700">Ecological Supplier</span>
+                       <span className="text-sm font-medium text-slate-700">{t('settings.isEco')}</span>
                     </label>
                  </div>
               </div>
             </div>
             <div className="flex gap-2">
               <button disabled={Object.keys(supplierErrors).length > 0} onClick={confirmSupplierSubmit} className={`text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2 ${Object.keys(supplierErrors).length > 0 ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600'}`}>
-                <Save size={14}/> {editingSupplierId ? 'Update' : 'Save'}
+                <Save size={14}/> {editingSupplierId ? t('common.save') : t('common.save')}
               </button>
-              <button onClick={resetSupplierForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">Cancel</button>
+              <button onClick={resetSupplierForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">{t('common.cancel')}</button>
             </div>
           </GlassCard>
         )}
@@ -775,9 +777,9 @@ export const SettingsTab: React.FC = () => {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
               <tr>
-                <th className="p-3">Name</th>
-                <th className="p-3 hidden md:table-cell">Codes</th>
-                <th className="p-3 text-right">Route/Info</th>
+                <th className="p-3">{t('settings.thName')}</th>
+                <th className="p-3 hidden md:table-cell">{t('settings.thCodes')}</th>
+                <th className="p-3 text-right">{t('settings.thRouteInfo')}</th>
                 <th className="p-3 text-center w-10"></th>
               </tr>
             </thead>
@@ -802,7 +804,7 @@ export const SettingsTab: React.FC = () => {
                       <td className="p-3 text-slate-600 font-mono text-xs hidden md:table-cell">{s.companyCode}</td>
                       <td className="p-3 text-right">
                         <div className="text-slate-700 text-xs font-semibold">{s.routeGroup}</div>
-                        <div className="text-[10px] text-slate-400">Quota: {s.contractQuota.toLocaleString()}</div>
+                        <div className="text-[10px] text-slate-400">{t('settings.quotaPrefix')} {s.contractQuota.toLocaleString()}</div>
                       </td>
                       <td className="p-3 text-center">
                         <button 
@@ -819,12 +821,12 @@ export const SettingsTab: React.FC = () => {
                         <td colSpan={4} className="p-0">
                           <div className="p-4 border-b border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             <div className="space-y-2">
-                               <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Company Details</h5>
+                               <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{t('settings.companyDetails')}</h5>
                                <div className="flex gap-2">
                                   <Building2 size={16} className="text-slate-400 shrink-0"/>
                                   <div>
                                     <div className="font-semibold text-slate-700">{s.name}</div>
-                                    <div className="text-slate-500 text-xs">Codes: {s.companyCode}</div>
+                                    <div className="text-slate-500 text-xs">{t('settings.codesPrefix')} {s.companyCode}</div>
                                   </div>
                                </div>
                                <div className="flex gap-2">
@@ -836,12 +838,12 @@ export const SettingsTab: React.FC = () => {
 
                             <div className="space-y-2">
                                <div className="flex justify-between items-start">
-                                  <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Location & Date</h5>
+                                  <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{t('settings.locationAndDate')}</h5>
                                   <button 
                                     onClick={(e) => startEditSupplier(s, e)}
                                     className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs font-bold border border-blue-200 bg-white px-3 py-1.5 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
                                   >
-                                    <Pencil size={12} /> Edit
+                                    <Pencil size={12} /> {t('common.edit')}
                                   </button>
                                </div>
                                <div className="flex gap-2">
@@ -854,7 +856,7 @@ export const SettingsTab: React.FC = () => {
                                </div>
                                <div className="flex gap-2 items-center">
                                   <Calendar size={16} className="text-slate-400 shrink-0"/>
-                                  <div className="text-slate-500 text-xs">Created: {new Date(s.createdOn).toLocaleDateString()}</div>
+                                  <div className="text-slate-500 text-xs">{t('settings.createdPrefix')} {new Date(s.createdOn).toLocaleDateString()}</div>
                                </div>
                             </div>
                           </div>
@@ -878,16 +880,16 @@ export const SettingsTab: React.FC = () => {
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
-              <Package size={16} /> Products Database
+              <Package size={16} /> {t('settings.productsDatabase')}
             </h3>
             <button 
               onClick={() => { resetProductForm(); setShowProductForm(true); }}
               className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-all shadow-sm flex items-center gap-1"
             >
-              <Plus size={14} /> Add Product
+              <Plus size={14} /> {t('settings.addProduct')}
             </button>
           </div>
-          <div className="text-[11px] text-slate-500">Drag rows to change the product order used across product selection fields in the app.</div>
+          <div className="text-[11px] text-slate-500">{t('settings.dragToReorder')}</div>
         </div>
 
         {showProductForm && (
@@ -898,37 +900,37 @@ export const SettingsTab: React.FC = () => {
                </div>
              )}
              <div className="flex justify-between items-center mb-2">
-               <h4 className="text-xs font-bold uppercase text-slate-500">{editingProductId ? 'Edit Product' : 'New Product'}</h4>
+               <h4 className="text-xs font-bold uppercase text-slate-500">{editingProductId ? t('settings.editProduct') : t('settings.addProduct')}</h4>
                <button onClick={resetProductForm}><X size={14} className="text-slate-400 hover:text-red-500"/></button>
              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-              <FormField label="Product ID" className="md:col-span-1">
-                <InputField placeholder="Required, editable later" value={newProduct.id} onChange={e => setNewProduct({...newProduct, id: e.target.value})} />
+              <FormField label={t('settings.productIdLabel')} className="md:col-span-1">
+                <InputField placeholder={t('settings.productIdPlaceholder')} value={newProduct.id} onChange={e => setNewProduct({...newProduct, id: e.target.value})} />
               </FormField>
-              <FormField label="Product Name" className="md:col-span-1">
-                <InputField placeholder="Required*" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+              <FormField label={t('settings.productNameLabel')} className="md:col-span-1">
+                <InputField placeholder={t('settings.productNamePlaceholder')} value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
               </FormField>
-              <FormField label="Details / Description" className="col-span-2">
-                 <InputField placeholder="Optional product notes" value={newProduct.details} onChange={e => setNewProduct({...newProduct, details: e.target.value})} />
+              <FormField label={t('settings.detailsLabel')} className="col-span-2">
+                 <InputField placeholder={t('settings.productDetailsPlaceholder')} value={newProduct.details} onChange={e => setNewProduct({...newProduct, details: e.target.value})} />
               </FormField>
-              <FormField label="Pallet Weight (kg, optional)">
+              <FormField label={t('settings.palletWeightLabel')}>
                 <InputField type="number" placeholder={`Defaults to ${DEFAULT_PRODUCT_PALLET_WEIGHT}`} value={newProduct.defaultPalletWeight} onChange={e => setNewProduct({...newProduct, defaultPalletWeight: e.target.value})} />
               </FormField>
-              <FormField label="Bag Weight (kg, optional)">
+              <FormField label={t('settings.bagWeightLabel')}>
                 <InputField type="number" placeholder={`Defaults to ${DEFAULT_PRODUCT_BAG_WEIGHT}`} value={newProduct.defaultBagWeight} onChange={e => setNewProduct({...newProduct, defaultBagWeight: e.target.value})} />
               </FormField>
-              <FormField label="Target Protein % (optional)">
-                <InputField type="number" placeholder="Optional, can be updated later" value={newProduct.proteinTargetPct} onChange={e => setNewProduct({...newProduct, proteinTargetPct: e.target.value})} />
+              <FormField label={t('settings.proteinTargetLabel')}>
+                <InputField type="number" placeholder={t('settings.optionalCanUpdateLater')} value={newProduct.proteinTargetPct} onChange={e => setNewProduct({...newProduct, proteinTargetPct: e.target.value})} />
               </FormField>
-              <FormField label="Yield Factor (optional)">
-                <InputField type="number" step="0.001" placeholder="Optional, can be updated later" value={newProduct.yieldFactor} onChange={e => setNewProduct({...newProduct, yieldFactor: e.target.value})} />
+              <FormField label={t('settings.yieldFactorLabel')}>
+                <InputField type="number" step="0.001" placeholder={t('settings.optionalCanUpdateLater')} value={newProduct.yieldFactor} onChange={e => setNewProduct({...newProduct, yieldFactor: e.target.value})} />
               </FormField>
             </div>
             <div className="flex gap-2">
               <button disabled={Object.keys(productErrors).length > 0} onClick={confirmProductSubmit} className={`text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2 ${Object.keys(productErrors).length > 0 ? 'bg-amber-300 cursor-not-allowed' : 'bg-amber-600'}`}>
-                <Save size={14}/> {editingProductId ? 'Update' : 'Save'}
+                <Save size={14}/> {editingProductId ? t('common.save') : t('common.save')}
               </button>
-              <button onClick={resetProductForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">Cancel</button>
+              <button onClick={resetProductForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">{t('common.cancel')}</button>
             </div>
           </GlassCard>
         )}
@@ -937,9 +939,9 @@ export const SettingsTab: React.FC = () => {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
               <tr>
-                <th className="p-3">ID</th>
-                <th className="p-3">Name</th>
-                <th className="p-3 text-right">Specs</th>
+                <th className="p-3">{t('settings.thId')}</th>
+                <th className="p-3">{t('settings.thName')}</th>
+                <th className="p-3 text-right">{t('settings.thSpecs')}</th>
                 <th className="p-3 text-center w-16"></th>
               </tr>
             </thead>
@@ -982,7 +984,7 @@ export const SettingsTab: React.FC = () => {
         {/* Milk Types */}
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
-            <Droplets size={16} /> Milk Types
+            <Droplets size={16} /> {t('settings.milkTypes')}
           </h3>
           <div className="text-[11px] text-slate-500">Drag chips to control the milk type order shown in supplier and intake forms.</div>
           
@@ -996,7 +998,7 @@ export const SettingsTab: React.FC = () => {
                  onKeyDown={e => e.key === 'Enter' && handleAddMilkType()}
                />
                <button onClick={handleAddMilkType} className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-blue-700 transition-colors">
-                 Add
+                 {t('common.add')}
                </button>
              </div>
              <InlineNotice message={milkTypeError} />
@@ -1030,20 +1032,20 @@ export const SettingsTab: React.FC = () => {
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
-              <Briefcase size={16} /> Buyers Database
+              <Briefcase size={16} /> {t('settings.buyersDatabase')}
             </h3>
             <button 
               onClick={() => { resetBuyerForm(); setShowBuyerForm(true); }}
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-all shadow-sm flex items-center gap-1"
             >
-              <Plus size={14} /> Add New
+              <Plus size={14} /> {t('common.add')}
             </button>
           </div>
           <div className="relative">
             <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search buyers..." 
+              placeholder={t('settings.searchBuyers')} 
               value={buyerSearch}
               onChange={(e) => setBuyerSearch(e.target.value)}
               className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs focus:ring-2 focus:ring-emerald-100 outline-none"
@@ -1061,23 +1063,23 @@ export const SettingsTab: React.FC = () => {
                </div>
              )}
              <div className="flex justify-between items-center mb-2">
-               <h4 className="text-xs font-bold uppercase text-slate-500">{editingBuyerId ? 'Edit Buyer' : 'New Buyer'}</h4>
+               <h4 className="text-xs font-bold uppercase text-slate-500">{editingBuyerId ? t('settings.editBuyer') : t('settings.addBuyer')}</h4>
                <button onClick={resetBuyerForm}><X size={14} className="text-slate-400 hover:text-red-500"/></button>
              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
               <div className="col-span-2">
-                <InputField placeholder="Buyer Name*" value={newBuyer.name} onChange={e => setNewBuyer({...newBuyer, name: e.target.value})} />
+                <InputField placeholder={t('settings.buyerNamePlaceholder')} value={newBuyer.name} onChange={e => setNewBuyer({...newBuyer, name: e.target.value})} />
               </div>
               <div className="md:col-span-2">
-                <InputField placeholder="Company Code(s)* — separate multiple VAT codes with ; or ," value={newBuyer.companyCode} onChange={e => setNewBuyer({...newBuyer, companyCode: e.target.value})} />
-                <div className="mt-1 text-[11px] text-slate-400">Dispatch invoice PDF can use any one of these codes.</div>
+                <InputField placeholder={t('settings.companyCodePlaceholder')} value={newBuyer.companyCode} onChange={e => setNewBuyer({...newBuyer, companyCode: e.target.value})} />
+                <div className="mt-1 text-[11px] text-slate-400">{t('settings.companyCodeHintBuyer')}</div>
               </div>
-              <InputField placeholder="Phone Number" value={newBuyer.phoneNumber} onChange={e => setNewBuyer({...newBuyer, phoneNumber: e.target.value})} />
-              <InputField placeholder="Country*" value={newBuyer.country} onChange={e => setNewBuyer({...newBuyer, country: e.target.value})} />
-              <InputField placeholder="Address Line 1*" value={newBuyer.addressLine1} onChange={e => setNewBuyer({...newBuyer, addressLine1: e.target.value})} />
-              <InputField placeholder="Address Line 2" value={newBuyer.addressLine2} onChange={e => setNewBuyer({...newBuyer, addressLine2: e.target.value})} />
+              <InputField placeholder={t('settings.phonePlaceholder')} value={newBuyer.phoneNumber} onChange={e => setNewBuyer({...newBuyer, phoneNumber: e.target.value})} />
+              <InputField placeholder={t('settings.countryPlaceholder')} value={newBuyer.country} onChange={e => setNewBuyer({...newBuyer, country: e.target.value})} />
+              <InputField placeholder={t('settings.addressLine1Placeholder')} value={newBuyer.addressLine1} onChange={e => setNewBuyer({...newBuyer, addressLine1: e.target.value})} />
+              <InputField placeholder={t('settings.addressLine2Placeholder')} value={newBuyer.addressLine2} onChange={e => setNewBuyer({...newBuyer, addressLine2: e.target.value})} />
               <div>
-                 <label className="text-xs text-slate-500 font-bold ml-1">Created On*</label>
+                 <label className="text-xs text-slate-500 font-bold ml-1">{t('settings.createdOn')}</label>
                  <InputField type="date" value={newBuyer.createdOn} onChange={e => setNewBuyer({...newBuyer, createdOn: e.target.value})} />
               </div>
             </div>
@@ -1086,11 +1088,11 @@ export const SettingsTab: React.FC = () => {
             <div className="mt-4 pt-3 border-t border-emerald-200/50">
                <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-emerald-700 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <FileText size={12}/> Contracts
+                      <FileText size={12}/> {t('settings.contracts')}
                   </label>
                   {editingContractId && (
                     <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 animate-pulse">
-                      <Pencil size={10}/> Editing Mode
+                      <Pencil size={10}/> {t('settings.editingMode')}
                     </span>
                   )}
                </div>
@@ -1100,7 +1102,7 @@ export const SettingsTab: React.FC = () => {
                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
                     <input 
                       className="w-full bg-white border border-slate-300 rounded p-1.5 text-xs" 
-                      placeholder="Contract No." 
+                      placeholder={t('settings.contractNoPlaceholder')} 
                       value={contractForm.contractNumber}
                       onChange={e => setContractForm({...contractForm, contractNumber: e.target.value})}
                     />
@@ -1113,13 +1115,13 @@ export const SettingsTab: React.FC = () => {
                     </select>
                     <input 
                       type="number" className="w-full bg-white border border-slate-300 rounded p-1.5 text-xs" 
-                      placeholder="Price €/kg" 
+                      placeholder={t('settings.pricePerKgPlaceholder')} 
                       value={contractForm.pricePerKg}
                       onChange={e => setContractForm({...contractForm, pricePerKg: e.target.value})}
                     />
                     <input 
                       type="number" className="w-full bg-white border border-slate-300 rounded p-1.5 text-xs" 
-                      placeholder="Amount (kg)" 
+                      placeholder={t('settings.amountKgPlaceholder')} 
                       value={contractForm.agreedAmountKg}
                       onChange={e => setContractForm({...contractForm, agreedAmountKg: e.target.value})}
                     />
@@ -1130,7 +1132,7 @@ export const SettingsTab: React.FC = () => {
                         className={`flex-1 text-white rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 ${Object.keys(contractErrors).length > 0 ? 'bg-slate-300 cursor-not-allowed' : editingContractId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                       >
                         {editingContractId ? <Save size={12}/> : <Plus size={12}/>}
-                        {editingContractId ? 'Update' : 'Add'}
+                        {editingContractId ? t('common.save') : t('common.add')}
                       </button>
                       {editingContractId && (
                         <button onClick={cancelContractEdit} className="px-2 bg-slate-200 text-slate-500 hover:text-slate-700 rounded text-xs font-bold">
@@ -1141,11 +1143,11 @@ export const SettingsTab: React.FC = () => {
                  </div>
                  <div className="flex gap-2">
                     <div className="flex-1">
-                      <label className="text-[9px] text-slate-400 font-bold uppercase">Start Date</label>
+                      <label className="text-[9px] text-slate-400 font-bold uppercase">{t('settings.startDate')}</label>
                       <input type="date" className="w-full bg-white border border-slate-300 rounded p-1 text-xs" value={contractForm.startDate} onChange={e => setContractForm({...contractForm, startDate: e.target.value})} />
                     </div>
                     <div className="flex-1">
-                      <label className="text-[9px] text-slate-400 font-bold uppercase">End Date</label>
+                      <label className="text-[9px] text-slate-400 font-bold uppercase">{t('settings.endDate')}</label>
                       <input type="date" className="w-full bg-white border border-slate-300 rounded p-1 text-xs" value={contractForm.endDate} onChange={e => setContractForm({...contractForm, endDate: e.target.value})} />
                     </div>
                  </div>
@@ -1174,9 +1176,9 @@ export const SettingsTab: React.FC = () => {
 
             <div className="flex gap-2 mt-4">
               <button disabled={Object.keys(buyerErrors).length > 0} onClick={confirmBuyerSubmit} className={`text-white px-4 py-1.5 rounded text-sm font-medium flex items-center gap-2 ${Object.keys(buyerErrors).length > 0 ? 'bg-emerald-300 cursor-not-allowed' : 'bg-emerald-600'}`}>
-                <Save size={14} /> {editingBuyerId ? 'Update' : 'Save'}
+                <Save size={14} /> {editingBuyerId ? t('common.save') : t('common.save')}
               </button>
-              <button onClick={resetBuyerForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">Cancel</button>
+              <button onClick={resetBuyerForm} className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded text-sm font-medium">{t('common.cancel')}</button>
             </div>
           </GlassCard>
         )}
@@ -1185,9 +1187,9 @@ export const SettingsTab: React.FC = () => {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
               <tr>
-                <th className="p-3">Name</th>
-                <th className="p-3">Country</th>
-                <th className="p-3 text-right hidden md:table-cell">Contracts</th>
+                <th className="p-3">{t('settings.thName')}</th>
+                <th className="p-3">{t('settings.thCountry')}</th>
+                <th className="p-3 text-right hidden md:table-cell">{t('settings.thContracts')}</th>
                 <th className="p-3 text-center w-10"></th>
               </tr>
             </thead>
@@ -1213,7 +1215,7 @@ export const SettingsTab: React.FC = () => {
                         <div className="flex items-center gap-1"><Globe size={12}/> {b.country}</div>
                       </td>
                       <td className="p-3 text-right font-mono text-xs text-slate-500 hidden md:table-cell">
-                        {(() => { const unused = (b.contracts || []).filter(c => !isContractUsed(b.id, c.contractNumber)).length; const total = (b.contracts || []).length; return unused > 0 ? `${unused} active` : total > 0 ? `${total} used` : '0'; })()}
+                        {(() => { const unused = (b.contracts || []).filter(c => !isContractUsed(b.id, c.contractNumber)).length; const total = (b.contracts || []).length; return unused > 0 ? `${unused} ${t('settings.activeContracts')}` : total > 0 ? `${total} ${t('settings.usedLabel')}` : '0'; })()}
                       </td>
                       <td className="p-3 text-center w-16">
                         <button 
@@ -1230,12 +1232,12 @@ export const SettingsTab: React.FC = () => {
                          <td colSpan={4} className="p-0">
                            <div className="p-4 border-b border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                              <div className="space-y-2">
-                                <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Company Details</h5>
+                                <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{t('settings.companyDetails')}</h5>
                                 <div className="flex gap-2">
                                    <Building2 size={16} className="text-slate-400 shrink-0"/>
                                    <div>
                                      <div className="font-semibold text-slate-700">{b.name}</div>
-                                     <div className="text-slate-500 text-xs">Codes: {b.companyCode}</div>
+                                     <div className="text-slate-500 text-xs">{t('settings.codesPrefix')} {b.companyCode}</div>
                                    </div>
                                 </div>
                                 <div className="flex gap-2">
@@ -1246,12 +1248,12 @@ export const SettingsTab: React.FC = () => {
 
                              <div className="space-y-2">
                                 <div className="flex justify-between items-start">
-                                  <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Contracts</h5>
+                                  <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{t('settings.thContracts')}</h5>
                                   <button 
                                     onClick={(e) => startEditBuyer(b, e)}
                                     className="text-emerald-600 hover:text-emerald-800 flex items-center gap-1 text-xs font-bold border border-emerald-200 bg-white px-3 py-1.5 rounded-md hover:bg-emerald-50 transition-colors shadow-sm"
                                   >
-                                    <Pencil size={12} /> Edit
+                                    <Pencil size={12} /> {t('common.edit')}
                                   </button>
                                 </div>
                                 {b.contracts && b.contracts.length > 0 ? (() => {
@@ -1274,7 +1276,7 @@ export const SettingsTab: React.FC = () => {
                                           ))}
                                         </div>
                                       ) : (
-                                        <div className="text-xs text-slate-400 italic">No unused contracts.</div>
+                                        <div className="text-xs text-slate-400 italic">{t('settings.noUnusedContracts')}</div>
                                       )}
                                       {usedContracts.length > 0 && (
                                         <div>
@@ -1282,7 +1284,7 @@ export const SettingsTab: React.FC = () => {
                                             onClick={() => setShowUsedContracts(prev => ({ ...prev, [b.id]: !prev[b.id] }))}
                                             className="text-[10px] text-slate-400 hover:text-blue-600 font-medium mb-1"
                                           >
-                                            {showUsed ? 'Hide' : 'Show'} used contracts ({usedContracts.length})
+                                            {showUsed ? t('settings.hideUsedContracts') : t('settings.showUsedContracts')} {t('settings.usedContracts')} ({usedContracts.length})
                                           </button>
                                           {showUsed && (
                                             <div className="max-h-40 overflow-y-auto space-y-1">
@@ -1303,7 +1305,7 @@ export const SettingsTab: React.FC = () => {
                                     </div>
                                   );
                                 })() : (
-                                  <div className="text-xs text-slate-400 italic">No contracts.</div>
+                                  <div className="text-xs text-slate-400 italic">{t('settings.noContractsYet')}</div>
                                 )}
                              </div>
                            </div>

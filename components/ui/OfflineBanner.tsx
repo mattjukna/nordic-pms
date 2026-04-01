@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { WifiOff } from 'lucide-react';
+import { useTranslation } from '../../i18n/useTranslation';
 
 const OfflineBanner: React.FC = () => {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -15,12 +16,14 @@ const OfflineBanner: React.FC = () => {
     };
   }, []);
 
+  const { t } = useTranslation();
+
   if (!isOffline) return null;
 
   return (
     <div className="fixed top-0 inset-x-0 z-[300] bg-amber-500 text-white text-center py-2 text-sm font-medium flex items-center justify-center gap-2 shadow-lg">
       <WifiOff size={16} />
-      You are offline. Changes won't be saved until you reconnect.
+      {t('offline.message')}
     </div>
   );
 };

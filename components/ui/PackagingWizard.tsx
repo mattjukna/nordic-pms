@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { LayoutGrid, X, Plus, Trash2 } from 'lucide-react';
 import { normalizePackagingString } from '../../utils/parser';
+import { useTranslation } from '../../i18n/useTranslation';
 
 interface PackagingWizardProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface PackagingWizardProps {
 }
 
 export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClose, onApply, defaultPallet, defaultBag }) => {
+   const { t } = useTranslation();
    const [lines, setLines] = useState<{ count: string; type: 'pad' | 'bb' | 'tank' | 'kg'; weight: string }[]>([
       { count: '', type: 'pad', weight: defaultPallet?.toString() || '0' }
    ]);
@@ -68,7 +70,7 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
     <div className="fixed inset-0 z-[100] bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-slate-900/10">
           <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-             <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><LayoutGrid size={16}/> Packaging Builder</h3>
+             <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><LayoutGrid size={16}/> {t('packagingWizard.title')}</h3>
              <button onClick={onClose}><X size={16} className="text-slate-400 hover:text-red-500"/></button>
           </div>
           <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
@@ -79,14 +81,14 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
                return (
                <div key={idx} className="flex gap-2 items-end">
                   <div className="w-16">
-                     <label className="text-[10px] font-bold text-slate-400 uppercase">Count</label>
+                     <label className="text-[10px] font-bold text-slate-400 uppercase">{t('packagingWizard.count')}</label>
                                <input type="number" step={line.type === 'kg' ? '1' : '1'} min={0} className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.count} onChange={e => updateLine(idx, 'count', e.target.value)} />
                                {hasDecimal && line.type !== 'kg' && (
-                                  <div className="text-[10px] text-amber-600 mt-1">Use partial unit weights (e.g. 1 pad*700) or add a 'kg' line</div>
+                                  <div className="text-[10px] text-amber-600 mt-1">{t('packagingWizard.fractionalWarning')}</div>
                                )}
                   </div>
                   <div className="w-28">
-                     <label className="text-[10px] font-bold text-slate-400 uppercase">Type</label>
+                     <label className="text-[10px] font-bold text-slate-400 uppercase">{t('packagingWizard.type')}</label>
                      <select className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.type} onChange={e => updateLine(idx, 'type', e.target.value as any)}>
                         <option value="pad">Pallet</option>
                         <option value="bb">Big Bag</option>
@@ -95,14 +97,14 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
                      </select>
                   </div>
                   <div className="flex-1">
-                     <label className="text-[10px] font-bold text-slate-400 uppercase">Unit Wgt (kg)</label>
+                     <label className="text-[10px] font-bold text-slate-400 uppercase">{t('packagingWizard.unitWeight')}</label>
                      <input type="number" className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.weight} onChange={e => updateLine(idx, 'weight', e.target.value)} disabled={line.type === 'kg'} />
                   </div>
                   <button onClick={() => removeLine(idx)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={14}/></button>
                </div>
              )})}
              <button onClick={addLine} className="text-xs text-blue-600 font-bold flex items-center gap-1 hover:underline mt-2">
-                <Plus size={12}/> Add Line
+                <Plus size={12}/> {t('packagingWizard.addLine')}
              </button>
           </div>
           <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
@@ -110,7 +112,7 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
                 {(function(){ const raw = buildRawString(); const norm = normalizePackagingString(raw, defaultPallet, defaultBag); return norm.normalized || raw || 'Empty'; })()}
              </div>
              <button onClick={handleApply} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm">
-                Apply to Batch
+                {t('packagingWizard.applyToBatch')}
              </button>
           </div>
        </div>

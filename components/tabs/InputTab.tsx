@@ -20,6 +20,7 @@ import { apiFetch } from '../../services/apiFetch';
 import { validateIntakeForm, validateOutputForm } from '../../utils/validation';
 import type { IntakePricingMode, IntakeUnitPriceBasis } from '../../types';
 import { PurchaseDataTab } from './PurchaseDataTab';
+import { useTranslation } from '../../i18n/useTranslation';
 
 // --- Smart Note Input Component ---
 const SUGGESTED_TAGS = ['#HighTemp', '#HighAcid', '#LowProtein', '#DamagedPackaging', '#LateArrival'];
@@ -128,6 +129,7 @@ const FilterSection: React.FC<{
   label: string;
   filterOptions?: FilterOption[];
 }> = ({ isOpen, onToggle, filters, onFilterChange, count, label, filterOptions }) => {
+  const { t } = useTranslation();
   const [localSearch, setLocalSearch] = React.useState(filters.search);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -160,7 +162,7 @@ const FilterSection: React.FC<{
       <div className="flex items-center justify-between cursor-pointer" onClick={onToggle}>
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
           <Filter size={14} className={isOpen ? 'text-blue-600' : 'text-slate-400'} />
-          <span>{label} History</span>
+          <span>{label}</span>
           <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{count}</span>
           {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
         </div>
@@ -175,7 +177,7 @@ const FilterSection: React.FC<{
             <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search..." 
+              placeholder={t('common.search') + '...'} 
               className="w-full bg-white text-slate-900 pl-8 pr-2 py-1.5 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-slate-400"
               value={localSearch}
               onChange={(e) => handleSearchChange(e.target.value)}
@@ -221,7 +223,7 @@ const FilterSection: React.FC<{
           
           <div className="col-span-12 flex gap-1 justify-between">
              {[
-               { l: 'Today', d: 0 }, { l: 'Week', d: 7 }, { l: 'Month', d: 30 }, { l: 'Qtr', d: 90 }
+               { l: t('common.today'), d: 0 }, { l: t('common.week'), d: 7 }, { l: t('common.month'), d: 30 }, { l: t('common.qtr'), d: 90 }
              ].map(p => (
                <button 
                   key={p.l}
@@ -241,17 +243,17 @@ const FilterSection: React.FC<{
                  }}
                  className="bg-red-50 border border-red-200 text-red-500 hover:bg-red-100 text-[10px] px-2 py-1 rounded transition-colors uppercase font-semibold"
                >
-                 Clear
+                 {t('common.clear')}
                </button>
              )}
           </div>
 
           <div className="col-span-12 text-[10px] text-center text-slate-400 italic">
-            Showing all matching results. Clear filters to reset.
+            {t('input.showingAllMatching')}
           </div>
         </div>
       )}
-      {!isOpen && <div className="text-[10px] text-slate-400 pl-6">Showing recent 5 entries</div>}
+      {!isOpen && <div className="text-[10px] text-slate-400 pl-6">{t('input.showingRecent', { count: 5 })}</div>}
     </div>
   );
 };
@@ -277,6 +279,7 @@ export const InputTab: React.FC = () => {
     milkTypes
   } = useStore();
   const undoableDelete = useUndoDelete();
+  const { t } = useTranslation();
 
   // Input Form States (Intake)
   const [activeMode, setActiveMode] = useState<'intake' | 'output' | 'purchase'>('intake');
@@ -316,9 +319,9 @@ export const InputTab: React.FC = () => {
   })), [suppliers]);
 
   const supplierFilters = useMemo(() => [
-    { id: 'concentrate', label: 'Concentrate', predicate: (s: any) => s.defaultMilkType?.toLowerCase().includes('concentrate') },
-    { id: 'milk', label: 'Raw Milk', predicate: (s: any) => !s.defaultMilkType?.toLowerCase().includes('concentrate') },
-    { id: 'eco', label: 'Ecological', predicate: (s: any) => s.isEco }
+    { id: 'concentrate', label: t('input.filterConcentrate'), predicate: (s: any) => s.defaultMilkType?.toLowerCase().includes('concentrate') },
+    { id: 'milk', label: t('input.filterRawMilk'), predicate: (s: any) => !s.defaultMilkType?.toLowerCase().includes('concentrate') },
+    { id: 'eco', label: t('input.filterEcological'), predicate: (s: any) => s.isEco }
   ], []);
 
   // Confirmation Modal State
@@ -433,16 +436,16 @@ export const InputTab: React.FC = () => {
     const uniqueRoutes = [...new Set(suppliers.map(s => s.routeGroup).filter(Boolean))].sort();
     const uniqueMilkTypes = milkTypes.length > 0 ? [...milkTypes] : [...new Set(intakeEntries.map(e => e.milkType).filter(Boolean))].sort();
     return [
-      { key: 'supplier', label: 'All suppliers', options: uniqueSuppliers.map(s => ({ value: s, label: s })) },
-      { key: 'route', label: 'All routes', options: uniqueRoutes.map(r => ({ value: r, label: r })) },
-      { key: 'milkType', label: 'All milk types', options: uniqueMilkTypes.map(m => ({ value: m, label: m })) },
+      { key: 'supplier', label: t('input.allSuppliers'), options: uniqueSuppliers.map(s => ({ value: s, label: s })) },
+      { key: 'route', label: t('input.allRoutes'), options: uniqueRoutes.map(r => ({ value: r, label: r })) },
+      { key: 'milkType', label: t('input.allMilkTypes'), options: uniqueMilkTypes.map(m => ({ value: m, label: m })) },
     ];
   }, [intakeEntries, suppliers, milkTypes]);
 
   const outputFilterOptions = useMemo<FilterOption[]>(() => {
     const uniqueProducts = [...new Set(outputEntries.map(e => e.productId))].sort();
     return [
-      { key: 'product', label: 'All products', options: uniqueProducts.map(p => ({ value: p, label: p })) },
+      { key: 'product', label: t('input.allProducts'), options: uniqueProducts.map(p => ({ value: p, label: p })) },
     ];
   }, [outputEntries]);
 
@@ -661,8 +664,8 @@ export const InputTab: React.FC = () => {
 
     setConfirmModal({
       isOpen: true,
-      title: editingIntakeId ? "Confirm Update" : "Confirm New Intake",
-      message: `Are you sure you want to ${editingIntakeId ? 'update' : 'add'} this intake entry for ${supplier.name} (${intakeKg}kg) on ${intakeDate}?`,
+      title: editingIntakeId ? t('input.editIntake') : t('input.intakeEntry'),
+      message: `${t('common.confirm')}: ${supplier.name} (${intakeKg}kg) — ${intakeDate}`,
       action: () => { void executeIntakeSubmit(); },
       isDanger: false
     });
@@ -754,13 +757,13 @@ export const InputTab: React.FC = () => {
   const confirmOutputSubmit = () => {
     if (Object.keys(outputErrors).length > 0) return;
     if (anyFractional(parserPreview)) {
-      setConfirmModal({ isOpen: true, title: 'Invalid Packaging', message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder.", action: () => setConfirmModal(prev => ({ ...prev, isOpen: false })), isDanger: false });
+      setConfirmModal({ isOpen: true, title: t('input.outputEntry'), message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder.", action: () => setConfirmModal(prev => ({ ...prev, isOpen: false })), isDanger: false });
       return;
     }
     setConfirmModal({
       isOpen: true,
-      title: editingOutputId ? "Confirm Update" : "Confirm Production Log",
-      message: `Are you sure you want to log ${parserPreview.totalWeight.toLocaleString()}kg of ${selectedProductId} (Batch: ${batchId})?`,
+      title: editingOutputId ? t('input.editOutput') : t('input.outputEntry'),
+      message: `${t('common.confirm')}: ${parserPreview.totalWeight.toLocaleString()}kg ${selectedProductId} (${batchId})`,
       action: () => { void executeOutputSubmit(); },
       isDanger: false
     });
@@ -857,7 +860,7 @@ export const InputTab: React.FC = () => {
                 activeMode === 'intake' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Droplets size={16} className="shrink-0" /> <span className="truncate">Milk{"\u00A0"}Intake</span>
+              <Droplets size={16} className="shrink-0" /> <span className="truncate">{t('input.intakeMode')}</span>
             </button>
             <button
               onClick={() => setActiveMode('output')}
@@ -865,7 +868,7 @@ export const InputTab: React.FC = () => {
                 activeMode === 'output' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Factory size={16} className="shrink-0" /> <span className="truncate">Production</span>
+              <Factory size={16} className="shrink-0" /> <span className="truncate">{t('input.outputMode')}</span>
             </button>
             <button
               onClick={() => setActiveMode('purchase')}
@@ -873,7 +876,7 @@ export const InputTab: React.FC = () => {
                 activeMode === 'purchase' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Receipt size={16} className="shrink-0" /> <span className="truncate">Invoices</span>
+              <Receipt size={16} className="shrink-0" /> <span className="truncate">{t('input.purchaseMode')}</span>
             </button>
          </div>
          <div className="ml-3 hidden md:block">
@@ -882,7 +885,7 @@ export const InputTab: React.FC = () => {
              className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-md text-sm font-semibold hover:bg-indigo-100 transition-colors"
              title="Export monthly report"
            >
-             Export
+             {t('trends.exportReport')}
            </button>
          </div>
       </div>
@@ -891,7 +894,7 @@ export const InputTab: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6 animate-slide-up min-w-0">
         <div className="flex-1 min-w-0 flex flex-col gap-4">
         <div className="text-slate-500 uppercase text-xs font-bold tracking-widest px-1 pt-2 md:pt-0">
-          New Intake Entry
+          {t('input.intakeEntry')}
         </div>
         
         {/* Entry Form */}
@@ -901,13 +904,13 @@ export const InputTab: React.FC = () => {
              {/* Note: Kept existing logic mostly same, just ensuring PackagingWizard usage below */}
              {editingIntakeId && (
                <div className="col-span-12 flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider mb-[-8px]">
-                 <Pencil size={12} /> Editing Mode
+                 <Pencil size={12} /> {t('input.editingMode')}
                </div>
              )}
             <div className="col-span-12 md:col-span-4">
               <SmartSelect 
-                label="Supplier"
-                placeholder="Select Supplier..."
+                label={t('common.supplier')}
+                placeholder={t('smartSelect.placeholder')}
                 options={supplierOptions}
                 value={selectedSupplierId}
                 onChange={setSelectedSupplierId}
@@ -917,14 +920,14 @@ export const InputTab: React.FC = () => {
             </div>
             
             <div className="col-span-12 md:col-span-4">
-               <label className="text-xs font-semibold text-slate-600 block mb-1.5">Milk Type</label>
+               <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.milkType')}</label>
                <SelectField value={milkType} onChange={e => setMilkType(e.target.value)} className={intakeErrors.milkType ? INTAKE_ERROR_CLASS : ''}>
                   {milkTypes.map(t => <option key={t} value={t}>{t}</option>)}
                </SelectField>
             </div>
 
             <div className="col-span-12 md:col-span-4">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Date</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('common.date')}</label>
               <InputField 
                 type="date"
                 value={intakeDate}
@@ -934,9 +937,9 @@ export const InputTab: React.FC = () => {
             </div>
 
             <div className="col-span-4 md:col-span-3">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Received kg</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.quantityKg')}</label>
               <InputField 
-                type="number" 
+                type="number"
                 value={intakeKg}
                 onChange={(e) => setIntakeKg(e.target.value)}
                 placeholder="0"
@@ -945,7 +948,7 @@ export const InputTab: React.FC = () => {
             </div>
 
             <div className="col-span-4 md:col-span-2">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Fat %</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.fatPct')}</label>
               <InputField 
                 type="number" 
                 value={fat}
@@ -955,7 +958,7 @@ export const InputTab: React.FC = () => {
               />
             </div>
             <div className="col-span-4 md:col-span-2">
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">Prot %</label>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.proteinPct')}</label>
               <InputField 
                 type="number" 
                 value={protein}
@@ -976,7 +979,7 @@ export const InputTab: React.FC = () => {
               />
             </div>
             <div className="col-span-4 md:col-span-2">
-                 <label className="text-xs font-semibold text-slate-600 block mb-1.5">Temp °C</label>
+                 <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.temperatureC')}</label>
                   <InputField 
                     type="number" 
                     value={temp}
@@ -989,8 +992,8 @@ export const InputTab: React.FC = () => {
             <div className="col-span-12 rounded-lg border border-slate-200 bg-white p-3">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Raw Milk Coefficient</div>
-                  <div className="mt-1 text-xs text-slate-500">Use lab-adjusted kg for raw milk yield calculations only.</div>
+                  <div className="text-xs font-bold uppercase tracking-widest text-slate-500">{t('input.labCoefficient')}</div>
+                  <div className="mt-1 text-xs text-slate-500">{t('input.labCoeffDesc')}</div>
                 </div>
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                   <input
@@ -999,48 +1002,48 @@ export const InputTab: React.FC = () => {
                     onChange={(e) => setApplyLabCoefficient(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
-                  Apply raw-milk coefficient
+                  {t('input.applyLabCoeff')}
                 </label>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="rounded-md bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Received kg</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('input.receivedKg')}</div>
                   <div className="mt-1 text-sm font-bold text-slate-800">{Number(intakeKg || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</div>
                 </div>
                 <div className="rounded-md bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Lab coefficient</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('input.labCoefficient')}</div>
                   <div className="mt-1 text-sm font-bold text-slate-800">{applyLabCoefficient ? intakeDerived.labCoefficient.toFixed(3) : '1.000'}</div>
                 </div>
                 <div className="rounded-md bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Effective kg</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('input.effectiveKg')}</div>
                   <div className="mt-1 text-sm font-bold text-slate-800">{intakeDerived.effectiveQuantityKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</div>
                 </div>
               </div>
             </div>
 
             <div className="col-span-12 rounded-lg border border-slate-200 bg-white p-3">
-              <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Pricing</div>
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-500">{t('input.pricing')}</div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setPricingMode('invoice_total')}
                   className={`rounded-md px-3 py-1.5 text-xs font-bold uppercase transition-all ${pricingMode === 'invoice_total' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
-                  Invoice total (€)
+                  {t('input.invoiceTotal')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setPricingMode('unit_price')}
                   className={`rounded-md px-3 py-1.5 text-xs font-bold uppercase transition-all ${pricingMode === 'unit_price' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
-                  Unit price × quantity
+                  {t('input.unitPriceQty')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setPricingMode('')}
                   className={`rounded-md px-3 py-1.5 text-xs font-bold uppercase transition-all ${pricingMode === '' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
-                  Add later
+                  {t('input.addLater')}
                 </button>
               </div>
 
@@ -1048,13 +1051,13 @@ export const InputTab: React.FC = () => {
               <>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">Invoice number</label>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.invoiceNumber')}</label>
                   <InputField value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Optional invoice reference" />
                 </div>
 
                 {pricingMode === 'invoice_total' ? (
                   <div className="md:col-span-2">
-                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Invoice total (€)</label>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.invoiceTotal')}</label>
                     <InputField
                       type="number"
                       step="0.01"
@@ -1067,7 +1070,7 @@ export const InputTab: React.FC = () => {
                 ) : (
                   <>
                     <div>
-                      <label className="text-xs font-semibold text-slate-600 block mb-1.5">Unit price (€/kg)</label>
+                      <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.unitPrice')}</label>
                       <InputField
                         type="number"
                         step="0.0001"
@@ -1078,10 +1081,10 @@ export const InputTab: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-600 block mb-1.5">Pricing basis</label>
+                      <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('input.pricingBasis')}</label>
                       <SelectField value={unitPriceBasis} onChange={(e) => setUnitPriceBasis(e.target.value as IntakeUnitPriceBasis)} className={intakeErrors.unitPriceBasis ? INTAKE_ERROR_CLASS : ''}>
-                        <option value="received_kg">Received kg</option>
-                        <option value="effective_kg">Lab-adjusted kg</option>
+                        <option value="received_kg">{t('input.receivedKg')}</option>
+                        <option value="effective_kg">{t('input.labAdjustedKg')}</option>
                       </SelectField>
                     </div>
                   </>
@@ -1090,15 +1093,15 @@ export const InputTab: React.FC = () => {
 
               <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
                 <div className="rounded-md bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total €</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('input.invoiceTotal')}</div>
                   <div className="mt-1 text-sm font-bold text-slate-800">€{intakePricingPreview.calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
                 <div className="rounded-md bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">€/received kg</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('input.euroReceivedKg')}</div>
                   <div className="mt-1 text-sm font-bold text-slate-800">€{intakePricingPreview.derivedUnitPricePerReceivedKg.toFixed(4)}</div>
                 </div>
                 <div className="rounded-md bg-slate-50 px-3 py-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">€/effective kg</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('input.euroEffectiveKg')}</div>
                   <div className="mt-1 text-sm font-bold text-slate-800">€{intakePricingPreview.derivedUnitPricePerEffectiveKg.toFixed(4)}</div>
                 </div>
               </div>
@@ -1107,7 +1110,7 @@ export const InputTab: React.FC = () => {
 
               {pricingMode === '' && (
                 <div className="mt-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
-                  Pricing will be added later via the <strong>Invoices</strong> tab.
+                  {t('input.pricingAddLaterMsg')}
                 </div>
               )}
             </div>
@@ -1126,7 +1129,7 @@ export const InputTab: React.FC = () => {
            </div>
             
             <div className="col-span-12 md:col-span-12">
-               <label className="text-xs font-semibold text-slate-600 block mb-1.5">Notes</label>
+               <label className="text-xs font-semibold text-slate-600 block mb-1.5">{t('common.note')}</label>
                <SmartNoteInput value={note} onChange={(val, newTags) => {
                  setNote(val);
                  setTags(prev => Array.from(new Set([...prev, ...newTags])));
@@ -1143,7 +1146,7 @@ export const InputTab: React.FC = () => {
                     className={`flex-1 text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all font-bold ${Object.keys(intakeErrors).length > 0 ? 'bg-amber-300 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'}`}
                     title="Update Entry"
                   >
-                    <Check size={20} /> Update Entry
+                    <Check size={20} /> {t('input.updateEntry')}
                   </button>
                   <button 
                     onClick={handleCancelIntakeEdit}
@@ -1160,7 +1163,7 @@ export const InputTab: React.FC = () => {
                   disabled={Object.keys(intakeErrors).length > 0}
                   className={`w-full text-white shadow-sm rounded-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] font-bold ${Object.keys(intakeErrors).length > 0 ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                 >
-                  <Plus size={20} /> Add Intake Entry
+                  <Plus size={20} /> {t('input.submitEntry')}
                 </button>
               )}
             </div>
@@ -1175,7 +1178,7 @@ export const InputTab: React.FC = () => {
             filters={intakeFilters}
             onFilterChange={(updates) => setIntakeFilters(prev => ({ ...prev, ...updates }))}
             count={intakeEntries.length}
-            label="Raw Milk Intake"
+            label={t('input.intakeHistory')}
             filterOptions={intakeFilterOptions}
           />
 
@@ -1190,17 +1193,17 @@ export const InputTab: React.FC = () => {
                   }}
                   className="rounded border-slate-300"
                 />
-                <span className="text-xs text-slate-500">Select all</span>
+                <span className="text-xs text-slate-500">{t('common.selectAll')}</span>
                 {selectedIntakeIds.size > 0 && (
                   <button onClick={bulkDeleteIntakes} className="ml-auto flex items-center gap-1 px-2 py-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 transition-colors">
-                    <Trash2 size={12} /> Delete {selectedIntakeIds.size} selected
+                    <Trash2 size={12} /> {t('common.deleteSelected')} ({selectedIntakeIds.size})
                   </button>
                 )}
               </div>
             )}
             {displayedIntake.length === 0 && (
               <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
-                No intake entries found.
+                {t('input.noIntakeEntries')}
               </div>
             )}
             {displayedIntake.map(entry => (
@@ -1209,7 +1212,7 @@ export const InputTab: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-semibold flex flex-wrap items-center gap-2 ${entry.isDiscarded ? 'text-red-800' : entry.isEcological ? 'text-red-600' : 'text-slate-800'}`}>
                     <span className="truncate">{entry.supplierName}</span>
-                    {entry.isDiscarded && <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">Discarded</span>}
+                    {entry.isDiscarded && <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">{t('input.discarded')}</span>}
                     <span className="text-[10px] text-slate-500 font-normal bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{entry.milkType}</span>
                     {entry.isEcological && <Leaf size={12} className="text-red-500 fill-red-100" />}
                     {entry.tags.map(t => (
@@ -1232,7 +1235,7 @@ export const InputTab: React.FC = () => {
                     }`}>pH {entry.ph}</span>
                     <span className="text-slate-300 hidden md:inline">•</span>
                     {!entry.pricingMode && entry.calculatedCost === 0 ? (
-                      <span className="whitespace-nowrap text-amber-600 font-medium">Awaiting invoice</span>
+                      <span className="whitespace-nowrap text-amber-600 font-medium">{t('input.awaitingInvoice')}</span>
                     ) : (
                       <span className="whitespace-nowrap text-slate-700">€{entry.calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     )}
@@ -1304,7 +1307,7 @@ export const InputTab: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6 animate-slide-up min-w-0">
       <div className="flex-1 min-w-0 flex flex-col gap-4">
         <div className="text-slate-500 uppercase text-xs font-bold tracking-widest px-1">
-          New Output Log
+          {t('input.outputEntry')}
         </div>
 
         {/* Output Form */}
@@ -1319,7 +1322,7 @@ export const InputTab: React.FC = () => {
           <div className="grid grid-cols-1 gap-4">
             {editingOutputId && (
                <div className="flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider mb-[-8px]">
-                 <Pencil size={12} /> Editing Mode
+                 <Pencil size={12} /> {t('input.editingMode')}
                </div>
              )}
             <div className="flex flex-col md:flex-row gap-3">
@@ -1343,7 +1346,7 @@ export const InputTab: React.FC = () => {
             
             <div className="relative">
               <label className="text-xs font-semibold text-slate-600 block mb-1.5 flex items-center gap-2">
-                Log String <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "34,96 pad; 2 bb")</span>
+                {t('input.logString')} <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "34,96 pad; 2 bb")</span>
               </label>
               <div className="flex gap-2 h-[42px]">
                 <div className="relative flex-1">
@@ -1399,8 +1402,8 @@ export const InputTab: React.FC = () => {
             {parserPreview && (
               <div className={`mt-0 p-3 rounded-md border flex justify-between items-center text-xs transition-colors ${parserPreview.isValid ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
                 <div className="flex flex-col md:flex-row gap-1 md:gap-3">
-                  <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.pallets} Pallets</span>
-                  <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.bigBags} Big Bags</span>
+                  <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.pallets} {t('common.pallets')}</span>
+                  <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.bigBags} {t('common.bigBag')}s</span>
                 </div>
                 <div className="font-bold font-mono text-sm">
                   {parserPreview.totalWeight.toLocaleString()} kg
@@ -1418,7 +1421,7 @@ export const InputTab: React.FC = () => {
             filters={outputFilters}
             onFilterChange={(updates) => setOutputFilters(prev => ({ ...prev, ...updates }))}
             count={outputEntries.length}
-            label="Fractionation Output"
+            label={t('input.outputHistory')}
             filterOptions={outputFilterOptions}
           />
 
@@ -1433,17 +1436,17 @@ export const InputTab: React.FC = () => {
                   }}
                   className="rounded border-slate-300"
                 />
-                <span className="text-xs text-slate-500">Select all</span>
+                <span className="text-xs text-slate-500">{t('common.selectAll')}</span>
                 {selectedOutputIds.size > 0 && (
                   <button onClick={bulkDeleteOutputs} className="ml-auto flex items-center gap-1 px-2 py-1 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 transition-colors">
-                    <Trash2 size={12} /> Delete {selectedOutputIds.size} selected
+                    <Trash2 size={12} /> {t('common.deleteSelected')} ({selectedOutputIds.size})
                   </button>
                 )}
               </div>
             )}
             {displayedOutput.length === 0 && (
               <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
-                No output entries found.
+                {t('input.noOutputEntries')}
               </div>
             )}
             {displayedOutput.map(entry => (

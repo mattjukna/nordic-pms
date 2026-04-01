@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, ChevronDown, Check } from 'lucide-react';
+import { useTranslation } from '../../i18n/useTranslation';
 
 interface SmartSelectOption {
   id: string;
@@ -38,6 +39,7 @@ export const SmartSelect: React.FC<SmartSelectProps> = ({
   triggerClassName = "",
   disabled = false
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeFilterId, setActiveFilterId] = useState<string>('all');
@@ -119,7 +121,7 @@ export const SmartSelect: React.FC<SmartSelectProps> = ({
               <input 
                 type="text" 
                 autoFocus
-                placeholder="Search..." 
+                placeholder={t('smartSelect.searchPlaceholder')} 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500"
@@ -151,7 +153,7 @@ export const SmartSelect: React.FC<SmartSelectProps> = ({
           {/* Options List */}
           <div className="max-h-60 overflow-y-auto">
             {filteredOptions.length === 0 ? (
-              <div className="p-4 text-center text-xs text-slate-400 italic">No options found.</div>
+              <div className="p-4 text-center text-xs text-slate-400 italic">{t('smartSelect.noOptions')}</div>
             ) : (
               filteredOptions.map(option => (
                 <div 

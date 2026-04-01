@@ -3,7 +3,8 @@ import { useMsal } from '@azure/msal-react';
 import { restoreLogoutDebug } from '../../src/auth/logoutDebug';
 import { useStore } from '../../store';
 import UserSettingsModal from './UserSettingsModal';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Sun, Globe } from 'lucide-react';
+import { useTranslation } from '../../i18n/useTranslation';
 
 const initials = (name?: string, email?: string) => {
   if (name) return name.split(' ').map(p => p[0]).slice(0,2).join('').toUpperCase();
@@ -22,6 +23,7 @@ const UserMenu: React.FC = () => {
   const userSettings = useStore((s) => s.userSettings);
   const setUserSettings = useStore((s) => s.setUserSettings);
   const isDark = userSettings?.darkMode ?? false;
+  const { t, locale } = useTranslation();
 
   return (
     <div className="relative">
@@ -44,9 +46,19 @@ const UserMenu: React.FC = () => {
               className="w-full text-left px-2 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
             >
               {isDark ? <Sun size={14} /> : <Moon size={14} />}
-              {isDark ? 'Light Mode' : 'Dark Mode'}
+              {isDark ? t('userMenu.lightMode') : t('userMenu.darkMode')}
             </button>
-            <button onClick={() => { setShowSettings(true); setOpen(false); }} className="w-full text-left px-2 py-2 text-sm hover:bg-slate-50">Settings</button>
+            <button
+              onClick={() => {
+                const next = locale === 'en' ? 'lt' : 'en';
+                setUserSettings({ language: next });
+              }}
+              className="w-full text-left px-2 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+            >
+              <Globe size={14} />
+              {locale === 'en' ? 'Lietuvių' : 'English'}
+            </button>
+            <button onClick={() => { setShowSettings(true); setOpen(false); }} className="w-full text-left px-2 py-2 text-sm hover:bg-slate-50">{t('userMenu.settings')}</button>
             <button
               onClick={() => {
                 try { restoreLogoutDebug(instance); } catch (e) { /* continue */ }
@@ -61,7 +73,7 @@ const UserMenu: React.FC = () => {
               }}
               className="w-full text-left px-2 py-2 text-sm text-red-600 hover:bg-slate-50"
             >
-              Sign out
+              {t('userMenu.signOut')}
             </button>
           </div>
         </div>

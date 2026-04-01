@@ -2,12 +2,14 @@ import React from 'react';
 import { ProductionLogEntry } from '../types';
 import { GlassCard } from './ui/GlassCard';
 import { Clock, Package, Hash } from 'lucide-react';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface HistoryGridProps {
   history: ProductionLogEntry[];
 }
 
 const HistoryGrid: React.FC<HistoryGridProps> = ({ history }) => {
+  const { t } = useTranslation();
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('en-GB', {
       hour: '2-digit',
@@ -22,7 +24,7 @@ const HistoryGrid: React.FC<HistoryGridProps> = ({ history }) => {
   if (history.length === 0) {
     return (
       <div className="h-64 flex items-center justify-center text-white/40 italic">
-        No logs recorded yet.
+        {t('historyGrid.noLogs')}
       </div>
     );
   }
@@ -34,10 +36,10 @@ const HistoryGrid: React.FC<HistoryGridProps> = ({ history }) => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white/5 border-b border-white/10 text-xs uppercase tracking-wider text-gray-400">
-                <th className="p-4 font-semibold"><div className="flex items-center gap-2"><Clock size={14} /> Time</div></th>
-                <th className="p-4 font-semibold"><div className="flex items-center gap-2"><Hash size={14} /> Batch ID</div></th>
-                <th className="p-4 font-semibold"><div className="flex items-center gap-2"><Package size={14} /> Product</div></th>
-                <th className="p-4 font-semibold text-right">Total Kg</th>
+                <th className="p-4 font-semibold"><div className="flex items-center gap-2"><Clock size={14} /> {t('historyGrid.time')}</div></th>
+                <th className="p-4 font-semibold"><div className="flex items-center gap-2"><Hash size={14} /> {t('historyGrid.batchId')}</div></th>
+                <th className="p-4 font-semibold"><div className="flex items-center gap-2"><Package size={14} /> {t('historyGrid.product')}</div></th>
+                <th className="p-4 font-semibold text-right">{t('historyGrid.totalKg')}</th>
               </tr>
             </thead>
             <tbody className="text-sm">
@@ -68,7 +70,7 @@ const HistoryGrid: React.FC<HistoryGridProps> = ({ history }) => {
       </GlassCard>
       
       <div className="mt-4 text-center text-xs text-white/30 uppercase tracking-widest">
-        Showing last {history.length} entries
+        {t('historyGrid.showingLast', { count: String(history.length) })}
       </div>
     </div>
   );

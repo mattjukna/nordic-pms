@@ -4,6 +4,7 @@ import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { Scale, Truck, ChevronDown, ChevronRight, AlertCircle, Leaf, Package, Calendar, Filter, Factory, Droplets, Ban } from 'lucide-react';
 import { getEffectiveIntakeQuantityKg } from '../../utils/intakeCoefficient';
+import { useTranslation } from '../../i18n/useTranslation';
 
 type TimeRange = 'day' | 'week' | 'month' | 'quarter' | 'year';
 type ViewMode = 'intake' | 'production';
@@ -22,6 +23,7 @@ const endOfDayTs = (date: Date) => {
 
 export const LivePreviewTab: React.FC = () => {
   const { intakeEntries, outputEntries, suppliers, products } = useStore();
+  const { t } = useTranslation();
   const [viewMode, setViewMode] = useState<ViewMode>('intake');
   const [timeRange, setTimeRange] = useState<TimeRange>('month'); // Default to month for quota context
   const [customStart, setCustomStart] = useState('');
@@ -237,7 +239,7 @@ export const LivePreviewTab: React.FC = () => {
               viewMode === 'intake' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <Droplets size={16} /> Intake
+            <Droplets size={16} /> {t('liveView.intake')}
           </button>
           <button
             onClick={() => setViewMode('production')}
@@ -245,7 +247,7 @@ export const LivePreviewTab: React.FC = () => {
               viewMode === 'production' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            <Factory size={16} /> Production
+            <Factory size={16} /> {t('liveView.production')}
           </button>
         </div>
 
@@ -259,13 +261,13 @@ export const LivePreviewTab: React.FC = () => {
                    onClick={() => setShowPallets(false)}
                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${!showPallets ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                   KG
+                   {t('liveView.kgUnit')}
                 </button>
                 <button 
                    onClick={() => setShowPallets(true)}
                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${showPallets ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                   Pallets
+                   {t('liveView.palletsUnit')}
                 </button>
              </div>
           )}
@@ -278,7 +280,7 @@ export const LivePreviewTab: React.FC = () => {
                 onChange={(e) => setSelectedSupplierId(e.target.value)}
                 className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold py-2 pl-3 pr-8 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100"
               >
-                <option value="all">All Suppliers</option>
+                <option value="all">{t('liveView.allSuppliers')}</option>
                 {suppliers.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -331,7 +333,7 @@ export const LivePreviewTab: React.FC = () => {
                 }}
                 className="rounded bg-slate-100 px-2 py-1 font-bold text-slate-500 hover:bg-slate-200"
               >
-                Clear
+                {t('liveView.clear')}
               </button>
             )}
           </div>
@@ -346,7 +348,7 @@ export const LivePreviewTab: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
              <GlassCard className="p-5 bg-blue-50/50 border-blue-100 flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-blue-600 uppercase tracking-widest font-bold mb-1">Total Intake</div>
+                  <div className="text-xs text-blue-600 uppercase tracking-widest font-bold mb-1">{t('liveView.totalIntake')}</div>
                   <div className="text-3xl font-mono font-bold text-slate-900">{intakeData.totalIntake.toLocaleString()} <span className="text-sm font-normal text-slate-500">kg</span></div>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
@@ -356,7 +358,7 @@ export const LivePreviewTab: React.FC = () => {
              
              <GlassCard className="p-5 bg-slate-50 border-slate-200 flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">Active Suppliers</div>
+                  <div className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">{t('liveView.activeSuppliers')}</div>
                   <div className="text-3xl font-mono font-bold text-slate-900">{intakeData.bySupplier.filter(s => s.total > 0).length} <span className="text-sm font-normal text-slate-500">/ {suppliers.length}</span></div>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
@@ -366,7 +368,7 @@ export const LivePreviewTab: React.FC = () => {
 
              <GlassCard className="p-5 bg-red-50/50 border-red-100 flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-red-600 uppercase tracking-widest font-bold mb-1">Discarded Milk</div>
+                  <div className="text-xs text-red-600 uppercase tracking-widest font-bold mb-1">{t('liveView.discardedMilk')}</div>
                   <div className="text-3xl font-mono font-bold text-slate-900">{intakeData.totalDiscarded.toLocaleString()} <span className="text-sm font-normal text-slate-500">kg</span></div>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-red-600">
@@ -378,7 +380,7 @@ export const LivePreviewTab: React.FC = () => {
           {/* Suppliers grouped by Route */}
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2 px-1">
-              <Truck size={16} /> Supplier Performance
+              <Truck size={16} /> {t('liveView.supplierPerformance')}
             </h3>
             
             {suppliersByRoute.map(group => {
@@ -393,7 +395,7 @@ export const LivePreviewTab: React.FC = () => {
                     <div className="flex items-center gap-2">
                       {isRouteCollapsed ? <ChevronRight size={14} className="text-slate-500"/> : <ChevronDown size={14} className="text-slate-500"/>}
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-600">{group.route}</span>
-                      <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded-full">{group.suppliers.length} suppliers</span>
+                      <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded-full">{t('liveView.suppliersCount', { count: group.suppliers.length })}</span>
                     </div>
                     <span className="text-xs font-mono font-bold text-blue-600">{group.routeTotal.toLocaleString()} kg</span>
                   </div>
@@ -421,7 +423,7 @@ export const LivePreviewTab: React.FC = () => {
                       {/* Quota Progress Bar */}
                       <div className="mt-3 max-w-md">
                         <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400 mb-1">
-                          <span>Monthly Quota Progress</span>
+                          <span>{t('liveView.monthlyQuotaProgress')}</span>
                           <span className={supplier.quota.isBehind ? 'text-amber-600' : 'text-emerald-600'}>
                              {supplier.quota.current.toLocaleString()} / {supplier.quota.monthly.toLocaleString()} kg ({supplier.quota.progress.toFixed(1)}%)
                           </span>
@@ -434,7 +436,7 @@ export const LivePreviewTab: React.FC = () => {
                         </div>
                         {supplier.quota.isBehind && (
                           <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 font-bold animate-pulse">
-                             <AlertCircle size={10} /> Falling behind monthly target
+                             <AlertCircle size={10} /> {t('liveView.fallingBehind')}
                           </div>
                         )}
                       </div>
@@ -442,11 +444,11 @@ export const LivePreviewTab: React.FC = () => {
 
                     {/* Total Intake */}
                     <div className="text-right shrink-0 flex flex-col items-end">
-                      <div className="text-xs text-slate-500 uppercase font-bold mb-0.5">Period Intake</div>
+                      <div className="text-xs text-slate-500 uppercase font-bold mb-0.5">{t('liveView.periodIntake')}</div>
                       <div className="text-xl font-mono font-bold text-blue-600">{supplier.total.toLocaleString()} kg</div>
                       {supplier.discardedTotal > 0 && (
                         <div className="text-[10px] font-bold text-red-600 flex items-center gap-1">
-                          <Ban size={10} /> {supplier.discardedTotal.toLocaleString()} kg discarded
+                          <Ban size={10} /> {t('liveView.kgDiscarded', { amount: supplier.discardedTotal.toLocaleString() })}
                         </div>
                       )}
                     </div>
@@ -461,7 +463,7 @@ export const LivePreviewTab: React.FC = () => {
                                <div>
                                   <div className="flex items-center gap-2">
                                      <div className="text-xs font-bold text-slate-700">{new Date(entry.timestamp).toLocaleDateString()}</div>
-                                     {entry.isDiscarded && <span className="text-[8px] bg-red-600 text-white px-1 rounded font-bold uppercase">Discarded</span>}
+                                     {entry.isDiscarded && <span className="text-[8px] bg-red-600 text-white px-1 rounded font-bold uppercase">{t('liveView.discardedBadge')}</span>}
                                   </div>
                                   <div className="text-[10px] text-slate-500 flex gap-2 mt-0.5">
                                      <span>F: {entry.fatPct}%</span>
@@ -485,7 +487,7 @@ export const LivePreviewTab: React.FC = () => {
                   )}
                   {!isCollapsed && !hasData && (
                     <div className="border-t border-slate-100 bg-slate-50/50 p-4 text-center text-xs text-slate-400 italic">
-                      No intake entries for this period.
+                      {t('liveView.noIntakeEntries')}
                     </div>
                   )}
                 </div>
@@ -506,7 +508,7 @@ export const LivePreviewTab: React.FC = () => {
            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
              <GlassCard className="p-5 bg-emerald-50/50 border-emerald-100 flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-emerald-600 uppercase tracking-widest font-bold mb-1">Total Output</div>
+                  <div className="text-xs text-emerald-600 uppercase tracking-widest font-bold mb-1">{t('liveView.totalOutput')}</div>
                   {showPallets ? (
                     <div className="flex flex-col">
                        <div className="text-2xl font-mono font-bold text-slate-900">
@@ -533,7 +535,7 @@ export const LivePreviewTab: React.FC = () => {
              {/* Mass Balance Check */}
              <GlassCard className="p-5 bg-slate-50 border-slate-200 flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">Yield Efficiency</div>
+                  <div className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">{t('liveView.yieldEfficiency')}</div>
                   <div className="text-3xl font-mono font-bold text-slate-900">
                     {intakeData.totalEffectiveIntake > 0 
                       ? ((productionData.totalOutput / intakeData.totalEffectiveIntake) * 100).toFixed(1) 
@@ -550,12 +552,12 @@ export const LivePreviewTab: React.FC = () => {
            {/* Products List */}
            <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2 px-1">
-              <Package size={16} /> Product Output
+              <Package size={16} /> {t('liveView.productOutput')}
             </h3>
 
             {productionData.byProduct.length === 0 && (
                <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 italic">
-                 No production data found for this period.
+                 {t('liveView.noProductionData')}
                </div>
             )}
 
@@ -574,7 +576,7 @@ export const LivePreviewTab: React.FC = () => {
                           </div>
                           <div>
                              <div className="font-bold text-slate-800">{product.name}</div>
-                             <div className="text-xs text-slate-500">{product.entries.length} batches</div>
+                             <div className="text-xs text-slate-500">{t('liveView.batchesLabel', { count: product.entries.length })}</div>
                           </div>
                        </div>
                        <div className="text-right">
@@ -595,9 +597,9 @@ export const LivePreviewTab: React.FC = () => {
                          <table className="w-full text-xs text-left">
                            <thead className="text-slate-400 font-bold uppercase">
                              <tr>
-                               <th className="p-2">Date</th>
-                               <th className="p-2">Batch</th>
-                               <th className="p-2 text-right">Amount</th>
+                               <th className="p-2">{t('liveView.thDate')}</th>
+                               <th className="p-2">{t('liveView.thBatch')}</th>
+                               <th className="p-2 text-right">{t('liveView.thAmount')}</th>
                              </tr>
                            </thead>
                            <tbody className="divide-y divide-slate-200">

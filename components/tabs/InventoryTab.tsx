@@ -17,6 +17,7 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
 import { apiFetch } from '../../services/apiFetch';
 import { validateDispatchForm, validateShipmentForm } from '../../utils/validation';
+import { useTranslation } from '../../i18n/useTranslation';
 // autoptable has no types exposed here
 // @ts-ignore
 import autoTable from 'jspdf-autotable';
@@ -27,6 +28,7 @@ const INVALID_FIELD_CLASS = 'border-red-300 bg-red-50/40 focus:border-red-400 fo
 export const InventoryTab: React.FC = () => {
   const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating, stockAdjustments, addStockAdjustment, removeStockAdjustment, addContract } = useStore();
   const undoableDelete = useUndoDelete();
+  const { t } = useTranslation();
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [showPallets, setShowPallets] = useState<boolean>(() => (userSettings?.defaultStockView === 'pallets'));
   const [editingDispatchId, setEditingDispatchId] = useState<string | null>(null);
@@ -1018,20 +1020,20 @@ export const InventoryTab: React.FC = () => {
       {/* Header with Toggle */}
       <div className="flex items-center justify-between shrink-0">
          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-            <Package size={16}/> Warehouse Status
+            <Package size={16}/> {t('inventory.stockOverview')}
          </h2>
          <div className="flex bg-slate-200 p-1 rounded-lg">
             <button 
                onClick={() => setShowPallets(false)}
                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${!showPallets ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
             >
-               KG
+               {t('inventory.viewKg')}
             </button>
             <button 
                onClick={() => setShowPallets(true)}
                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${showPallets ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
             >
-               Pallets
+               {t('inventory.viewPallets')}
             </button>
          </div>
       </div>
@@ -1062,16 +1064,16 @@ export const InventoryTab: React.FC = () => {
                      </div>
                    )}
                    {item.hasFractionalInput && (
-                     <div className="text-[9px] text-red-600 font-bold mt-1 leading-tight">ERROR: Fractional unit input</div>
+                     <div className="text-[9px] text-red-600 font-bold mt-1 leading-tight">{t('inventory.errorFractional')}</div>
                    )}
                    {!item.hasFractionalInput && item.looseWarning && (
-                     <div className="text-[10px] text-amber-600 font-bold mt-1 leading-tight">WARNING: Variance / unmapped shipments</div>
+                     <div className="text-[10px] text-amber-600 font-bold mt-1 leading-tight">{t('inventory.warningVariance')}</div>
                    )}
                    {item.unmappedKgForUnits > 0 && (
-                     <div className="text-[11px] text-slate-600 mt-1">Unmapped shipped: {Math.round(item.unmappedKgForUnits).toLocaleString()} kg</div>
+                     <div className="text-[11px] text-slate-600 mt-1">{t('inventory.unmappedShipped')}: {Math.round(item.unmappedKgForUnits).toLocaleString()} kg</div>
                    )}
                    {Math.abs(item.looseKgEstimate || 0) > 50 && (
-                     <div className="text-[11px] text-slate-600 mt-1">Variance: {Math.round(item.looseKgEstimate).toLocaleString()} kg</div>
+                     <div className="text-[11px] text-slate-600 mt-1">{t('inventory.variance')}: {Math.round(item.looseKgEstimate).toLocaleString()} kg</div>
                    )}
                    {item.looseKgEstimate > 0 && item.defaultPalletWeight > 0 && item.looseKgEstimate >= item.defaultPalletWeight && (
                      <div className="text-[10px] text-emerald-600 font-bold mt-1">
@@ -1085,7 +1087,7 @@ export const InventoryTab: React.FC = () => {
                      </div>
                    )}
                    {(item.hasFractionalInput || item.looseWarning || item.unmappedKgForUnits > 0) && (
-                     <button onClick={() => { setInvestigateTarget(item.id); setShowInvestigateModal(true); }} className="mt-2 text-xs text-blue-600 font-bold underline">Investigate</button>
+                     <button onClick={() => { setInvestigateTarget(item.id); setShowInvestigateModal(true); }} className="mt-2 text-xs text-blue-600 font-bold underline">{t('inventory.investigate')}</button>
                    )}
                 </div>
               ) : (
@@ -1095,8 +1097,8 @@ export const InventoryTab: React.FC = () => {
               )}
               
               <div className="text-[10px] text-slate-400 font-medium flex justify-between mt-1">
-                <span>{showPallets ? 'stock mix' : 'kg in stock'}</span>
-                {item.ageStatus === 'red' && <span className="text-red-600 font-bold animate-pulse">AGING</span>}
+                <span>{showPallets ? t('inventory.stockMix') : t('inventory.kgInStock')}</span>
+                {item.ageStatus === 'red' && <span className="text-red-600 font-bold animate-pulse">{t('inventory.aging')}</span>}
               </div>
             </div>
           </GlassCard>
@@ -1107,14 +1109,14 @@ export const InventoryTab: React.FC = () => {
       <div className="flex flex-col gap-3 shrink-0">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-            <Calculator size={16}/> Stock Corrections
+            <Calculator size={16}/> {t('inventory.stockCorrection')}
           </h2>
           <div className="flex gap-2">
             <button onClick={() => setShowAdjustmentHistory(!showAdjustmentHistory)} className="px-3 py-1 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
-              {showAdjustmentHistory ? 'Hide History' : 'History'} ({stockAdjustments.length})
+              {showAdjustmentHistory ? t('inventory.hideHistory') : t('inventory.history')} ({stockAdjustments.length})
             </button>
             <button onClick={() => { setShowCorrectionForm(!showCorrectionForm); setCorrError(''); }} className="px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all flex items-center gap-1">
-              <Plus size={12}/> New Correction
+              <Plus size={12}/> {t('inventory.newCorrection')}
             </button>
           </div>
         </div>
@@ -1123,39 +1125,39 @@ export const InventoryTab: React.FC = () => {
           <GlassCard className="p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="col-span-2 md:col-span-1">
-                <label className="block text-xs font-bold text-slate-500 mb-1">Product</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('common.product')}</label>
                 <select value={corrProductId} onChange={e => setCorrProductId(e.target.value)} className="w-full p-2 text-sm border rounded-lg bg-white">
-                  <option value="">Select product…</option>
+                  <option value="">{t('inventory.selectProduct')}</option>
                   {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Reason</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('inventory.reason')}</label>
                 <select value={corrReason} onChange={e => setCorrReason(e.target.value as any)} className="w-full p-2 text-sm border rounded-lg bg-white">
-                  <option value="correction">Correction</option>
-                  <option value="audit">Physical Audit</option>
-                  <option value="initial_balance">Initial Balance</option>
+                  <option value="correction">{t('inventory.reasonCorrection')}</option>
+                  <option value="audit">{t('inventory.reasonAudit')}</option>
+                  <option value="initial_balance">{t('inventory.reasonInitialBalance')}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Pallets (+/-)</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('inventory.palletsAdj')}</label>
                 <input type="number" value={corrPallets} onChange={e => setCorrPallets(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Big Bags (+/-)</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('inventory.bigBagsAdj')}</label>
                 <input type="number" value={corrBigBags} onChange={e => setCorrBigBags(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Tanks (+/-)</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('inventory.tanksAdj')}</label>
                 <input type="number" value={corrTanks} onChange={e => setCorrTanks(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Loose Kg (+/-)</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('inventory.looseKgAdj')}</label>
                 <input type="number" value={corrLooseKg} onChange={e => setCorrLooseKg(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-500 mb-1">Note</label>
-                <input type="text" value={corrNote} onChange={e => setCorrNote(e.target.value)} placeholder="Reason for correction…" className="w-full p-2 text-sm border rounded-lg" />
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('common.note')}</label>
+                <input type="text" value={corrNote} onChange={e => setCorrNote(e.target.value)} placeholder={t('inventory.correctionReason')} className="w-full p-2 text-sm border rounded-lg" />
               </div>
             </div>
             {corrProductId && (
@@ -1168,7 +1170,7 @@ export const InventoryTab: React.FC = () => {
                   const tnks = Number(corrTanks) || 0;
                   const loose = Number(corrLooseKg) || 0;
                   const totalKg = (pads * (prod.defaultPalletWeight || 0)) + (bbs * (prod.defaultBagWeight || 0)) + (tnks * 25000) + loose;
-                  return <span>Total adjustment: <strong>{totalKg >= 0 ? '+' : ''}{totalKg.toLocaleString()} kg</strong></span>;
+                  return <span>{t('inventory.totalAdjustment')}: <strong>{totalKg >= 0 ? '+' : ''}{totalKg.toLocaleString()} kg</strong></span>;
                 })()}
               </div>
             )}
@@ -1184,7 +1186,7 @@ export const InventoryTab: React.FC = () => {
                   const tnks = Number(corrTanks) || 0;
                   const loose = Number(corrLooseKg) || 0;
                   const totalKg = (pads * (prod.defaultPalletWeight || 0)) + (bbs * (prod.defaultBagWeight || 0)) + (tnks * 25000) + loose;
-                  if (totalKg === 0 && pads === 0 && bbs === 0 && tnks === 0) { setCorrError('Enter at least one adjustment value.'); return; }
+                  if (totalKg === 0 && pads === 0 && bbs === 0 && tnks === 0) { setCorrError(t('inventory.enterAdjustment')); return; }
                   setCorrSubmitting(true);
                   setCorrError('');
                   try {
@@ -1201,16 +1203,16 @@ export const InventoryTab: React.FC = () => {
                     setCorrProductId(''); setCorrPallets(''); setCorrBigBags(''); setCorrTanks(''); setCorrLooseKg(''); setCorrNote('');
                     setShowCorrectionForm(false);
                   } catch (err: any) {
-                    setCorrError(err?.message || 'Failed to save correction');
+                    setCorrError(err?.message || t('inventory.failedSaveCorrection'));
                   } finally {
                     setCorrSubmitting(false);
                   }
                 }}
                 className="px-4 py-2 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
               >
-                {corrSubmitting ? 'Saving…' : 'Save Correction'}
+                {corrSubmitting ? t('common.saving') : t('inventory.saveCorrection')}
               </button>
-              <button onClick={() => setShowCorrectionForm(false)} className="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">Cancel</button>
+              <button onClick={() => setShowCorrectionForm(false)} className="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">{t('common.cancel')}</button>
             </div>
           </GlassCard>
         )}
@@ -1220,14 +1222,14 @@ export const InventoryTab: React.FC = () => {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-slate-500 border-b">
-                  <th className="p-1">Date</th>
-                  <th className="p-1">Product</th>
-                  <th className="p-1">Type</th>
-                  <th className="p-1 text-right">Pallets</th>
-                  <th className="p-1 text-right">Big Bags</th>
-                  <th className="p-1 text-right">Loose Kg</th>
-                  <th className="p-1 text-right">Total Kg</th>
-                  <th className="p-1">Note</th>
+                  <th className="p-1">{t('common.date')}</th>
+                  <th className="p-1">{t('common.product')}</th>
+                  <th className="p-1">{t('common.status')}</th>
+                  <th className="p-1 text-right">{t('common.pallets')}</th>
+                  <th className="p-1 text-right">{t('inventory.bigBags')}</th>
+                  <th className="p-1 text-right">{t('inventory.looseKg')}</th>
+                  <th className="p-1 text-right">{t('inventory.totalKg')}</th>
+                  <th className="p-1">{t('common.note')}</th>
                   <th className="p-1 w-8"></th>
                 </tr>
               </thead>
@@ -1260,7 +1262,7 @@ export const InventoryTab: React.FC = () => {
         <div className="flex-1 flex flex-col gap-4">
           <div className="flex items-center justify-between shrink-0">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
-              <Truck size={16} /> Dispatch Log & Plans
+              <Truck size={16} /> {t('inventory.dispatchLog')}
             </h3>
             <button 
               onClick={() => {
@@ -1269,7 +1271,7 @@ export const InventoryTab: React.FC = () => {
               }}
               className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg font-medium transition-all shadow-sm flex items-center gap-2"
             >
-              <ArrowUpRight size={16} /> New Entry
+              <ArrowUpRight size={16} /> {t('inventory.newEntry')}
             </button>
           </div>
 
@@ -1277,7 +1279,7 @@ export const InventoryTab: React.FC = () => {
             <div className={`animate-slide-up bg-white border rounded-xl p-4 shadow-lg ring-4 z-10 shrink-0 ${dispatchStatus === 'confirmed' ? 'border-blue-200 ring-blue-50' : 'border-amber-200 ring-amber-50'}`}>
               {editingDispatchId && (
                  <div className="flex items-center gap-2 text-amber-700 text-xs font-bold uppercase tracking-wider mb-2">
-                   <div className="bg-amber-100 p-1 rounded"><Pencil size={12} /></div> Editing Entry
+                   <div className="bg-amber-100 p-1 rounded"><Pencil size={12} /></div> {t('inventory.editingEntry')}
                  </div>
               )}
 
@@ -1285,10 +1287,10 @@ export const InventoryTab: React.FC = () => {
               <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
                  <div className="flex bg-slate-100 p-1 rounded-lg">
                     <button onClick={() => setDispatchStatus('confirmed')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${dispatchStatus === 'confirmed' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>
-                       <CheckCircle2 size={14}/> Confirmed Sale
+                       <CheckCircle2 size={14}/> {t('inventory.confirmedSale')}
                     </button>
                     <button onClick={() => setDispatchStatus('planned')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${dispatchStatus === 'planned' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500'}`}>
-                       <Clock size={14}/> Planned Order
+                       <Clock size={14}/> {t('inventory.plannedOrder')}
                     </button>
                  </div>
                  <input 
@@ -1317,20 +1319,20 @@ export const InventoryTab: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Company Code for Invoice</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">{t('inventory.companyCodeInvoice')}</label>
                   <select
                     value={selectedBuyerCompanyCode}
                     onChange={(e) => setSelectedBuyerCompanyCode(e.target.value)}
                     className="w-full bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     disabled={currentBuyerCompanyCodes.length <= 1}
                   >
-                    {currentBuyerCompanyCodes.length === 0 && <option value="">No code available</option>}
+                    {currentBuyerCompanyCodes.length === 0 && <option value="">{t('inventory.noCodeAvailable')}</option>}
                     {currentBuyerCompanyCodes.map((code) => <option key={code} value={code}>{code}</option>)}
                   </select>
-                  <div className="mt-1 text-[11px] text-slate-400">Used only on invoice PDF export.</div>
+                  <div className="mt-1 text-[11px] text-slate-400">{t('inventory.usedOnInvoice')}</div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Product</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">{t('common.product')}</label>
                   <select 
                     value={selectedProduct}
                     onChange={(e) => {
@@ -1350,14 +1352,14 @@ export const InventoryTab: React.FC = () => {
                 {/* Contract Selection */}
                 <div className="md:col-span-2">
                    <div className="flex items-center justify-between mb-1">
-                     <label className="text-xs font-semibold text-slate-500">Contract (Optional)</label>
+                     <label className="text-xs font-semibold text-slate-500">{t('inventory.contractOptional')}</label>
                      {archivedContracts.length > 0 && (
                        <button
                          type="button"
                          onClick={() => setShowArchivedContracts(!showArchivedContracts)}
                          className="text-[10px] text-slate-400 hover:text-blue-600 font-medium"
                        >
-                         {showArchivedContracts ? 'Hide' : 'Show'} expired ({archivedContracts.length})
+                         {showArchivedContracts ? t('inventory.hideExpired') : t('inventory.showExpired')} ({archivedContracts.length})
                        </button>
                      )}
                    </div>
@@ -1367,9 +1369,9 @@ export const InventoryTab: React.FC = () => {
                         onChange={(e) => setSelectedContractId(e.target.value)}
                         className="flex-1 bg-white border border-slate-300 text-slate-900 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                      >
-                        <option value="">-- No Contract (Manual Price) --</option>
+                        <option value="">-- {t('inventory.noContract')} --</option>
                         {activeContracts.length > 0 && (
-                          <optgroup label="Active">
+                          <optgroup label={t('inventory.active')}>
                             {activeContracts.map(c => (
                               <option key={c.id} value={c.id}>
                                 {c.contractNumber} — €{c.pricePerKg}/kg{c.agreedAmountKg ? ` (${c.agreedAmountKg.toLocaleString()} kg)` : ''}
@@ -1378,7 +1380,7 @@ export const InventoryTab: React.FC = () => {
                           </optgroup>
                         )}
                         {showArchivedContracts && archivedContracts.length > 0 && (
-                          <optgroup label="Expired / Fulfilled">
+                          <optgroup label={t('inventory.expiredFulfilled')}>
                             {archivedContracts.map(c => (
                               <option key={c.id} value={c.id}>
                                 {c.contractNumber} — €{c.pricePerKg}/kg (archived)
@@ -1428,16 +1430,16 @@ export const InventoryTab: React.FC = () => {
                                setInlineContractNumber(''); setInlineContractPrice(''); setInlineContractAmount('');
                                setShowInlineContract(false);
                              } catch (err: any) {
-                               setInlineContractError(err?.message || 'Failed to create contract');
+                               setInlineContractError(err?.message || t('inventory.failedCreateContract'));
                              } finally {
                                setInlineContractSubmitting(false);
                              }
                            }}
                            className="px-3 py-1 text-xs font-bold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-all"
                          >
-                           {inlineContractSubmitting ? 'Saving…' : 'Add Contract'}
+                           {inlineContractSubmitting ? t('common.saving') : t('inventory.addContract')}
                          </button>
-                         <button type="button" onClick={() => setShowInlineContract(false)} className="px-3 py-1 text-xs font-bold rounded bg-slate-100 text-slate-600 hover:bg-slate-200">Cancel</button>
+                         <button type="button" onClick={() => setShowInlineContract(false)} className="px-3 py-1 text-xs font-bold rounded bg-slate-100 text-slate-600 hover:bg-slate-200">{t('common.cancel')}</button>
                        </div>
                      </div>
                    )}
@@ -1445,7 +1447,7 @@ export const InventoryTab: React.FC = () => {
 
                 <div className="relative">
                   <label className="text-xs font-semibold text-slate-500 block mb-1 flex items-center gap-2">
-                    Quantity <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "10 pad")</span>
+                    {t('common.quantity')} <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "10 pad")</span>
                   </label>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
@@ -1470,13 +1472,13 @@ export const InventoryTab: React.FC = () => {
                   </div>
                   {/* Manual Override hidden if parsed is active, or shown as readonly result */}
                   <div className="mt-1 flex justify-end text-xs font-bold text-slate-500">
-                     Result: {quantity ? `${parseFloat(quantity).toLocaleString()} kg` : '0 kg'}
+                     {t('inventory.result')}: {quantity ? `${parseFloat(quantity).toLocaleString()} kg` : '0 kg'}
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">
-                     {dispatchStatus === 'planned' ? 'Est. Price (€/kg)' : 'Sales Price (€/kg)'}
+                     {dispatchStatus === 'planned' ? t('inventory.estPrice') : t('inventory.salesPrice')}
                   </label>
                   <input 
                     type="number"
@@ -1487,7 +1489,7 @@ export const InventoryTab: React.FC = () => {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Batch Ref (Optional)</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">{t('inventory.batchRefOptional')}</label>
                   <input 
                     type="text"
                     value={batchRef}
@@ -1502,18 +1504,18 @@ export const InventoryTab: React.FC = () => {
               {editingDispatchId && (dispatchStatus === 'confirmed' || dispatchEntries.find(e => e.id === editingDispatchId)?.status === 'completed') && (
                 <div className="mt-6 pt-6 border-t border-slate-100">
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <Box size={14} /> Shipments Tracking
+                    <Box size={14} /> {t('inventory.shipmentsTracking')}
                   </h4>
                   <div className="mb-3 text-xs text-slate-600 flex items-center gap-4">
-                    <div><span className="font-bold">Ordered:</span> {editingOrderLimit.toLocaleString()} kg</div>
-                    <div><span className="font-bold">Shipped:</span> {editingShippedSoFar.toLocaleString()} kg</div>
-                    <div className={`${editingRemaining < 0 ? 'text-red-600 font-bold' : ''}`}><span className="font-bold">Remaining:</span> {(editingRemaining).toLocaleString()} kg {editingRemaining < 0 && <span className="ml-2 text-red-600 font-bold">OVER-SHIPPED</span>}</div>
+                    <div><span className="font-bold">{t('inventory.ordered')}:</span> {editingOrderLimit.toLocaleString()} kg</div>
+                    <div><span className="font-bold">{t('inventory.shipped')}:</span> {editingShippedSoFar.toLocaleString()} kg</div>
+                    <div className={`${editingRemaining < 0 ? 'text-red-600 font-bold' : ''}`}><span className="font-bold">{t('inventory.remaining')}:</span> {(editingRemaining).toLocaleString()} kg {editingRemaining < 0 && <span className="ml-2 text-red-600 font-bold">{t('inventory.overShipped')}</span>}</div>
                   </div>
                   
                   <div className="bg-slate-50 rounded-lg p-4 mb-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Ship Date</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">{t('inventory.shipmentDate')}</label>
                         <input 
                           type="date"
                           value={shipmentDate}
@@ -1574,7 +1576,7 @@ export const InventoryTab: React.FC = () => {
                         disabled={(editingOrderLimit > 0 && editingRemaining <= 0) || Object.keys(shipmentErrors).length > 0}
                         className={`${(editingOrderLimit > 0 && editingRemaining <= 0) || Object.keys(shipmentErrors).length > 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-4 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1`}
                       >
-                        <Plus size={14} /> Add
+                        <Plus size={14} /> {t('common.add')}
                       </button>
                     </div>
                   </div>
@@ -1596,18 +1598,18 @@ export const InventoryTab: React.FC = () => {
                       </div>
                     ))}
                     {(!dispatchEntries.find(e => e.id === editingDispatchId)?.shipments || dispatchEntries.find(e => e.id === editingDispatchId)?.shipments?.length === 0) && (
-                      <div className="text-center py-4 text-slate-400 italic text-xs">No shipments recorded yet.</div>
+                      <div className="text-center py-4 text-slate-400 italic text-xs">{t('inventory.noShipments')}</div>
                     )}
                   </div>
 
                   {/* Completion Toggle */}
                   <div className="mt-4 flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
                     <div className="text-xs">
-                      <div className="font-bold text-blue-800">Order Status</div>
+                      <div className="font-bold text-blue-800">{t('inventory.orderStatus')}</div>
                       <div className="text-blue-600">
                         {dispatchEntries.find(e => e.id === editingDispatchId)?.status === 'completed' 
-                          ? 'This order is marked as FULLY COMPLETED.' 
-                          : 'Mark as completed when all items are shipped.'}
+                          ? t('inventory.orderCompleted') 
+                          : t('inventory.markCompletedHint')}
                       </div>
                     </div>
                     <button 
@@ -1618,7 +1620,7 @@ export const InventoryTab: React.FC = () => {
                         : 'bg-white text-blue-600 border border-blue-200'
                       }`}
                     >
-                      {dispatchEntries.find(e => e.id === editingDispatchId)?.status === 'completed' ? 'Re-open Order' : 'Mark Completed'}
+                      {dispatchEntries.find(e => e.id === editingDispatchId)?.status === 'completed' ? t('inventory.reopenOrder') : t('inventory.markCompleted')}
                     </button>
                   </div>
                 </div>
@@ -1631,13 +1633,13 @@ export const InventoryTab: React.FC = () => {
                   disabled={Object.keys(dispatchErrors).length > 0}
                   className={`flex-1 text-white py-2 rounded-md text-sm font-bold shadow-md ${Object.keys(dispatchErrors).length > 0 ? 'bg-slate-300 cursor-not-allowed' : dispatchStatus === 'confirmed' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'}`}
                 >
-                  {dispatchStatus === 'confirmed' ? 'Confirm Sale & Deduct Stock' : 'Save Plan'}
+                  {dispatchStatus === 'confirmed' ? t('inventory.confirmSale') : t('inventory.savePlan')}
                 </button>
                 <button 
                   onClick={() => setShowDispatchForm(false)}
                   className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-md text-sm font-bold"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -1648,7 +1650,7 @@ export const InventoryTab: React.FC = () => {
             <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowFilter(!showFilter)}>
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500">
                 <Filter size={14} className={showFilter ? 'text-blue-600' : 'text-slate-400'} />
-                <span>Filter Log</span>
+                <span>{t('inventory.filterLog')}</span>
                 <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{dispatchEntries.length}</span>
               </div>
               <button className="text-slate-400 hover:text-blue-600">
@@ -1675,7 +1677,7 @@ export const InventoryTab: React.FC = () => {
                   <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
                   <input 
                     type="text" 
-                    placeholder="Search buyer, product, contract..." 
+                    placeholder={t('inventory.searchPlaceholder')} 
                     className="w-full bg-white text-slate-900 pl-8 pr-2 py-1.5 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-slate-400"
                     value={localFilterSearch}
                     onChange={(e) => {
@@ -1694,7 +1696,7 @@ export const InventoryTab: React.FC = () => {
                     onChange={(e) => setFilters(prev => ({ ...prev, buyer: e.target.value }))}
                     className="w-full bg-white text-slate-700 text-[11px] border border-slate-200 rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-100"
                   >
-                    <option value="">All buyers</option>
+                    <option value="">{t('inventory.allBuyers')}</option>
                     {[...new Set(dispatchEntries.map(e => e.buyer))].sort().map(b => (
                       <option key={b} value={b}>{b}</option>
                     ))}
@@ -1706,7 +1708,7 @@ export const InventoryTab: React.FC = () => {
                     onChange={(e) => setFilters(prev => ({ ...prev, product: e.target.value }))}
                     className="w-full bg-white text-slate-700 text-[11px] border border-slate-200 rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-100"
                   >
-                    <option value="">All products</option>
+                    <option value="">{t('inventory.allProducts')}</option>
                     {[...new Set(dispatchEntries.map(e => e.productId))].sort().map(p => (
                       <option key={p} value={p}>{p}</option>
                     ))}
@@ -1734,7 +1736,7 @@ export const InventoryTab: React.FC = () => {
 
                 <div className="col-span-12 flex gap-1 justify-between">
                    {[
-                     { l: 'Today', d: 0 }, { l: 'Week', d: 7 }, { l: 'Month', d: 30 }, { l: 'Qtr', d: 90 }, { l: 'Year', d: 365 }
+                     { l: t('common.today'), d: 0 }, { l: t('common.week'), d: 7 }, { l: t('common.month'), d: 30 }, { l: t('common.qtr'), d: 90 }, { l: t('common.year'), d: 365 }
                    ].map(p => (
                      <button 
                         key={p.l}
@@ -1747,7 +1749,7 @@ export const InventoryTab: React.FC = () => {
                 </div>
               </div>
             )}
-            {!showFilter && <div className="text-[10px] text-slate-400 pl-6">Showing recent 10 entries</div>}
+            {!showFilter && <div className="text-[10px] text-slate-400 pl-6">{t('inventory.showingRecentDispatches')}</div>}
           </div>
 
           {selectedDispatchIds.size > 0 && (
@@ -1756,9 +1758,9 @@ export const InventoryTab: React.FC = () => {
                 onClick={bulkDeleteDispatches}
                 className="flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors"
               >
-                <Trash2 size={13}/> Delete Selected ({selectedDispatchIds.size})
+                <Trash2 size={13}/> {t('common.deleteSelected')} ({selectedDispatchIds.size})
               </button>
-              <button onClick={() => setSelectedDispatchIds(new Set())} className="text-xs text-slate-500 hover:text-slate-700">Clear selection</button>
+              <button onClick={() => setSelectedDispatchIds(new Set())} className="text-xs text-slate-500 hover:text-slate-700">{t('common.clearSelection')}</button>
             </div>
           )}
 
@@ -1780,18 +1782,18 @@ export const InventoryTab: React.FC = () => {
                       className="rounded border-slate-300"
                     />
                   </th>
-                  <th className="p-3">Date</th>
-                  <th className="p-3">Buyer</th>
-                  <th className="p-3">Details</th>
-                  <th className="p-3 text-right">Revenue</th>
-                  <th className="p-3 text-center">Status</th>
+                  <th className="p-3">{t('common.date')}</th>
+                  <th className="p-3">{t('common.buyer')}</th>
+                  <th className="p-3">{t('common.details')}</th>
+                  <th className="p-3 text-right">{t('common.revenue')}</th>
+                  <th className="p-3 text-center">{t('common.status')}</th>
                   <th className="p-3 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {displayedDispatches.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400 italic">No dispatches found matching filters.</td>
+                    <td colSpan={7} className="p-8 text-center text-slate-400 italic">{t('inventory.noDispatches')}</td>
                   </tr>
                 ) : (
                   displayedDispatches.map(entry => (
@@ -1856,22 +1858,22 @@ export const InventoryTab: React.FC = () => {
                       <td className="p-3 text-center">
                          {entry.status === 'completed' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
-                               <CheckCircle2 size={10}/> COMPLETED
+                               <CheckCircle2 size={10}/> {t('inventory.completed')}
                             </span>
                          ) : entry.status === 'confirmed' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
-                               <CheckCircle2 size={10}/> {entry.shipments && entry.shipments.length > 0 ? 'SHIPPING' : 'DONE'}
+                               <CheckCircle2 size={10}/> {entry.shipments && entry.shipments.length > 0 ? t('inventory.shipping') : t('inventory.done')}
                             </span>
                          ) : (
                             <div className="flex flex-col items-center gap-1">
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                                  <Clock size={10}/> PLAN
+                                  <Clock size={10}/> {t('inventory.plan')}
                                 </span>
                                 <button 
                                   onClick={() => convertToConfirmed(entry)}
                                   className="text-[10px] text-blue-600 hover:underline font-bold"
                                 >
-                                  Mark Done
+                                  {t('inventory.markDone')}
                                 </button>
                             </div>
                          )}
