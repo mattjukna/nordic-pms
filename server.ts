@@ -630,7 +630,7 @@ async function startServer() {
         try {
             const { contracts, dispatches, id, ...data } = req.body;
             if (Object.prototype.hasOwnProperty.call(data, 'companyCode')) data.companyCode = normalizeCompanyCodes(data.companyCode);
-            if (data.createdOn) data.createdOn = new Date(data.createdOn);
+            if (Object.prototype.hasOwnProperty.call(data, 'createdOn')) data.createdOn = data.createdOn != null ? new Date(data.createdOn) : null;
             await prisma.buyer.update({ where: { id: req.params.id }, data });
             const fetched = await prisma.buyer.findUnique({ where: { id: req.params.id }, include: { contracts: true } });
             res.json({ ...fetched, createdOn: mapDate(fetched?.createdOn), contracts: fetched?.contracts?.map((c: any) => ({ ...c, startDate: mapDate(c.startDate), endDate: mapDate(c.endDate) })) });
