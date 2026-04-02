@@ -38,7 +38,7 @@ const REAL_STOCK: Record<string, {
   SMP:   { pallets: 63, bigBags: 3, tanks: 0, looseKg: 650, palletWeight: 1000, bagWeight: 1000 },
   WMP26: { pallets: 2, bigBags: 0, tanks: 0, looseKg: 950, palletWeight: 1000, bagWeight: 1000 },
   PERM015: { pallets: 19, bigBags: 0, tanks: 0, looseKg: 350, palletWeight: 1000, bagWeight: 1000 },
-};
+};;
 
 async function main() {
   console.log(`\n=== Stock Adjustment Seeder ${DRY_RUN ? '(DRY RUN)' : ''} ===\n`);

@@ -1366,26 +1366,45 @@ async function startServer() {
     });
 
     // ── One-time seed: create initial_balance reset records ───────────
+    // Uses name matching to find products (handles user-created products with custom IDs).
+    // Always replaces existing initial_balance records to ensure correct absolute values.
     if (prismaAvailable) {
         try {
-            const existingIBs = await prisma.stockAdjustment.findMany({ where: { type: 'initial_balance' } });
-            const STOCK_SEED: Record<string, { pallets: number; bigBags: number; tanks: number; looseKg: number; padW: number; bbW: number }> = {
-                MPC85:   { pallets: 35, bigBags: 12, tanks: 0, looseKg: 0,   padW: 900,  bbW: 850 },
-                MPC83:   { pallets: 0,  bigBags: 30, tanks: 0, looseKg: 248, padW: 900,  bbW: 850 },
-                MPC85_ORG: { pallets: 4, bigBags: 0, tanks: 0, looseKg: 480, padW: 900, bbW: 850 },
-                MPI:     { pallets: 16, bigBags: 0,  tanks: 0, looseKg: 765, padW: 900,  bbW: 850 },
-                SMP:     { pallets: 63, bigBags: 3,  tanks: 0, looseKg: 650, padW: 1000, bbW: 1000 },
-                WMP26:   { pallets: 2,  bigBags: 0,  tanks: 0, looseKg: 950, padW: 1000, bbW: 1000 },
-                PERM015: { pallets: 19, bigBags: 0,  tanks: 0, looseKg: 350, padW: 1000, bbW: 1000 },
+            const allProducts = await prisma.product.findMany();
+            const STOCK_SEED: Array<{ nameMatch: string; pallets: number; bigBags: number; tanks: number; looseKg: number; padW: number; bbW: number }> = [
+                { nameMatch: 'MPC 85',             pallets: 35, bigBags: 12, tanks: 0, looseKg: 0,   padW: 900,  bbW: 850 },
+                { nameMatch: 'MPC 83',             pallets: 0,  bigBags: 30, tanks: 0, looseKg: 248, padW: 900,  bbW: 850 },
+                { nameMatch: 'MPC 85 Organic',     pallets: 4,  bigBags: 0,  tanks: 0, looseKg: 480, padW: 900,  bbW: 850 },
+                { nameMatch: 'MPI',                pallets: 16, bigBags: 0,  tanks: 0, looseKg: 765, padW: 900,  bbW: 850 },
+                { nameMatch: 'SMP LH',             pallets: 63, bigBags: 3,  tanks: 0, looseKg: 650, padW: 1000, bbW: 1000 },
+                { nameMatch: 'WMP 26/26',          pallets: 2,  bigBags: 0,  tanks: 0, looseKg: 950, padW: 1000, bbW: 1000 },
+                { nameMatch: 'Permeate Powder 015', pallets: 19, bigBags: 0, tanks: 0, looseKg: 350, padW: 1000, bbW: 1000 },
+            ];
+
+            // Match each seed entry to a product by name (case-insensitive exact match first, then contains)
+            const matchProduct = (nameMatch: string) => {
+                const lower = nameMatch.toLowerCase();
+                return allProducts.find(p => p.name.toLowerCase() === lower)
+                    || allProducts.find(p => p.name.toLowerCase().includes(lower) && !allProducts.some(q => q.id !== p.id && q.name.toLowerCase().includes(lower)));
             };
-            const seededIds = new Set(existingIBs.map(a => a.productId));
-            const toSeed = Object.entries(STOCK_SEED).filter(([id]) => !seededIds.has(id));
-            if (toSeed.length > 0) {
-                console.log(`[SEED] Creating ${toSeed.length} initial_balance record(s)…`);
-                for (const [productId, s] of toSeed) {
+
+            // Delete ALL old auto-seeded initial_balance records so we can recreate cleanly
+            const deleted = await prisma.stockAdjustment.deleteMany({
+                where: { type: 'initial_balance', note: { contains: 'Physical stock count' } }
+            });
+            if (deleted.count > 0) console.log(`[SEED] Deleted ${deleted.count} old initial_balance record(s).`);
+
+            let created = 0;
+            for (const s of STOCK_SEED) {
+                const product = matchProduct(s.nameMatch);
+                if (!product) {
+                    console.warn(`[SEED] No product matched for "${s.nameMatch}", skipping.`);
+                    continue;
+                }
+                try {
                     const totalKg = s.pallets * s.padW + s.bigBags * s.bbW + s.tanks * 25000 + s.looseKg;
                     await prisma.stockAdjustment.create({ data: {
-                        productId,
+                        productId: product.id,
                         adjustmentKg: totalKg,
                         pallets: s.pallets,
                         bigBags: s.bigBags,
@@ -1395,10 +1414,13 @@ async function startServer() {
                         type: 'initial_balance',
                         note: 'Physical stock count 2026-04-02',
                     }});
-                    console.log(`  [SEED] ${productId}: ${totalKg.toLocaleString()} kg`);
+                    console.log(`  [SEED] ${product.name} (${product.id}): ${totalKg.toLocaleString()} kg`);
+                    created++;
+                } catch (err: any) {
+                    console.warn(`  [SEED] Failed for ${product.name} (${product.id}):`, err?.message ?? err);
                 }
-                console.log('[SEED] Done.');
             }
+            if (created > 0) console.log(`[SEED] Created ${created} initial_balance record(s).`);
         } catch (err: any) {
             console.warn('[SEED] Initial balance seeding failed (non-fatal):', err?.message ?? err);
         }
