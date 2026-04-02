@@ -1365,6 +1365,45 @@ async function startServer() {
         port: process.env.PORT,
     });
 
+    // ── One-time seed: create initial_balance reset records ───────────
+    if (prismaAvailable) {
+        try {
+            const existingIBs = await prisma.stockAdjustment.findMany({ where: { type: 'initial_balance' } });
+            const STOCK_SEED: Record<string, { pallets: number; bigBags: number; tanks: number; looseKg: number; padW: number; bbW: number }> = {
+                MPC85:   { pallets: 35, bigBags: 12, tanks: 0, looseKg: 0,   padW: 900,  bbW: 850 },
+                MPC83:   { pallets: 0,  bigBags: 30, tanks: 0, looseKg: 248, padW: 900,  bbW: 850 },
+                MPC85_ORG: { pallets: 4, bigBags: 0, tanks: 0, looseKg: 480, padW: 900, bbW: 850 },
+                MPI:     { pallets: 16, bigBags: 0,  tanks: 0, looseKg: 765, padW: 900,  bbW: 850 },
+                SMP:     { pallets: 63, bigBags: 3,  tanks: 0, looseKg: 650, padW: 1000, bbW: 1000 },
+                WMP26:   { pallets: 2,  bigBags: 0,  tanks: 0, looseKg: 950, padW: 1000, bbW: 1000 },
+                PERM015: { pallets: 19, bigBags: 0,  tanks: 0, looseKg: 350, padW: 1000, bbW: 1000 },
+            };
+            const seededIds = new Set(existingIBs.map(a => a.productId));
+            const toSeed = Object.entries(STOCK_SEED).filter(([id]) => !seededIds.has(id));
+            if (toSeed.length > 0) {
+                console.log(`[SEED] Creating ${toSeed.length} initial_balance record(s)…`);
+                for (const [productId, s] of toSeed) {
+                    const totalKg = s.pallets * s.padW + s.bigBags * s.bbW + s.tanks * 25000 + s.looseKg;
+                    await prisma.stockAdjustment.create({ data: {
+                        productId,
+                        adjustmentKg: totalKg,
+                        pallets: s.pallets,
+                        bigBags: s.bigBags,
+                        tanks: s.tanks,
+                        looseKg: s.looseKg,
+                        reason: `Initial balance: ${s.pallets} pad + ${s.bigBags} bb + ${s.looseKg} loose = ${totalKg} kg`,
+                        type: 'initial_balance',
+                        note: 'Physical stock count 2026-04-02',
+                    }});
+                    console.log(`  [SEED] ${productId}: ${totalKg.toLocaleString()} kg`);
+                }
+                console.log('[SEED] Done.');
+            }
+        } catch (err: any) {
+            console.warn('[SEED] Initial balance seeding failed (non-fatal):', err?.message ?? err);
+        }
+    }
+
     app.listen(port, host, () => {
         console.log(`[BOOT] listening on ${host}:${port}`);
     });

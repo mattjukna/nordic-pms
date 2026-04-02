@@ -1,9 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * Seed initial stock adjustments to align calculated stock with real warehouse values.
+ * Seed initial stock adjustments to set the baseline stock levels.
  *
- * This script creates "initial_balance" type StockAdjustment records that correct
- * the ledger so that:   Stock = Produced - Shipped + Adjustments = Real Stock
+ * This script creates "initial_balance" type StockAdjustment records that act as
+ * RESET POINTS in the stock calculation.  All production/shipments before the
+ * reset timestamp are ignored; the initial_balance values become the starting inventory.
  *
  * Usage:
  *   npx tsx scripts/seed-stock-adjustments.ts --dry-run
@@ -18,11 +19,9 @@ import prisma from '../services/prisma';
 const DRY_RUN = process.argv.includes('--dry-run');
 
 /**
- * Real warehouse stock as provided by the user.
- * Format: { productId: { pallets, bigBags, tanks, looseKg, palletWeight, bagWeight } }
- * 
- * These are the ABSOLUTE target stock levels.  The script computes the current
- * ledger-derived stock and creates an adjustment = target − current.
+ * Real warehouse stock as provided by the user (2026-04-02).
+ * These are ABSOLUTE stock levels — the initial_balance acts as a reset point
+ * in the stock calculation (all production/shipments before it are ignored).
  */
 const REAL_STOCK: Record<string, {
   pallets: number;
@@ -32,7 +31,7 @@ const REAL_STOCK: Record<string, {
   palletWeight: number;
   bagWeight: number;
 }> = {
-  MPC85: { pallets: 28, bigBags: 12, tanks: 0, looseKg: 570, palletWeight: 900, bagWeight: 850 },
+  MPC85: { pallets: 35, bigBags: 12, tanks: 0, looseKg: 0, palletWeight: 900, bagWeight: 850 },
   MPC83: { pallets: 0, bigBags: 30, tanks: 0, looseKg: 248, palletWeight: 900, bagWeight: 850 },
   MPC85_ORG: { pallets: 4, bigBags: 0, tanks: 0, looseKg: 480, palletWeight: 900, bagWeight: 850 },
   MPI:   { pallets: 16, bigBags: 0, tanks: 0, looseKg: 765, palletWeight: 900, bagWeight: 850 },
@@ -48,40 +47,8 @@ async function main() {
   const products = await prisma.product.findMany();
   const productMap = new Map(products.map(p => [p.id, p]));
 
-  // Fetch all output entries & dispatch entries to compute current ledger stock
-  const outputEntries = await prisma.outputEntry.findMany();
-  const dispatchEntries = await prisma.dispatchEntry.findMany({
-    where: { status: { not: 'planned' } },
-    include: { shipments: true },
-  });
-
-  // Fetch existing adjustments
-  const existingAdjustments = await prisma.stockAdjustment.findMany();
-
-  // Compute current ledger stock per product
-  const ledger: Record<string, { producedKg: number; shippedKg: number; adjustedKg: number }> = {};
-  for (const p of products) {
-    ledger[p.id] = { producedKg: 0, shippedKg: 0, adjustedKg: 0 };
-  }
-
-  for (const o of outputEntries) {
-    if (ledger[o.productId]) {
-      ledger[o.productId].producedKg += o.totalWeight || 0;
-    }
-  }
-
-  for (const d of dispatchEntries) {
-    if (!ledger[d.productId]) continue;
-    for (const s of (d.shipments || [])) {
-      ledger[d.productId].shippedKg += s.quantityKg || 0;
-    }
-  }
-
-  for (const a of existingAdjustments) {
-    if (ledger[a.productId]) {
-      ledger[a.productId].adjustedKg += a.adjustmentKg || 0;
-    }
-  }
+  // Fetch existing initial_balance adjustments to clean up
+  const existingIBs = await prisma.stockAdjustment.findMany({ where: { type: 'initial_balance' } });
 
   const adjustmentsToCreate: Array<{
     productId: string;
@@ -95,7 +62,7 @@ async function main() {
     note: string;
   }> = [];
 
-  // For each product with real stock data, compute the correction needed
+  // For each product with real stock data, create an initial_balance reset entry
   for (const [productId, real] of Object.entries(REAL_STOCK)) {
     const product = productMap.get(productId);
     if (!product) {
@@ -103,80 +70,29 @@ async function main() {
       continue;
     }
 
-    const targetKg = (real.pallets * real.palletWeight) + (real.bigBags * real.bagWeight) + (real.tanks * 25000) + real.looseKg;
-    const currentLedger = ledger[productId] || { producedKg: 0, shippedKg: 0, adjustedKg: 0 };
-    const currentStockKg = currentLedger.producedKg - currentLedger.shippedKg + currentLedger.adjustedKg;
-    const diffKg = targetKg - currentStockKg;
+    const totalKg = (real.pallets * real.palletWeight) + (real.bigBags * real.bagWeight) + (real.tanks * 25000) + real.looseKg;
 
     console.log(`${product.name} (${productId}):`);
-    console.log(`  Target: ${targetKg.toLocaleString()} kg (${real.pallets} pad + ${real.bigBags} bb + ${real.tanks} tank + ${real.looseKg} loose)`);
-    console.log(`  Current ledger: ${currentStockKg.toLocaleString()} kg (produced ${currentLedger.producedKg.toLocaleString()} - shipped ${currentLedger.shippedKg.toLocaleString()} + adj ${currentLedger.adjustedKg.toLocaleString()})`);
-    console.log(`  Correction needed: ${diffKg >= 0 ? '+' : ''}${diffKg.toLocaleString()} kg`);
-
-    if (Math.abs(diffKg) < 1) {
-      // Check if there's already an initial_balance adjustment for this product
-      const existingAdj = existingAdjustments.filter(a => a.productId === productId && a.type === 'initial_balance');
-      if (existingAdj.length > 0) {
-        console.log(`  ✓ Already aligned, skipping.\n`);
-        continue;
-      }
-      // Kg is aligned but no unit adjustment exists — create one for pallet/bb/tank counts
-      console.log(`  Kg aligned but no unit counts recorded — creating unit alignment.\n`);
-      adjustmentsToCreate.push({
-        productId,
-        adjustmentKg: 0,
-        pallets: real.pallets,
-        bigBags: real.bigBags,
-        tanks: real.tanks,
-        looseKg: real.looseKg,
-        reason: `Unit alignment: ${real.pallets} pad + ${real.bigBags} bb + ${real.looseKg} loose kg`,
-        type: 'initial_balance',
-        note: `Auto-seeded — kg was already correct, added unit counts`,
-      });
-      continue;
-    }
+    console.log(`  Stock: ${totalKg.toLocaleString()} kg (${real.pallets} pad×${real.palletWeight} + ${real.bigBags} bb×${real.bagWeight} + ${real.looseKg} loose)`);
 
     adjustmentsToCreate.push({
       productId,
-      adjustmentKg: diffKg,
+      adjustmentKg: totalKg,
       pallets: real.pallets,
       bigBags: real.bigBags,
       tanks: real.tanks,
       looseKg: real.looseKg,
-      reason: `Initial stock alignment: set warehouse to ${targetKg.toLocaleString()} kg (${real.pallets} pad + ${real.bigBags} bb + ${real.looseKg} loose kg)`,
+      reason: `Initial balance: ${real.pallets} pad + ${real.bigBags} bb + ${real.looseKg} loose kg = ${totalKg.toLocaleString()} kg`,
       type: 'initial_balance',
-      note: `Auto-seeded from real warehouse count`,
-    });
-    console.log('');
-  }
-
-  // For products NOT in REAL_STOCK that have non-zero stock, zero them out
-  for (const product of products) {
-    if (REAL_STOCK[product.id]) continue;
-    const l = ledger[product.id];
-    if (!l) continue;
-    const currentStockKg = l.producedKg - l.shippedKg + l.adjustedKg;
-    if (Math.abs(currentStockKg) < 1) continue;
-
-    const diffKg = -currentStockKg;
-    console.log(`${product.name} (${product.id}):`);
-    console.log(`  Current ledger: ${currentStockKg.toLocaleString()} kg`);
-    console.log(`  Zeroing out: ${diffKg.toLocaleString()} kg`);
-
-    adjustmentsToCreate.push({
-      productId: product.id,
-      adjustmentKg: diffKg,
-      pallets: 0,
-      bigBags: 0,
-      tanks: 0,
-      looseKg: 0,
-      reason: `Zero-out: product has no real warehouse stock`,
-      type: 'initial_balance',
-      note: `Auto-seeded — warehouse confirmed 0 stock`,
+      note: `Physical stock count 2026-04-02`,
     });
   }
 
-  console.log(`\n${adjustmentsToCreate.length} adjustment(s) to create.`);
+  console.log(`\n${adjustmentsToCreate.length} initial balance(s) to create.`);
+
+  if (existingIBs.length > 0) {
+    console.log(`${existingIBs.length} existing initial_balance record(s) to delete first.`);
+  }
 
   if (DRY_RUN) {
     console.log('\n🏁 Dry run complete. No changes made.\n');
@@ -184,10 +100,16 @@ async function main() {
     return;
   }
 
-  // Create adjustments
+  // Delete old initial_balance adjustments
+  if (existingIBs.length > 0) {
+    const deleted = await prisma.stockAdjustment.deleteMany({ where: { type: 'initial_balance' } });
+    console.log(`  🗑  Deleted ${deleted.count} old initial_balance record(s).`);
+  }
+
+  // Create new initial_balance adjustments
   for (const adj of adjustmentsToCreate) {
     const created = await prisma.stockAdjustment.create({ data: adj });
-    console.log(`  ✓ Created adjustment ${created.id} for ${adj.productId}: ${adj.adjustmentKg >= 0 ? '+' : ''}${adj.adjustmentKg.toLocaleString()} kg`);
+    console.log(`  ✓ Created ${created.id} for ${adj.productId}: ${adj.adjustmentKg.toLocaleString()} kg`);
   }
 
   console.log('\n✅ Done.\n');

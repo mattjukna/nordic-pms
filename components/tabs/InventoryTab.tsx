@@ -295,7 +295,14 @@ export const InventoryTab: React.FC = () => {
       const defPad = product.defaultPalletWeight || 0;
       const defBb = product.defaultBagWeight || 0;
 
-      // ── 1. Build produced lot groups ─────────────────────────────────
+      // ── 0. Find latest initial_balance reset ───────────────────────────
+      const initialBalances = productAdjustments.filter(a => a.type === 'initial_balance');
+      const latestIB = initialBalances.length > 0
+        ? initialBalances.reduce((latest, a) => ((a.timestamp || 0) > (latest.timestamp || 0) ? a : latest))
+        : null;
+      const resetTs = latestIB ? (latestIB.timestamp || 0) : 0;
+
+      // ── 1. Build produced lot groups (post-reset only) ───────────────
       const producedLots: LotGroup[] = [];
       let producedLooseKg = 0;
       let producedKg = 0;
@@ -308,7 +315,8 @@ export const InventoryTab: React.FC = () => {
         else producedLots.push({ unit, weight, count });
       };
 
-      for (const out of productOutputs) {
+      const activeOutputs = resetTs > 0 ? productOutputs.filter(o => (o.timestamp || 0) > resetTs) : productOutputs;
+      for (const out of activeOutputs) {
         const prevProducedKg = producedKg;
         const segs = out.packagingString ? parsePackagingSegments(out.packagingString, defPad, defBb) : [];
         if (segs.length > 0) {
@@ -357,7 +365,7 @@ export const InventoryTab: React.FC = () => {
       };
 
       const varianceCutoffTs = new Date(VARIANCE_CUTOFF_DATE).getTime();
-      const relevantDispatches = dispatchEntries.filter(d => d.productId === product.id && d.status !== 'planned');
+      const relevantDispatches = dispatchEntries.filter(d => d.productId === product.id && d.status !== 'planned' && (!resetTs || (d.date ?? 0) > resetTs));
       for (const d of relevantDispatches) {
         const isAfterCutoff = (d.date ?? 0) >= varianceCutoffTs;
         if (Array.isArray(d.shipments) && d.shipments.length > 0) {
@@ -401,11 +409,24 @@ export const InventoryTab: React.FC = () => {
         }
       }
 
-      // ── 3. Stock adjustments ─────────────────────────────────────────
+      // ── 3. Stock adjustments (initial_balance = reset point) ──────
       let adjKg = 0;
       let adjLooseKg = 0;
       const adjLots: LotGroup[] = [];
+
+      // Use latest initial_balance as starting inventory
+      if (latestIB) {
+        adjKg += latestIB.adjustmentKg || 0;
+        adjLooseKg += latestIB.looseKg || 0;
+        if (latestIB.pallets) adjLots.push({ unit: 'pad', weight: defPad, count: latestIB.pallets });
+        if (latestIB.bigBags) adjLots.push({ unit: 'bb', weight: defBb, count: latestIB.bigBags });
+        if (latestIB.tanks) adjLots.push({ unit: 'tank', weight: 25000, count: latestIB.tanks });
+      }
+
+      // Add other adjustments (corrections, audits) after the reset
       for (const a of productAdjustments) {
+        if (a.type === 'initial_balance') continue;
+        if (resetTs && (a.timestamp || 0) <= resetTs) continue;
         adjKg += a.adjustmentKg || 0;
         adjLooseKg += a.looseKg || 0;
         if (a.pallets) { const ex = adjLots.find(l => l.unit === 'pad' && l.weight === defPad); if (ex) ex.count += a.pallets; else adjLots.push({ unit: 'pad', weight: defPad, count: a.pallets }); }
@@ -494,12 +515,8 @@ export const InventoryTab: React.FC = () => {
       // FIFO aging
       let ageStatus: 'green' | 'yellow' | 'red' = 'green';
       if (currentStockKg > 50) {
-        const initialBalances = productAdjustments.filter(a => a.type === 'initial_balance');
-        const latestResetTs = initialBalances.length > 0
-          ? Math.max(...initialBalances.map(a => new Date(a.timestamp).getTime()))
-          : 0;
         const recentBatches = batchKgs
-          .filter(b => b.timestamp > latestResetTs)
+          .filter(b => b.timestamp > resetTs)
           .sort((a, b) => a.timestamp - b.timestamp);
 
         if (recentBatches.length > 0) {
