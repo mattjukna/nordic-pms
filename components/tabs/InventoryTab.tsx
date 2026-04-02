@@ -40,6 +40,7 @@ export const InventoryTab: React.FC = () => {
   const [wizardTarget, setWizardTarget] = useState<'dispatch' | 'shipment'>('dispatch');
   const [investigateTarget, setInvestigateTarget] = useState<string | null>(null);
   const [showInvestigateModal, setShowInvestigateModal] = useState(false);
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   // Form State
   const [dispatchStatus, setDispatchStatus] = useState<'confirmed' | 'planned'>('confirmed');
@@ -285,66 +286,75 @@ export const InventoryTab: React.FC = () => {
   const editingOrderLimit = editingEntry ? (editingEntry.orderedQuantityKg ?? editingEntry.quantityKg ?? 0) : 0;
   const editingRemaining = editingOrderLimit - editingShippedSoFar;
 
-  // Calculate current stock and Aging — ledgered by discrete units (pallets/bigBags/tanks)
+  // Calculate current stock and Aging — lot-based ledger tracking individual unit weights
+  type LotGroup = { unit: 'pad' | 'bb' | 'tank'; weight: number; count: number };
   const stockLevels = useMemo(() => {
     return products.map(product => {
       const productOutputs = outputEntries.filter(e => e.productId === product.id);
       const productAdjustments = stockAdjustments.filter(a => a.productId === product.id);
+      const defPad = product.defaultPalletWeight || 0;
+      const defBb = product.defaultBagWeight || 0;
 
-      // Produced aggregates (from explicit segments or parsed totals)
+      // ── 1. Build produced lot groups ─────────────────────────────────
+      const producedLots: LotGroup[] = [];
+      let producedLooseKg = 0;
       let producedKg = 0;
-      let producedPallets = 0;
-      let producedBigBags = 0;
-      let producedTanks = 0;
-      let producedPadKg = 0;
-      let producedBbKg = 0;
-      let producedTankKg = 0;
       const batchKgs: { timestamp: number; kg: number }[] = [];
+      const fractionalOutputs: any[] = [];
+
+      const addLot = (unit: 'pad' | 'bb' | 'tank', weight: number, count: number) => {
+        const existing = producedLots.find(l => l.unit === unit && l.weight === weight);
+        if (existing) existing.count += count;
+        else producedLots.push({ unit, weight, count });
+      };
 
       for (const out of productOutputs) {
         const prevProducedKg = producedKg;
-        const segs = out.packagingString ? parsePackagingSegments(out.packagingString, product.defaultPalletWeight, product.defaultBagWeight) : [] as any[];
+        const segs = out.packagingString ? parsePackagingSegments(out.packagingString, defPad, defBb) : [];
         if (segs.length > 0) {
           for (const seg of segs) {
-            if (seg.unit === 'pad') { producedPallets += seg.count; const w = seg.unitWeight || product.defaultPalletWeight || 0; producedPadKg += seg.count * w; producedKg += seg.count * w; }
-            else if (seg.unit === 'bb') { producedBigBags += seg.count; const w = seg.unitWeight || product.defaultBagWeight || 0; producedBbKg += seg.count * w; producedKg += seg.count * w; }
-            else if (seg.unit === 'tank') { producedTanks += seg.count; const w = seg.unitWeight || 25000; producedTankKg += seg.count * w; producedKg += seg.count * w; }
-            else if (seg.unit === 'kg') { producedKg += seg.count; }
+            if (seg.unit === 'kg') { producedLooseKg += seg.count; producedKg += seg.count; }
+            else {
+              const w = seg.unitWeight || (seg.unit === 'pad' ? defPad : seg.unit === 'bb' ? defBb : 25000);
+              addLot(seg.unit, w, seg.count);
+              producedKg += seg.count * w;
+            }
           }
         } else if (out.parsed) {
           const p = out.parsed;
-          // whole units
-          const wholeP = Math.floor(p.pallets || 0);
-          const fracP = (p.pallets || 0) - wholeP;
-          if (wholeP > 0) { producedPallets += wholeP; producedPadKg += wholeP * (product.defaultPalletWeight || 0); producedKg += wholeP * (product.defaultPalletWeight || 0); }
-          if (fracP > 1e-6) { producedPallets += 1; const pk = Math.round(fracP * (product.defaultPalletWeight || 0)); producedPadKg += pk; producedKg += pk; }
+          const wholeP = Math.floor(p.pallets || 0); const fracP = (p.pallets || 0) - wholeP;
+          if (wholeP > 0) { addLot('pad', defPad, wholeP); producedKg += wholeP * defPad; }
+          if (fracP > 1e-6) { const pk = Math.round(fracP * defPad); addLot('pad', pk, 1); producedKg += pk; }
 
-          const wholeB = Math.floor(p.bigBags || 0);
-          const fracB = (p.bigBags || 0) - wholeB;
-          if (wholeB > 0) { producedBigBags += wholeB; producedBbKg += wholeB * (product.defaultBagWeight || 0); producedKg += wholeB * (product.defaultBagWeight || 0); }
-          if (fracB > 1e-6) { producedBigBags += 1; const bk = Math.round(fracB * (product.defaultBagWeight || 0)); producedBbKg += bk; producedKg += bk; }
+          const wholeB = Math.floor(p.bigBags || 0); const fracB = (p.bigBags || 0) - wholeB;
+          if (wholeB > 0) { addLot('bb', defBb, wholeB); producedKg += wholeB * defBb; }
+          if (fracB > 1e-6) { const bk = Math.round(fracB * defBb); addLot('bb', bk, 1); producedKg += bk; }
 
-          const wholeT = Math.floor(p.tanks || 0);
-          const fracT = (p.tanks || 0) - wholeT;
-          if (wholeT > 0) { producedTanks += wholeT; producedTankKg += wholeT * 25000; producedKg += wholeT * 25000; }
-          if (fracT > 1e-6) { producedTanks += 1; const tk = Math.round(fracT * 25000); producedTankKg += tk; producedKg += tk; }
+          const wholeT = Math.floor(p.tanks || 0); const fracT = (p.tanks || 0) - wholeT;
+          if (wholeT > 0) { addLot('tank', 25000, wholeT); producedKg += wholeT * 25000; }
+          if (fracT > 1e-6) { const tk = Math.round(fracT * 25000); addLot('tank', tk, 1); producedKg += tk; }
+
+          if (!Number.isInteger(p.pallets || 0) || !Number.isInteger(p.bigBags || 0) || !Number.isInteger(p.tanks || 0)) {
+            fractionalOutputs.push(out);
+          }
         }
         if (out.timestamp) batchKgs.push({ timestamp: out.timestamp, kg: producedKg - prevProducedKg });
       }
 
-      // Shipments / dispatches
+      // ── 2. Build shipped lot groups ──────────────────────────────────
+      const shippedLots: LotGroup[] = [];
+      let shippedLooseKg = 0;
       let shippedKg = 0;
-      let shippedPallets = 0;
-      let shippedBigBags = 0;
-      let shippedTanks = 0;
-      let shippedPadKg = 0;
-      let shippedBbKg = 0;
-      let shippedTankKg = 0;
       let unmappedKgForUnits = 0;
       let hasLegacyUnmappedData = false;
-      const fractionalOutputs: any[] = [];
       const problematicShipments: any[] = [];
       const unmappedDispatches: any[] = [];
+
+      const addShippedLot = (unit: 'pad' | 'bb' | 'tank', weight: number, count: number) => {
+        const existing = shippedLots.find(l => l.unit === unit && l.weight === weight);
+        if (existing) existing.count += count;
+        else shippedLots.push({ unit, weight, count });
+      };
 
       const varianceCutoffTs = new Date(VARIANCE_CUTOFF_DATE).getTime();
       const relevantDispatches = dispatchEntries.filter(d => d.productId === product.id && d.status !== 'planned');
@@ -353,40 +363,29 @@ export const InventoryTab: React.FC = () => {
         if (Array.isArray(d.shipments) && d.shipments.length > 0) {
           for (const s of d.shipments) {
             shippedKg += s.quantityKg || 0;
-            const segs = s.packagingString ? parsePackagingSegments(s.packagingString, product.defaultPalletWeight, product.defaultBagWeight) : [] as any[];
+            const segs = s.packagingString ? parsePackagingSegments(s.packagingString, defPad, defBb) : [];
             if (segs.length > 0) {
               for (const seg of segs) {
-                if (seg.unit === 'pad') { shippedPallets += seg.count; const w = seg.unitWeight || product.defaultPalletWeight || 0; shippedPadKg += seg.count * w; }
-                else if (seg.unit === 'bb') { shippedBigBags += seg.count; const w = seg.unitWeight || product.defaultBagWeight || 0; shippedBbKg += seg.count * w; }
-                else if (seg.unit === 'tank') { shippedTanks += seg.count; const w = seg.unitWeight || 25000; shippedTankKg += seg.count * w; }
-                else if (seg.unit === 'kg') { /* loose kg */ }
+                if (seg.unit === 'kg') { shippedLooseKg += seg.count; }
+                else {
+                  const w = seg.unitWeight || (seg.unit === 'pad' ? defPad : seg.unit === 'bb' ? defBb : 25000);
+                  addShippedLot(seg.unit, w, seg.count);
+                }
               }
               if (isAfterCutoff && s.parsed && s.parsed.totalWeight && Math.abs((s.parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
             } else if (s.parsed) {
               const p = s.parsed;
-              const wholeP = Math.floor(p.pallets || 0);
-              const fracP = (p.pallets || 0) - wholeP;
-              if (wholeP > 0) { shippedPallets += wholeP; shippedPadKg += wholeP * (product.defaultPalletWeight || 0); }
-              if (fracP > 1e-6) {
-                if (isAfterCutoff) { unmappedKgForUnits += fracP * (product.defaultPalletWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
-                else { hasLegacyUnmappedData = true; }
-              }
+              const wholeP = Math.floor(p.pallets || 0); const fracP = (p.pallets || 0) - wholeP;
+              if (wholeP > 0) addShippedLot('pad', defPad, wholeP);
+              if (fracP > 1e-6) { if (isAfterCutoff) { unmappedKgForUnits += fracP * defPad; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); } else { hasLegacyUnmappedData = true; } }
 
-              const wholeB = Math.floor(p.bigBags || 0);
-              const fracB = (p.bigBags || 0) - wholeB;
-              if (wholeB > 0) { shippedBigBags += wholeB; shippedBbKg += wholeB * (product.defaultBagWeight || 0); }
-              if (fracB > 1e-6) {
-                if (isAfterCutoff) { unmappedKgForUnits += fracB * (product.defaultBagWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
-                else { hasLegacyUnmappedData = true; }
-              }
+              const wholeB = Math.floor(p.bigBags || 0); const fracB = (p.bigBags || 0) - wholeB;
+              if (wholeB > 0) addShippedLot('bb', defBb, wholeB);
+              if (fracB > 1e-6) { if (isAfterCutoff) { unmappedKgForUnits += fracB * defBb; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); } else { hasLegacyUnmappedData = true; } }
 
-              const wholeT = Math.floor(p.tanks || 0);
-              const fracT = (p.tanks || 0) - wholeT;
-              if (wholeT > 0) { shippedTanks += wholeT; shippedTankKg += wholeT * 25000; }
-              if (fracT > 1e-6) {
-                if (isAfterCutoff) { unmappedKgForUnits += fracT * 25000; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
-                else { hasLegacyUnmappedData = true; }
-              }
+              const wholeT = Math.floor(p.tanks || 0); const fracT = (p.tanks || 0) - wholeT;
+              if (wholeT > 0) addShippedLot('tank', 25000, wholeT);
+              if (fracT > 1e-6) { if (isAfterCutoff) { unmappedKgForUnits += fracT * 25000; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); } else { hasLegacyUnmappedData = true; } }
             } else if (isAfterCutoff) {
               unmappedKgForUnits += s.quantityKg || 0;
               problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
@@ -395,7 +394,6 @@ export const InventoryTab: React.FC = () => {
             }
           }
         } else if (isAfterCutoff) {
-          // Only warn about unmapped dispatches from new data (after cutoff).
           unmappedDispatches.push(d);
           if (d.packagingString || d.parsed) problematicShipments.push({ type: 'dispatch', entry: d });
         } else {
@@ -403,42 +401,89 @@ export const InventoryTab: React.FC = () => {
         }
       }
 
-      // Identify fractional outputs from output entries
-      for (const out of productOutputs) {
-        const p = out.parsed || { pallets: 0, bigBags: 0, tanks: 0 } as any;
-        if (!Number.isInteger(p.pallets || 0) || !Number.isInteger(p.bigBags || 0) || !Number.isInteger(p.tanks || 0)) {
-          fractionalOutputs.push(out);
+      // ── 3. Stock adjustments ─────────────────────────────────────────
+      let adjKg = 0;
+      let adjLooseKg = 0;
+      const adjLots: LotGroup[] = [];
+      for (const a of productAdjustments) {
+        adjKg += a.adjustmentKg || 0;
+        adjLooseKg += a.looseKg || 0;
+        if (a.pallets) { const ex = adjLots.find(l => l.unit === 'pad' && l.weight === defPad); if (ex) ex.count += a.pallets; else adjLots.push({ unit: 'pad', weight: defPad, count: a.pallets }); }
+        if (a.bigBags) { const ex = adjLots.find(l => l.unit === 'bb' && l.weight === defBb); if (ex) ex.count += a.bigBags; else adjLots.push({ unit: 'bb', weight: defBb, count: a.bigBags }); }
+        if (a.tanks) { const ex = adjLots.find(l => l.unit === 'tank' && l.weight === 25000); if (ex) ex.count += a.tanks; else adjLots.push({ unit: 'tank', weight: 25000, count: a.tanks }); }
+      }
+
+      // ── 4. Compute net lot inventory (produced + adj - shipped) ──────
+      const lotMap = new Map<string, { unit: 'pad' | 'bb' | 'tank'; weight: number; count: number }>();
+      const lotKey = (unit: string, weight: number) => `${unit}:${weight}`;
+
+      for (const l of producedLots) {
+        const k = lotKey(l.unit, l.weight);
+        const ex = lotMap.get(k);
+        lotMap.set(k, ex ? { ...ex, count: ex.count + l.count } : { ...l });
+      }
+      for (const l of adjLots) {
+        const k = lotKey(l.unit, l.weight);
+        const ex = lotMap.get(k);
+        lotMap.set(k, ex ? { ...ex, count: ex.count + l.count } : { ...l });
+      }
+
+      // Subtract shipped lots — match by exact weight first, then closest
+      for (const sl of shippedLots) {
+        let remaining = sl.count;
+        const exactKey = lotKey(sl.unit, sl.weight);
+        const exact = lotMap.get(exactKey);
+        if (exact && exact.count > 0) {
+          const take = Math.min(exact.count, remaining);
+          exact.count -= take;
+          remaining -= take;
+        }
+        if (remaining > 0) {
+          const sameUnit = [...lotMap.values()].filter(l => l.unit === sl.unit && l.count > 0)
+            .sort((a, b) => Math.abs(a.weight - sl.weight) - Math.abs(b.weight - sl.weight));
+          for (const lot of sameUnit) {
+            if (remaining <= 0) break;
+            const take = Math.min(lot.count, remaining);
+            lot.count -= take;
+            remaining -= take;
+          }
         }
       }
 
-      // Stock adjustments (initial balances, audits, corrections)
-      let adjKg = 0;
-      let adjPallets = 0;
-      let adjBigBags = 0;
-      let adjTanks = 0;
-      let adjLooseKg = 0;
-      for (const a of productAdjustments) {
-        adjKg += a.adjustmentKg || 0;
-        adjPallets += a.pallets || 0;
-        adjBigBags += a.bigBags || 0;
-        adjTanks += a.tanks || 0;
-        adjLooseKg += a.looseKg || 0;
-      }
+      // Net loose kg
+      let netLooseKg = producedLooseKg - shippedLooseKg + adjLooseKg;
 
+      // Total kg
       const realStockKg = producedKg - shippedKg + adjKg;
       const currentStockKg = Math.max(0, realStockKg);
 
-      // Ledgered units (integer counts)
-      const currentStockPallets = Math.max(0, Math.round(producedPallets) - Math.round(shippedPallets) + Math.round(adjPallets));
-      const currentStockBigBags = Math.max(0, Math.round(producedBigBags) - Math.round(shippedBigBags) + Math.round(adjBigBags));
-      const currentStockTanks = Math.max(0, Math.round(producedTanks) - Math.round(shippedTanks) + Math.round(adjTanks));
+      // ── 5. Auto-consolidation: loose kg → new pallets ────────────────
+      if (defPad > 0 && netLooseKg >= defPad) {
+        const newPallets = Math.floor(netLooseKg / defPad);
+        netLooseKg -= newPallets * defPad;
+        const k = lotKey('pad', defPad);
+        const ex = lotMap.get(k);
+        lotMap.set(k, ex ? { ...ex, count: ex.count + newPallets } : { unit: 'pad', weight: defPad, count: newPallets });
+      }
 
-      // Use product default weights for unit kg calculations
-      const avgPadKg = product.defaultPalletWeight || 0;
-      const avgBbKg = product.defaultBagWeight || 0;
+      // Collect surviving lot groups (count > 0), sorted by unit then weight desc
+      const currentLots: LotGroup[] = [...lotMap.values()]
+        .filter(l => l.count > 0)
+        .sort((a, b) => {
+          const unitOrder = { pad: 0, bb: 1, tank: 2 };
+          if (unitOrder[a.unit] !== unitOrder[b.unit]) return unitOrder[a.unit] - unitOrder[b.unit];
+          return b.weight - a.weight;
+        });
 
-      const expectedKgFromUnits = (currentStockPallets * avgPadKg) + (currentStockBigBags * avgBbKg) + (currentStockTanks * 25000);
-      const looseKgEstimate = currentStockKg - expectedKgFromUnits;
+      // Summary counts
+      const currentStockPallets = currentLots.filter(l => l.unit === 'pad').reduce((s, l) => s + l.count, 0);
+      const currentStockBigBags = currentLots.filter(l => l.unit === 'bb').reduce((s, l) => s + l.count, 0);
+      const currentStockTanks = currentLots.filter(l => l.unit === 'tank').reduce((s, l) => s + l.count, 0);
+      const looseKg = Math.max(0, Math.round(netLooseKg));
+
+      // Variance: compare total kg from lots+loose vs currentStockKg
+      const expectedKgFromLots = currentLots.reduce((s, l) => s + l.count * l.weight, 0) + looseKg;
+      const looseKgEstimate = currentStockKg - expectedKgFromLots;
 
       const hasFractionalInput = fractionalOutputs.length > 0 || problematicShipments.some(p => (
         (p.entry?.pallets && !Number.isInteger(p.entry.pallets)) || (p.entry?.bigBags && !Number.isInteger(p.entry.bigBags)) || (p.entry?.tanks && !Number.isInteger(p.entry.tanks))
@@ -446,8 +491,7 @@ export const InventoryTab: React.FC = () => {
 
       const looseWarning = unmappedKgForUnits > 0 || (!hasLegacyUnmappedData && Math.abs(looseKgEstimate) > 50) || unmappedDispatches.length > 0 || problematicShipments.length > 0;
 
-      // FIFO aging: only consider batches produced AFTER the latest initial_balance
-      // adjustment, since that represents a verified stock reset point.
+      // FIFO aging
       let ageStatus: 'green' | 'yellow' | 'red' = 'green';
       if (currentStockKg > 50) {
         const initialBalances = productAdjustments.filter(a => a.type === 'initial_balance');
@@ -459,7 +503,6 @@ export const InventoryTab: React.FC = () => {
           .sort((a, b) => a.timestamp - b.timestamp);
 
         if (recentBatches.length > 0) {
-          // FIFO within post-reset batches only
           const postResetProducedKg = recentBatches.reduce((sum, b) => sum + b.kg, 0);
           let consumed = Math.max(0, postResetProducedKg - currentStockKg);
           for (const batch of recentBatches) {
@@ -479,7 +522,9 @@ export const InventoryTab: React.FC = () => {
         currentStockPallets,
         currentStockBigBags,
         currentStockTanks,
-        expectedKgFromUnits,
+        currentLots,
+        looseKg,
+        expectedKgFromUnits: expectedKgFromLots,
         looseKgEstimate,
         unmappedKgForUnits,
         fractionalOutputs,
@@ -492,6 +537,7 @@ export const InventoryTab: React.FC = () => {
       };
     });
   }, [outputEntries, dispatchEntries, products, stockAdjustments]);
+
 
   // Auto-map helpers
   const autoMapShipment = async (dispatchId: string, shipmentId: string, kg: number) => {
@@ -1083,17 +1129,49 @@ export const InventoryTab: React.FC = () => {
             <div>
               {showPallets ? (
                 <div className="flex flex-col">
+                   {/* Summary line */}
                    <div className={`text-xl font-mono font-bold ${item.hasFractionalInput ? 'text-red-600' : 'text-slate-800'}`}>
                      {Math.round(item.currentStockPallets).toLocaleString()} <span className="text-sm font-normal text-slate-400">pad</span>
                    </div>
-                   <div className={`text-sm font-mono font-bold ${item.hasFractionalInput ? 'text-red-600' : 'text-slate-600'}`}>
-                     {Math.round(item.currentStockBigBags).toLocaleString()} <span className="text-xs font-normal text-slate-400">bb</span>
-                   </div>
+                   {item.currentStockBigBags > 0 && (
+                     <div className={`text-sm font-mono font-bold ${item.hasFractionalInput ? 'text-red-600' : 'text-slate-600'}`}>
+                       {Math.round(item.currentStockBigBags).toLocaleString()} <span className="text-xs font-normal text-slate-400">bb</span>
+                     </div>
+                   )}
                    {item.currentStockTanks > 0 && (
                      <div className={`text-sm font-mono font-bold ${item.hasFractionalInput ? 'text-red-600' : 'text-slate-600'}`}>
                        {Math.round(item.currentStockTanks).toLocaleString()} <span className="text-xs font-normal text-slate-400">tank</span>
                      </div>
                    )}
+                   {item.looseKg > 0 && (
+                     <div className="text-sm font-mono font-bold text-amber-600">
+                       {item.looseKg.toLocaleString()} <span className="text-xs font-normal">kg {t('inventory.looseKg').toLowerCase()}</span>
+                     </div>
+                   )}
+
+                   {/* Expand/collapse lot details */}
+                   {item.currentLots.length > 0 && (
+                     <button
+                       onClick={(e) => { e.stopPropagation(); setExpandedCards(prev => { const next = new Set(prev); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; }); }}
+                       className="flex items-center gap-1 text-[10px] text-blue-600 font-bold mt-1 hover:text-blue-800 transition-colors"
+                     >
+                       {expandedCards.has(item.id) ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                       {expandedCards.has(item.id) ? t('inventory.hideLots') : t('inventory.showLots')}
+                     </button>
+                   )}
+
+                   {/* Lot detail rows */}
+                   {expandedCards.has(item.id) && item.currentLots.length > 0 && (
+                     <div className="mt-1 border-t border-slate-200 pt-1 space-y-0.5">
+                       {item.currentLots.map((lot, idx) => (
+                         <div key={`${lot.unit}-${lot.weight}-${idx}`} className="text-[10px] font-mono text-slate-600 flex justify-between">
+                           <span>{lot.count}× {lot.unit}</span>
+                           <span className="text-slate-400">{lot.weight.toLocaleString()} kg</span>
+                         </div>
+                       ))}
+                     </div>
+                   )}
+
                    {item.hasFractionalInput && (
                      <div className="text-[9px] text-red-600 font-bold mt-1 leading-tight">{t('inventory.errorFractional')}</div>
                    )}
@@ -1105,17 +1183,6 @@ export const InventoryTab: React.FC = () => {
                    )}
                    {!item.hasLegacyUnmappedData && Math.abs(item.looseKgEstimate || 0) > 50 && (
                      <div className="text-[11px] text-slate-600 mt-1">{t('inventory.variance')}: {Math.round(item.looseKgEstimate).toLocaleString()} kg</div>
-                   )}
-                   {item.looseKgEstimate > 0 && item.defaultPalletWeight > 0 && item.looseKgEstimate >= item.defaultPalletWeight && (
-                     <div className="text-[10px] text-emerald-600 font-bold mt-1">
-                       ↑ {Math.floor(item.looseKgEstimate / item.defaultPalletWeight)} loose pallet(s) can be consolidated
-                     </div>
-                   )}
-                   {(item.currentStockPallets > 0 || item.currentStockBigBags > 0) && (
-                     <div className="text-[10px] text-slate-500 mt-1">
-                       {item.currentStockPallets > 0 ? `Avg pad: ${item.defaultPalletWeight || 0} kg` : ''}
-                       {item.currentStockBigBags > 0 && <span className="ml-2">Avg bb: {item.defaultBagWeight || 0} kg</span>}
-                     </div>
                    )}
                    {(item.hasFractionalInput || item.looseWarning || item.unmappedKgForUnits > 0) && (
                      <button onClick={() => { setInvestigateTarget(item.id); setShowInvestigateModal(true); }} className="mt-2 text-xs text-blue-600 font-bold underline">{t('inventory.investigate')}</button>
