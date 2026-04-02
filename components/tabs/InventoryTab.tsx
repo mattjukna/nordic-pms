@@ -18,6 +18,7 @@ import { clearDraft, loadDraft, saveDraft } from '../../utils/sessionDraft';
 import { apiFetch } from '../../services/apiFetch';
 import { validateDispatchForm, validateShipmentForm } from '../../utils/validation';
 import { useTranslation } from '../../i18n/useTranslation';
+import { VARIANCE_CUTOFF_DATE } from '../../constants';
 // autoptable has no types exposed here
 // @ts-ignore
 import autoTable from 'jspdf-autotable';
@@ -344,8 +345,10 @@ export const InventoryTab: React.FC = () => {
       const problematicShipments: any[] = [];
       const unmappedDispatches: any[] = [];
 
+      const varianceCutoffTs = new Date(VARIANCE_CUTOFF_DATE).getTime();
       const relevantDispatches = dispatchEntries.filter(d => d.productId === product.id && d.status !== 'planned');
       for (const d of relevantDispatches) {
+        const isAfterCutoff = (d.date ?? 0) >= varianceCutoffTs;
         if (Array.isArray(d.shipments) && d.shipments.length > 0) {
           for (const s of d.shipments) {
             shippedKg += s.quantityKg || 0;
@@ -357,31 +360,30 @@ export const InventoryTab: React.FC = () => {
                 else if (seg.unit === 'tank') { shippedTanks += seg.count; const w = seg.unitWeight || 25000; shippedTankKg += seg.count * w; }
                 else if (seg.unit === 'kg') { /* loose kg */ }
               }
-              if (s.parsed && s.parsed.totalWeight && Math.abs((s.parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
+              if (isAfterCutoff && s.parsed && s.parsed.totalWeight && Math.abs((s.parsed.totalWeight || 0) - (s.quantityKg || 0)) > 25) problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
             } else if (s.parsed) {
               const p = s.parsed;
               const wholeP = Math.floor(p.pallets || 0);
               const fracP = (p.pallets || 0) - wholeP;
               if (wholeP > 0) { shippedPallets += wholeP; shippedPadKg += wholeP * (product.defaultPalletWeight || 0); }
-              if (fracP > 1e-6) { unmappedKgForUnits += fracP * (product.defaultPalletWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+              if (isAfterCutoff && fracP > 1e-6) { unmappedKgForUnits += fracP * (product.defaultPalletWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
 
               const wholeB = Math.floor(p.bigBags || 0);
               const fracB = (p.bigBags || 0) - wholeB;
               if (wholeB > 0) { shippedBigBags += wholeB; shippedBbKg += wholeB * (product.defaultBagWeight || 0); }
-              if (fracB > 1e-6) { unmappedKgForUnits += fracB * (product.defaultBagWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+              if (isAfterCutoff && fracB > 1e-6) { unmappedKgForUnits += fracB * (product.defaultBagWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
 
               const wholeT = Math.floor(p.tanks || 0);
               const fracT = (p.tanks || 0) - wholeT;
               if (wholeT > 0) { shippedTanks += wholeT; shippedTankKg += wholeT * 25000; }
-              if (fracT > 1e-6) { unmappedKgForUnits += fracT * 25000; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
-            } else {
+              if (isAfterCutoff && fracT > 1e-6) { unmappedKgForUnits += fracT * 25000; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+            } else if (isAfterCutoff) {
               unmappedKgForUnits += s.quantityKg || 0;
               problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
             }
           }
-        } else {
-          // Do NOT deduct stock for confirmed / planned dispatches that have no shipments yet.
-          // Mark as unmapped so user can investigate and the UI can surface it.
+        } else if (isAfterCutoff) {
+          // Only warn about unmapped dispatches from new data (after cutoff).
           unmappedDispatches.push(d);
           if (d.packagingString || d.parsed) problematicShipments.push({ type: 'dispatch', entry: d });
         }

@@ -1,6 +1,13 @@
 
 import { Product, Supplier, IntakeEntry, OutputEntry, Buyer, GlobalConfig } from './types';
 
+/**
+ * Dispatches before this date were imported from a legacy system that did not
+ * track pallet / big-bag numbers.  Exclude them from variance & unmapped-
+ * shipment warnings so only new, app-entered data is validated.
+ */
+export const VARIANCE_CUTOFF_DATE = '2026-04-02';
+
 export const DEFAULT_CONFIG: GlobalConfig = {
   processingCostPerTon: 45.00, // EUR per ton of wet milk
   defaultMilkBasePrice: 0.35, // EUR per kg
