@@ -341,6 +341,7 @@ export const InventoryTab: React.FC = () => {
       let shippedBbKg = 0;
       let shippedTankKg = 0;
       let unmappedKgForUnits = 0;
+      let hasLegacyUnmappedData = false;
       const fractionalOutputs: any[] = [];
       const problematicShipments: any[] = [];
       const unmappedDispatches: any[] = [];
@@ -366,26 +367,39 @@ export const InventoryTab: React.FC = () => {
               const wholeP = Math.floor(p.pallets || 0);
               const fracP = (p.pallets || 0) - wholeP;
               if (wholeP > 0) { shippedPallets += wholeP; shippedPadKg += wholeP * (product.defaultPalletWeight || 0); }
-              if (isAfterCutoff && fracP > 1e-6) { unmappedKgForUnits += fracP * (product.defaultPalletWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+              if (fracP > 1e-6) {
+                if (isAfterCutoff) { unmappedKgForUnits += fracP * (product.defaultPalletWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+                else { hasLegacyUnmappedData = true; }
+              }
 
               const wholeB = Math.floor(p.bigBags || 0);
               const fracB = (p.bigBags || 0) - wholeB;
               if (wholeB > 0) { shippedBigBags += wholeB; shippedBbKg += wholeB * (product.defaultBagWeight || 0); }
-              if (isAfterCutoff && fracB > 1e-6) { unmappedKgForUnits += fracB * (product.defaultBagWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+              if (fracB > 1e-6) {
+                if (isAfterCutoff) { unmappedKgForUnits += fracB * (product.defaultBagWeight || 0); problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+                else { hasLegacyUnmappedData = true; }
+              }
 
               const wholeT = Math.floor(p.tanks || 0);
               const fracT = (p.tanks || 0) - wholeT;
               if (wholeT > 0) { shippedTanks += wholeT; shippedTankKg += wholeT * 25000; }
-              if (isAfterCutoff && fracT > 1e-6) { unmappedKgForUnits += fracT * 25000; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+              if (fracT > 1e-6) {
+                if (isAfterCutoff) { unmappedKgForUnits += fracT * 25000; problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id }); }
+                else { hasLegacyUnmappedData = true; }
+              }
             } else if (isAfterCutoff) {
               unmappedKgForUnits += s.quantityKg || 0;
               problematicShipments.push({ type: 'shipment', entry: s, dispatchId: d.id });
+            } else {
+              hasLegacyUnmappedData = true;
             }
           }
         } else if (isAfterCutoff) {
           // Only warn about unmapped dispatches from new data (after cutoff).
           unmappedDispatches.push(d);
           if (d.packagingString || d.parsed) problematicShipments.push({ type: 'dispatch', entry: d });
+        } else {
+          hasLegacyUnmappedData = true;
         }
       }
 
@@ -430,7 +444,7 @@ export const InventoryTab: React.FC = () => {
         (p.entry?.pallets && !Number.isInteger(p.entry.pallets)) || (p.entry?.bigBags && !Number.isInteger(p.entry.bigBags)) || (p.entry?.tanks && !Number.isInteger(p.entry.tanks))
       ));
 
-      const looseWarning = unmappedKgForUnits > 0 || Math.abs(looseKgEstimate) > 50 || unmappedDispatches.length > 0 || problematicShipments.length > 0;
+      const looseWarning = unmappedKgForUnits > 0 || (!hasLegacyUnmappedData && Math.abs(looseKgEstimate) > 50) || unmappedDispatches.length > 0 || problematicShipments.length > 0;
 
       // FIFO aging: only consider batches produced AFTER the latest initial_balance
       // adjustment, since that represents a verified stock reset point.
@@ -473,7 +487,8 @@ export const InventoryTab: React.FC = () => {
         unmappedDispatches,
         ageStatus,
         hasFractionalInput,
-        looseWarning
+        looseWarning,
+        hasLegacyUnmappedData
       };
     });
   }, [outputEntries, dispatchEntries, products, stockAdjustments]);
@@ -1088,7 +1103,7 @@ export const InventoryTab: React.FC = () => {
                    {item.unmappedKgForUnits > 0 && (
                      <div className="text-[11px] text-slate-600 mt-1">{t('inventory.unmappedShipped')}: {Math.round(item.unmappedKgForUnits).toLocaleString()} kg</div>
                    )}
-                   {Math.abs(item.looseKgEstimate || 0) > 50 && (
+                   {!item.hasLegacyUnmappedData && Math.abs(item.looseKgEstimate || 0) > 50 && (
                      <div className="text-[11px] text-slate-600 mt-1">{t('inventory.variance')}: {Math.round(item.looseKgEstimate).toLocaleString()} kg</div>
                    )}
                    {item.looseKgEstimate > 0 && item.defaultPalletWeight > 0 && item.looseKgEstimate >= item.defaultPalletWeight && (

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import NordicLogApp from "./components/NordicLogApp";
 import LoginPage from "./components/auth/LoginPage";
+import WelcomeScreen from "./components/WelcomeScreen";
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { useStore } from "./store";
 import { loadRuntimeAuthConfig, RuntimeAuthConfig } from "./auth/runtimeConfig";
@@ -21,6 +22,19 @@ const App: React.FC = () => {
 
   const [cfg, setCfg] = useState<RuntimeAuthConfig | null>(null);
   const [cfgLoading, setCfgLoading] = useState(true);
+
+  // Welcome screen: show once per calendar day
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      return localStorage.getItem('lastWelcomeDate') !== today;
+    } catch { return true; }
+  });
+
+  const dismissWelcome = () => {
+    try { localStorage.setItem('lastWelcomeDate', new Date().toISOString().slice(0, 10)); } catch {}
+    setShowWelcome(false);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -67,6 +81,33 @@ const App: React.FC = () => {
     }
   }, [isAuthenticated, isDomainOk, hydrateFromApi]);
 
+  // SSE: listen for data-changed events from other clients and re-hydrate
+  useEffect(() => {
+    if (!isAuthenticated || !isDomainOk) return;
+    let es: EventSource | null = null;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    try {
+      es = new EventSource('/api/events');
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'data-changed') {
+            // Debounce rapid successive changes (e.g. bulk operations)
+            if (debounce) clearTimeout(debounce);
+            debounce = setTimeout(() => hydrateFromApi(), 500);
+          }
+        } catch { /* ignore malformed messages */ }
+      };
+      es.onerror = () => {
+        // EventSource will auto-reconnect; nothing extra needed
+      };
+    } catch { /* SSE not supported or blocked */ }
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      es?.close();
+    };
+  }, [isAuthenticated, isDomainOk, hydrateFromApi]);
+
   if (cfgLoading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center p-4">
@@ -89,6 +130,10 @@ const App: React.FC = () => {
         }}
       />
     );
+  }
+
+  if (showWelcome) {
+    return <WelcomeScreen userName={userEmail} onContinue={dismissWelcome} />;
   }
 
   return <NordicLogApp isAuthed={true} />;

@@ -217,8 +217,17 @@ type UserSettings = {
 };
 
 export const useStore = create<AppState>((set, get) => ({
-  activeTab: 'input',
-  setActiveTab: (tab) => set({ activeTab: tab }),
+  activeTab: ((): AppState['activeTab'] => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('activeTab') : null;
+      if (saved && ['input', 'preview', 'trends', 'ai', 'inventory', 'settings'].includes(saved)) return saved as AppState['activeTab'];
+    } catch (e) {}
+    return 'input';
+  })(),
+  setActiveTab: (tab) => {
+    try { localStorage.setItem('activeTab', tab); } catch (e) {}
+    set({ activeTab: tab });
+  },
 
   globalConfig: DEFAULT_CONFIG,
   updateGlobalConfig: (config) => set((state) => ({ globalConfig: { ...state.globalConfig, ...config } })),

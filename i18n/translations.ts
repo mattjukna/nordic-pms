@@ -826,6 +826,16 @@ const en = {
     noLogs: 'No logs recorded yet.',
     showingLast: 'Showing last {count} entries',
   },
+
+  // ─── Welcome screen ───────────────────────────────────────────
+  welcome: {
+    greeting: 'Good morning',
+    greetingAfternoon: 'Good afternoon',
+    greetingEvening: 'Good evening',
+    subtitle: 'Nordic Production Management System',
+    todaySummary: 'Ready to start your day.',
+    continueButton: 'Continue to Dashboard',
+  },
 } as const;
 
 // ─── LITHUANIAN ──────────────────────────────────────────────────────
@@ -1593,6 +1603,15 @@ const lt: TranslationDict = {
     totalKg: 'Iš viso kg',
     noLogs: 'Įrašų dar nėra.',
     showingLast: 'Rodomi paskutiniai {count} įrašai',
+  },
+
+  welcome: {
+    greeting: 'Labas rytas',
+    greetingAfternoon: 'Laba diena',
+    greetingEvening: 'Labas vakaras',
+    subtitle: 'Nordic gamybos valdymo sistema',
+    todaySummary: 'Pasiruošę pradėti dieną.',
+    continueButton: 'Tęsti į valdymo skydelį',
   },
 };
 

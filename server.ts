@@ -488,6 +488,38 @@ async function startServer() {
         res.json({ status: 'ok', timestamp: Date.now() });
     });
 
+    // ── SSE: real-time data sync across clients ──────────────────────────
+    const sseClients = new Set<import('express').Response>();
+
+    app.get('/api/events', (req, res) => {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+        });
+        res.write(':\n\n'); // initial keep-alive comment
+        sseClients.add(res);
+        req.on('close', () => { sseClients.delete(res); });
+    });
+
+    /** Broadcast a data-changed event to all connected SSE clients. */
+    const broadcastChange = () => {
+        const payload = `data: ${JSON.stringify({ type: 'data-changed', ts: Date.now() })}\n\n`;
+        for (const client of sseClients) {
+            try { client.write(payload); } catch { sseClients.delete(client); }
+        }
+    };
+
+    // Middleware: after any successful mutation, notify all SSE clients
+    app.use((req, res, next) => {
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method) && req.path.startsWith('/api/')) {
+            res.on('finish', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) broadcastChange();
+            });
+        }
+        next();
+    });
+
     // (removed /api/config — public runtime /config used instead)
 
     // Monthly Excel report export
