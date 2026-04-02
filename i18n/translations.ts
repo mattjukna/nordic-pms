@@ -393,6 +393,7 @@ const en = {
     products: 'Products',
     buyers: 'Buyers',
     milkTypes: 'Milk Types',
+    productsAndMilkTypes: 'Products & Milk Types',
     contracts: 'Contracts',
     // Supplier form
     addSupplier: 'Add Supplier',
@@ -1187,6 +1188,7 @@ const lt: TranslationDict = {
     products: 'Produktai',
     buyers: 'Pirkėjai',
     milkTypes: 'Pieno rūšys',
+    productsAndMilkTypes: 'Produktai ir pieno rūšys',
     contracts: 'Sutartys',
     addSupplier: 'Pridėti tiekėją',
     editSupplier: 'Redaguoti tiekėją',
