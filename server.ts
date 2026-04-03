@@ -1101,7 +1101,7 @@ async function startServer() {
             if (!existing) return res.status(404).json({ error: 'Not found' });
             const validation = validateOutputPayload({
                 productId: existing.productId,
-                batchId: existing.batchId,
+                batchId: req.body.batchId ?? existing.batchId,
                 packagingString: req.body.packagingString ?? existing.packagingString,
                 timestamp: existing.timestamp.getTime(),
             });
@@ -1111,6 +1111,7 @@ async function startServer() {
             if (anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
             const updated = await prisma.outputEntry.update({ where: { id }, data: {
                 packagingString: req.body.packagingString ?? existing.packagingString,
+                batchId: req.body.batchId ?? existing.batchId,
                 pallets: parsed.pallets,
                 bigBags: parsed.bigBags,
                 tanks: parsed.tanks,

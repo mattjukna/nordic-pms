@@ -103,7 +103,7 @@ interface AppState {
   removeIntakeEntry: (id: string) => Promise<void>;
 
   addOutputEntry: (payload: { productId: string; batchId?: string; packagingString?: string; destination?: string; timestamp?: number }) => Promise<void>;
-  updateOutputEntry: (id: string, packagingString: string) => Promise<void>;
+  updateOutputEntry: (id: string, packagingString: string, batchId?: string) => Promise<void>;
   removeOutputEntry: (id: string) => Promise<void>;
 
   addDispatchEntry: (entry: Omit<DispatchEntry, 'id'>) => Promise<void>;
@@ -531,8 +531,10 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({ outputEntries: [parseOutputEntry(created), ...s.outputEntries] }));
   },
 
-  updateOutputEntry: async (id, packagingString) => {
-    const updated = await api<OutputEntry>(`/api/output-entries/${id}`, { method: 'PUT', body: JSON.stringify({ packagingString }) });
+  updateOutputEntry: async (id, packagingString, batchId) => {
+    const body: Record<string, string> = { packagingString };
+    if (batchId !== undefined) body.batchId = batchId;
+    const updated = await api<OutputEntry>(`/api/output-entries/${id}`, { method: 'PUT', body: JSON.stringify(body) });
     set((s) => ({ outputEntries: s.outputEntries.map(e => e.id === id ? { ...e, ...parseOutputEntry(updated) } : e), editingOutputId: null }));
   },
 

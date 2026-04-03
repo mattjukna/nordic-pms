@@ -784,7 +784,7 @@ export const InputTab: React.FC = () => {
     try {
       if (Object.keys(outputErrors).length > 0) return;
       if (editingOutputId) {
-        await updateOutputEntry(editingOutputId, pkgString);
+        await updateOutputEntry(editingOutputId, pkgString, batchId);
       } else {
         await addOutputEntry({ productId: selectedProductId, batchId, packagingString: pkgString, destination: 'Warehouse', timestamp: new Date(outputDate + 'T12:00:00').getTime() });
       }
@@ -1357,7 +1357,6 @@ export const InputTab: React.FC = () => {
                 value={batchId}
                 onChange={(e) => setBatchId(e.target.value)}
                 className="w-full md:w-1/3 font-mono"
-                disabled={!!editingOutputId}
               />
               <FieldHint message={outputErrors.batchId} />
             </div>
