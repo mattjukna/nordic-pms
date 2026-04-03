@@ -1495,11 +1495,37 @@ async function startServer() {
         }
     }
 
-    // ── One-time seed: create initial_balance reset records ───────────
-    // Uses name matching to find products (handles user-created products with custom IDs).
-    // Always replaces existing initial_balance records to ensure correct absolute values.
+    // ── Fix: correct initial_balance timestamps to actual count date ──
+    // Previous versions re-created initial_balance records on every deploy,
+    // resetting their timestamp to NOW and hiding output entries added before
+    // the latest deploy.  Fix: set them to the actual physical count date.
     if (prismaAvailable) {
         try {
+            const fixed = await prisma.$executeRawUnsafe(`
+                UPDATE [dbo].[StockAdjustment]
+                SET [timestamp] = '2026-04-02T00:00:00.000Z'
+                WHERE [type] = 'initial_balance'
+                  AND [note] LIKE '%Physical stock count 2026-04-02%'
+                  AND [timestamp] > '2026-04-02T23:59:59.000Z'
+            `);
+            if (fixed > 0) console.log(`[BOOT] Fixed ${fixed} initial_balance timestamp(s) to 2026-04-02.`);
+        } catch (err: any) {
+            console.warn('[BOOT] initial_balance timestamp fix failed (non-fatal):', err?.message ?? err);
+        }
+    }
+
+    // ── One-time seed: create initial_balance reset records ───────────
+    // Uses name matching to find products (handles user-created products with custom IDs).
+    // Only creates records if none exist yet — never deletes/recreates to avoid
+    // moving the reset timestamp forward past existing output entries.
+    if (prismaAvailable) {
+        try {
+            const existingIB = await prisma.stockAdjustment.count({
+                where: { type: 'initial_balance', note: { contains: 'Physical stock count' } }
+            });
+            if (existingIB > 0) {
+                console.log(`[SEED] Initial balance records already exist (${existingIB}), skipping seed.`);
+            } else {
             const allProducts = await prisma.product.findMany();
             const STOCK_SEED: Array<{ nameMatch: string; pallets: number; bigBags: number; tanks: number; looseKg: number; padW: number; bbW: number }> = [
                 { nameMatch: 'MPC 85',             pallets: 35, bigBags: 12, tanks: 0, looseKg: 0,   padW: 900,  bbW: 850 },
@@ -1517,12 +1543,6 @@ async function startServer() {
                 return allProducts.find(p => p.name.toLowerCase() === lower)
                     || allProducts.find(p => p.name.toLowerCase().includes(lower) && !allProducts.some(q => q.id !== p.id && q.name.toLowerCase().includes(lower)));
             };
-
-            // Delete ALL old auto-seeded initial_balance records so we can recreate cleanly
-            const deleted = await prisma.stockAdjustment.deleteMany({
-                where: { type: 'initial_balance', note: { contains: 'Physical stock count' } }
-            });
-            if (deleted.count > 0) console.log(`[SEED] Deleted ${deleted.count} old initial_balance record(s).`);
 
             let created = 0;
             for (const s of STOCK_SEED) {
@@ -1543,6 +1563,7 @@ async function startServer() {
                         reason: `Initial balance: ${s.pallets} pad + ${s.bigBags} bb + ${s.looseKg} loose = ${totalKg} kg`,
                         type: 'initial_balance',
                         note: 'Physical stock count 2026-04-02',
+                        timestamp: new Date('2026-04-02T00:00:00.000Z'),
                     }});
                     console.log(`  [SEED] ${product.name} (${product.id}): ${totalKg.toLocaleString()} kg`);
                     created++;
@@ -1551,6 +1572,7 @@ async function startServer() {
                 }
             }
             if (created > 0) console.log(`[SEED] Created ${created} initial_balance record(s).`);
+            } // end else (no existing IB records)
         } catch (err: any) {
             console.warn('[SEED] Initial balance seeding failed (non-fatal):', err?.message ?? err);
         }
