@@ -1,6 +1,9 @@
 import ExcelJS from 'exceljs';
 import prisma from './prisma';
 function addHeader(worksheet, headers) {
+    // Fix ExcelJS bug: dyDescent defaults to 55 (twips) instead of 0.25 (points),
+    // causing Excel to miscalculate row heights during printing → hang/crash.
+    worksheet.properties.dyDescent = 0.25;
     worksheet.columns = headers.map(h => ({ header: h.header, key: h.key, width: h.width || 15 }));
     // style header
     worksheet.getRow(1).font = { bold: true };
@@ -20,13 +23,10 @@ function addHeader(worksheet, headers) {
         from: { row: 1, column: 1 },
         to: { row: 1, column: headers.length }
     };
-    // Print setup — prevents Excel crashes when printing
+    // Print setup
     worksheet.pageSetup = {
         paperSize: 9, // A4
         orientation: 'landscape',
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 999, // large number = effectively unlimited vertical pages
         horizontalCentered: true,
         margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
     };

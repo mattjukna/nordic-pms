@@ -5,6 +5,10 @@ type ReportKind = 'full' | 'accounting' | 'intake' | 'production' | 'dispatch' |
 type SheetKey = 'intake' | 'production' | 'dispatch' | 'quality' | 'accounting' | 'suppliers' | 'buyers' | 'products' | 'stock' | 'quotas';
 
 function addHeader(worksheet: any, headers: { header: string; key: string; width?: number }[]) {
+  // Fix ExcelJS bug: dyDescent defaults to 55 (twips) instead of 0.25 (points),
+  // causing Excel to miscalculate row heights during printing → hang/crash.
+  worksheet.properties.dyDescent = 0.25;
+
   worksheet.columns = headers.map(h => ({ header: h.header, key: h.key, width: h.width || 15 }));
   // style header
   worksheet.getRow(1).font = { bold: true } as any;
@@ -25,13 +29,10 @@ function addHeader(worksheet: any, headers: { header: string; key: string; width
     to: { row: 1, column: headers.length }
   } as any;
 
-  // Print setup — prevents Excel crashes when printing
+  // Print setup
   worksheet.pageSetup = {
     paperSize: 9,              // A4
     orientation: 'landscape',
-    fitToPage: true,
-    fitToWidth: 1,
-    fitToHeight: 999,          // large number = effectively unlimited vertical pages
     horizontalCentered: true,
     margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
   };
