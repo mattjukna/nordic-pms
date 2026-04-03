@@ -20,6 +20,21 @@ function addHeader(worksheet, headers) {
         from: { row: 1, column: 1 },
         to: { row: 1, column: headers.length }
     };
+    // Print setup — prevents Excel crashes when printing
+    worksheet.pageSetup = {
+        paperSize: 9, // A4
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0, // 0 = as many pages as needed vertically
+        horizontalCentered: true,
+        margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
+    };
+    worksheet.headerFooter = {
+        oddFooter: '&C&P of &N',
+    };
+    // Repeat header row on every printed page
+    worksheet.pageSetup.printTitlesRow = '1:1';
 }
 /* ── Legacy wrapper (keeps old /api/reports/monthly working) ── */
 export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
