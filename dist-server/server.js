@@ -1589,6 +1589,31 @@ async function startServer() {
             console.warn('[BOOT] initial_balance timestamp fix failed (non-fatal):', err?.message ?? err);
         }
     }
+    // ── Fix: correct MPC 85 initial_balance from wrong 35pad/0loose to 28pad/570loose ──
+    if (prismaAvailable) {
+        try {
+            const fixed = await prisma.$executeRawUnsafe(`
+                UPDATE sa
+                SET sa.[adjustmentKg] = 35970,
+                    sa.[pallets] = 28,
+                    sa.[looseKg] = 570,
+                    sa.[reason] = 'Initial balance: 28 pad + 12 bb + 570 loose = 35970 kg'
+                FROM [dbo].[StockAdjustment] sa
+                INNER JOIN [dbo].[Product] p ON sa.[productId] = p.[id]
+                WHERE sa.[type] = 'initial_balance'
+                  AND sa.[note] LIKE '%Physical stock count 2026-04-02%'
+                  AND LOWER(p.[name]) LIKE '%mpc 85%'
+                  AND LOWER(p.[name]) NOT LIKE '%organic%'
+                  AND sa.[pallets] = 35
+                  AND sa.[looseKg] = 0
+            `);
+            if (fixed > 0)
+                console.log(`[BOOT] Corrected MPC 85 initial_balance: 28 pad + 12 bb + 570 loose = 35,970 kg.`);
+        }
+        catch (err) {
+            console.warn('[BOOT] MPC 85 initial_balance correction failed (non-fatal):', err?.message ?? err);
+        }
+    }
     // ── One-time seed: create initial_balance reset records ───────────
     // Uses name matching to find products (handles user-created products with custom IDs).
     // Only creates records if none exist yet — never deletes/recreates to avoid
@@ -1604,7 +1629,7 @@ async function startServer() {
             else {
                 const allProducts = await prisma.product.findMany();
                 const STOCK_SEED = [
-                    { nameMatch: 'MPC 85', pallets: 35, bigBags: 12, tanks: 0, looseKg: 0, padW: 900, bbW: 850 },
+                    { nameMatch: 'MPC 85', pallets: 28, bigBags: 12, tanks: 0, looseKg: 570, padW: 900, bbW: 850 },
                     { nameMatch: 'MPC 83', pallets: 0, bigBags: 30, tanks: 0, looseKg: 248, padW: 900, bbW: 850 },
                     { nameMatch: 'MPC 85 Organic', pallets: 4, bigBags: 0, tanks: 0, looseKg: 480, padW: 900, bbW: 850 },
                     { nameMatch: 'MPI', pallets: 16, bigBags: 0, tanks: 0, looseKg: 765, padW: 900, bbW: 850 },
