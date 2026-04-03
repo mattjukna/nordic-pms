@@ -102,7 +102,7 @@ interface AppState {
   dismissTempAlert: (id: string) => void;
   removeIntakeEntry: (id: string) => Promise<void>;
 
-  addOutputEntry: (payload: { productId: string; batchId?: string; packagingString?: string; destination?: string }) => Promise<void>;
+  addOutputEntry: (payload: { productId: string; batchId?: string; packagingString?: string; destination?: string; timestamp?: number }) => Promise<void>;
   updateOutputEntry: (id: string, packagingString: string) => Promise<void>;
   removeOutputEntry: (id: string) => Promise<void>;
 
@@ -527,7 +527,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addOutputEntry: async (payload) => {
-    const created = await api<OutputEntry>('/api/output-entries', { method: 'POST', body: JSON.stringify({ ...payload, timestamp: Date.now() }) });
+    const created = await api<OutputEntry>('/api/output-entries', { method: 'POST', body: JSON.stringify({ ...payload, timestamp: payload.timestamp ?? Date.now() }) });
     set((s) => ({ outputEntries: [parseOutputEntry(created), ...s.outputEntries] }));
   },
 

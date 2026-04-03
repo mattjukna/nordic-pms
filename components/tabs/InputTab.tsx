@@ -303,11 +303,13 @@ export const InputTab: React.FC = () => {
   
   // Input Form States (Output)
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id || '');
-  const [batchId, setBatchId] = useState(`MPC-${new Date().toISOString().slice(0,10)}`);
+  const [outputDate, setOutputDate] = useState(new Date().toISOString().split('T')[0]);
+  const makeBatchId = (pid: string, d: string) => `${pid.replace(/\s+/g, '')}-${d}`;
+  const [batchId, setBatchId] = useState(() => makeBatchId(products[0]?.id || 'MPC', new Date().toISOString().split('T')[0]));
   const [pkgString, setPkgString] = useState('');
   const [showWizard, setShowWizard] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const defaultBatchId = `MPC-${new Date().toISOString().slice(0,10)}`;
+  const defaultBatchId = makeBatchId(selectedProductId || 'MPC', outputDate);
 
   // Supplier Options for SmartSelect
   const supplierOptions = useMemo(() => suppliers.map(s => ({
@@ -395,6 +397,12 @@ export const InputTab: React.FC = () => {
       setSelectedProductId(products[0].id);
     }
   }, [products, selectedProductId]);
+
+  // Auto-update batch ID when product or date changes (only if not editing)
+  useEffect(() => {
+    if (editingOutputId) return;
+    setBatchId(makeBatchId(selectedProductId || 'MPC', outputDate));
+  }, [selectedProductId, outputDate, editingOutputId]);
 
   // Track previous supplier to only auto-fill on actual supplier change
   const prevSupplierRef = React.useRef(selectedSupplierId);
@@ -576,6 +584,7 @@ export const InputTab: React.FC = () => {
     if (draft.selectedProductId) setSelectedProductId(draft.selectedProductId);
     if (draft.batchId) setBatchId(draft.batchId);
     if (draft.pkgString) setPkgString(draft.pkgString);
+    if (draft.outputDate) setOutputDate(draft.outputDate);
   }, [editingOutputId]);
 
   useEffect(() => {
@@ -585,8 +594,8 @@ export const InputTab: React.FC = () => {
 
   useEffect(() => {
     if (editingOutputId) return;
-    saveDraft(OUTPUT_DRAFT_KEY, { selectedProductId, batchId, pkgString });
-  }, [selectedProductId, batchId, pkgString, editingOutputId]);
+    saveDraft(OUTPUT_DRAFT_KEY, { selectedProductId, batchId, pkgString, outputDate });
+  }, [selectedProductId, batchId, pkgString, outputDate, editingOutputId]);
 
   // Filter Logic: Intake
   const displayedIntake = useMemo(() => {
@@ -777,7 +786,7 @@ export const InputTab: React.FC = () => {
       if (editingOutputId) {
         await updateOutputEntry(editingOutputId, pkgString);
       } else {
-        await addOutputEntry({ productId: selectedProductId, batchId, packagingString: pkgString, destination: 'Warehouse' });
+        await addOutputEntry({ productId: selectedProductId, batchId, packagingString: pkgString, destination: 'Warehouse', timestamp: new Date(outputDate + 'T12:00:00').getTime() });
       }
       setPkgString('');
       clearDraft(OUTPUT_DRAFT_KEY);
@@ -1336,6 +1345,13 @@ export const InputTab: React.FC = () => {
               >
                 {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </SelectField>
+              <InputField 
+                type="date" 
+                value={outputDate}
+                onChange={(e) => setOutputDate(e.target.value)}
+                className="w-full md:w-40"
+                disabled={!!editingOutputId}
+              />
               <InputField 
                 type="text" 
                 value={batchId}
