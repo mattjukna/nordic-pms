@@ -61,6 +61,8 @@ const startOfDayTs = (d: Date) => { const c = new Date(d); c.setHours(0,0,0,0); 
 
 const formatKg = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}t` : `${Math.round(v).toLocaleString()} kg`);
 const formatEur = (v: number) => `€${Math.round(v).toLocaleString()}`;
+const toLocalDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /* ─────── Delta badge (period-over-period) ─────── */
 const DeltaBadge: React.FC<{ current: number; previous: number; inverse?: boolean }> = ({ current, previous, inverse }) => {
@@ -415,6 +417,23 @@ export const TrendsTab: React.FC = () => {
 
   const setQuickRange = (r: TimeRange) => { setTimeRange(r); setCustomStart(''); setCustomEnd(''); };
 
+  // Computed display dates for the active shortcut
+  const presetStartStr = useMemo(() => {
+    if (timeRange === 'all') return '';
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const sub = (days: number) => { const d = new Date(todayStart); d.setDate(d.getDate() - days); return d; };
+    switch (timeRange) {
+      case 'day': return toLocalDateStr(todayStart);
+      case 'week': return toLocalDateStr(sub(7));
+      case 'month': return toLocalDateStr(sub(30));
+      case 'quarter': return toLocalDateStr(sub(90));
+      case 'year': return toLocalDateStr(sub(365));
+      default: return '';
+    }
+  }, [timeRange]);
+  const todayStr = toLocalDateStr(new Date());
+
   /* ═══════════ RENDER ═══════════ */
   return (
     <div className="space-y-5 overflow-x-hidden">
@@ -435,9 +454,9 @@ export const TrendsTab: React.FC = () => {
               </button>
             ))}
             <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1">
-              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs bg-transparent outline-none text-slate-600 font-medium" />
+              <input type="date" value={customStart || presetStartStr} onChange={e => setCustomStart(e.target.value)} className="text-xs bg-transparent outline-none text-slate-600 font-medium" />
               <span className="text-xs text-slate-400">→</span>
-              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs bg-transparent outline-none text-slate-600 font-medium" />
+              <input type="date" value={customEnd || todayStr} onChange={e => setCustomEnd(e.target.value)} className="text-xs bg-transparent outline-none text-slate-600 font-medium" />
             </div>
             <button onClick={() => setShowReportModal(true)} className="ml-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-md text-sm font-semibold hover:bg-indigo-100 transition-colors" title={t('trends.exportMonthlyReport')}>
               {t('trends.exportReport')}

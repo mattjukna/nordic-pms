@@ -7,7 +7,7 @@ import { logAudit } from './services/audit';
 import { parsePackagingString } from './utils/parser';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
-import { buildMonthlyWorkbook } from './services/reportExcel';
+import { buildMonthlyWorkbook, buildExportWorkbook } from './services/reportExcel';
 import { getPrimaryCompanyCode, normalizeCompanyCodes } from './utils/companyCodes';
 import { resolveEffectiveQuantityKg } from './utils/intakeCoefficient';
 import { resolveIntakeCost } from './utils/intakePricing';
@@ -544,6 +544,34 @@ async function startServer() {
         } catch (err: any) {
             console.error('report export failed', err);
             return res.status(500).json({ error: 'Failed to generate report', detail: err?.message });
+        }
+    });
+
+    // Advanced Excel export with arbitrary date range and sheet selection
+    app.get('/api/reports/export', async (req, res) => {
+        try {
+            const from = String(req.query.from || '');
+            const to = String(req.query.to || '');
+            const sheetsParam = String(req.query.sheets || '');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+                return res.status(400).json({ error: 'Invalid date. Expected YYYY-MM-DD for from and to' });
+            }
+            const validSheets = new Set(['intake', 'production', 'dispatch', 'quality', 'accounting', 'suppliers', 'buyers', 'products', 'stock', 'quotas']);
+            const sheets = sheetsParam.split(',').filter(s => validSheets.has(s)) as any[];
+            if (sheets.length === 0) return res.status(400).json({ error: 'No valid sheets selected' });
+
+            const startDate = new Date(`${from}T00:00:00.000Z`);
+            const endDate = new Date(`${to}T00:00:00.000Z`);
+            const endDateExclusive = new Date(endDate.getTime() + 24 * 60 * 60 * 1000);
+
+            const buf = await buildExportWorkbook({ sheets, startDate, endDateExclusive });
+            const filename = `NordicPMS_export_${from}_${to}.xlsx`;
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            return res.send(buf);
+        } catch (err: any) {
+            console.error('export failed', err);
+            return res.status(500).json({ error: 'Failed to generate export', detail: err?.message });
         }
     });
 

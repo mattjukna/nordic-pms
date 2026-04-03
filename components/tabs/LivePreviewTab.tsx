@@ -21,6 +21,9 @@ const endOfDayTs = (date: Date) => {
   return next.getTime();
 };
 
+const toLocalDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export const LivePreviewTab: React.FC = () => {
   const { intakeEntries, outputEntries, suppliers, products } = useStore();
   const { t } = useTranslation();
@@ -50,6 +53,10 @@ export const LivePreviewTab: React.FC = () => {
       default: return startOfToday;
     }
   };
+
+  // Computed display dates for the active shortcut
+  const presetStartStr = useMemo(() => toLocalDateStr(new Date(getDateRangeStart(timeRange))), [timeRange]);
+  const todayStr = toLocalDateStr(new Date());
 
   const { startTime, endTime } = useMemo(() => {
     if (customStart) {
@@ -314,14 +321,14 @@ export const LivePreviewTab: React.FC = () => {
             <Calendar size={14} className="text-slate-400" />
             <input
               type="date"
-              value={customStart}
+              value={customStart || presetStartStr}
               onChange={(e) => setCustomStart(e.target.value)}
               className="bg-transparent text-slate-600 outline-none"
             />
             <span className="text-slate-300">→</span>
             <input
               type="date"
-              value={customEnd}
+              value={customEnd || todayStr}
               onChange={(e) => setCustomEnd(e.target.value)}
               className="bg-transparent text-slate-600 outline-none"
             />
