@@ -1476,6 +1476,24 @@ async function startServer() {
         }
     }
 
+    // ── Schema migration: ensure DispatchEntry.createdAt column exists ──
+    if (prismaAvailable) {
+        try {
+            await prisma.$executeRawUnsafe(`
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.columns
+                    WHERE object_id = OBJECT_ID('dbo.DispatchEntry') AND name = 'createdAt'
+                )
+                ALTER TABLE [dbo].[DispatchEntry]
+                    ADD [createdAt] DATETIME2 NOT NULL
+                    CONSTRAINT [DF_DispatchEntry_createdAt] DEFAULT GETDATE();
+            `);
+            console.log('[BOOT] DispatchEntry.createdAt column ensured.');
+        } catch (err: any) {
+            console.warn('[BOOT] DispatchEntry.createdAt migration failed (non-fatal):', err?.message ?? err);
+        }
+    }
+
     // ── One-time seed: create initial_balance reset records ───────────
     // Uses name matching to find products (handles user-created products with custom IDs).
     // Always replaces existing initial_balance records to ensure correct absolute values.

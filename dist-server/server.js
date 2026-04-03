@@ -7,7 +7,7 @@ import { logAudit } from './services/audit';
 import { parsePackagingString } from './utils/parser';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { anyFractional } from './utils/wholeUnits';
-import { buildMonthlyWorkbook } from './services/reportExcel';
+import { buildMonthlyWorkbook, buildExportWorkbook } from './services/reportExcel';
 import { getPrimaryCompanyCode, normalizeCompanyCodes } from './utils/companyCodes';
 import { resolveEffectiveQuantityKg } from './utils/intakeCoefficient';
 import { resolveIntakeCost } from './utils/intakePricing';
@@ -94,6 +94,7 @@ const toClientShipment = (s) => {
 const toClientDispatch = (d) => ({
     id: d.id,
     date: mapDate(d.date),
+    createdAt: mapDate(d.createdAt),
     buyer: d.buyerName || '',
     buyerId: d.buyerId ?? undefined,
     buyerCompanyCode: d.buyerCompanyCode ?? undefined,
@@ -500,6 +501,33 @@ async function startServer() {
         catch (err) {
             console.error('report export failed', err);
             return res.status(500).json({ error: 'Failed to generate report', detail: err?.message });
+        }
+    });
+    // Advanced Excel export with arbitrary date range and sheet selection
+    app.get('/api/reports/export', async (req, res) => {
+        try {
+            const from = String(req.query.from || '');
+            const to = String(req.query.to || '');
+            const sheetsParam = String(req.query.sheets || '');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+                return res.status(400).json({ error: 'Invalid date. Expected YYYY-MM-DD for from and to' });
+            }
+            const validSheets = new Set(['intake', 'production', 'dispatch', 'quality', 'accounting', 'suppliers', 'buyers', 'products', 'stock', 'quotas']);
+            const sheets = sheetsParam.split(',').filter(s => validSheets.has(s));
+            if (sheets.length === 0)
+                return res.status(400).json({ error: 'No valid sheets selected' });
+            const startDate = new Date(`${from}T00:00:00.000Z`);
+            const endDate = new Date(`${to}T00:00:00.000Z`);
+            const endDateExclusive = new Date(endDate.getTime() + 24 * 60 * 60 * 1000);
+            const buf = await buildExportWorkbook({ sheets, startDate, endDateExclusive });
+            const filename = `NordicPMS_export_${from}_${to}.xlsx`;
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            return res.send(buf);
+        }
+        catch (err) {
+            console.error('export failed', err);
+            return res.status(500).json({ error: 'Failed to generate export', detail: err?.message });
         }
     });
     // Debugging endpoint: return authenticated user info
@@ -1160,6 +1188,7 @@ async function startServer() {
         try {
             const created = await prisma.dispatchEntry.create({ data: {
                     date: b.date ? new Date(b.date) : new Date(),
+                    createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
                     buyerId: b.buyerId ?? null,
                     buyerName: b.buyerName || b.buyer || '',
                     buyerCompanyCode: normalizeCompanyCodes(b.buyerCompanyCode) ?? getPrimaryCompanyCode(b.companyCode) ?? null,
@@ -1187,7 +1216,7 @@ async function startServer() {
     });
     app.put('/api/dispatch-entries/:id', async (req, res) => {
         try {
-            const allowedKeys = ['date', 'buyerId', 'buyerName', 'buyerCompanyCode', 'contractNumber', 'productId', 'quantityKg', 'orderedQuantityKg', 'batchRefId', 'packagingString', 'pallets', 'bigBags', 'tanks', 'totalWeight', 'salesPricePerKg', 'totalRevenue', 'status'];
+            const allowedKeys = ['date', 'createdAt', 'buyerId', 'buyerName', 'buyerCompanyCode', 'contractNumber', 'productId', 'quantityKg', 'orderedQuantityKg', 'batchRefId', 'packagingString', 'pallets', 'bigBags', 'tanks', 'totalWeight', 'salesPricePerKg', 'totalRevenue', 'status'];
             const data = {};
             for (const k of allowedKeys) {
                 if (Object.prototype.hasOwnProperty.call(req.body, k))
@@ -1201,6 +1230,8 @@ async function startServer() {
                 return res.status(404).json({ error: 'Not found' });
             if (data.date)
                 data.date = new Date(data.date);
+            if (data.createdAt)
+                data.createdAt = new Date(data.createdAt);
             if (Object.prototype.hasOwnProperty.call(data, 'buyerCompanyCode')) {
                 data.buyerCompanyCode = normalizeCompanyCodes(data.buyerCompanyCode) ?? null;
             }
@@ -1517,6 +1548,24 @@ async function startServer() {
         }
         catch (err) {
             console.warn('[BOOT] SupplierQuota migration failed (non-fatal):', err?.message ?? err);
+        }
+    }
+    // ── Schema migration: ensure DispatchEntry.createdAt column exists ──
+    if (prismaAvailable) {
+        try {
+            await prisma.$executeRawUnsafe(`
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.columns
+                    WHERE object_id = OBJECT_ID('dbo.DispatchEntry') AND name = 'createdAt'
+                )
+                ALTER TABLE [dbo].[DispatchEntry]
+                    ADD [createdAt] DATETIME2 NOT NULL
+                    CONSTRAINT [DF_DispatchEntry_createdAt] DEFAULT GETDATE();
+            `);
+            console.log('[BOOT] DispatchEntry.createdAt column ensured.');
+        }
+        catch (err) {
+            console.warn('[BOOT] DispatchEntry.createdAt migration failed (non-fatal):', err?.message ?? err);
         }
     }
     // ── One-time seed: create initial_balance reset records ───────────

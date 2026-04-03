@@ -21,16 +21,32 @@ function addHeader(worksheet, headers) {
         to: { row: 1, column: headers.length }
     };
 }
+/* ── Legacy wrapper (keeps old /api/reports/monthly working) ── */
 export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
+    const sheetMap = {
+        full: ['intake', 'production', 'dispatch', 'quality', 'accounting'],
+        accounting: ['accounting'],
+        intake: ['intake'],
+        production: ['production'],
+        dispatch: ['dispatch'],
+        quality: ['quality'],
+    };
+    return buildExportWorkbook({ sheets: sheetMap[report], startDate, endDateExclusive });
+}
+/* ── Main export builder ── */
+export async function buildExportWorkbook({ sheets, startDate, endDateExclusive }) {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Nordic PMS';
     workbook.created = new Date();
-    // Helper: format date to YYYY-MM-DD
     const fmtDate = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
-    // Query datasets as needed
-    const intakeEntries = await prisma.intakeEntry.findMany({ where: { timestamp: { gte: startDate, lt: endDateExclusive } }, include: { tags: true, supplier: true } });
-    const outputEntries = await prisma.outputEntry.findMany({ where: { timestamp: { gte: startDate, lt: endDateExclusive } } });
-    const dispatchEntries = await prisma.dispatchEntry.findMany({ where: { date: { gte: startDate, lt: endDateExclusive } }, include: { shipments: true } });
+    const sheetSet = new Set(sheets);
+    // Query datasets only if needed
+    const needsIntake = sheetSet.has('intake') || sheetSet.has('quality') || sheetSet.has('accounting');
+    const needsOutput = sheetSet.has('production') || sheetSet.has('accounting');
+    const needsDispatch = sheetSet.has('dispatch');
+    const intakeEntries = needsIntake ? await prisma.intakeEntry.findMany({ where: { timestamp: { gte: startDate, lt: endDateExclusive } }, include: { tags: true, supplier: true } }) : [];
+    const outputEntries = needsOutput ? await prisma.outputEntry.findMany({ where: { timestamp: { gte: startDate, lt: endDateExclusive } } }) : [];
+    const dispatchEntries = needsDispatch ? await prisma.dispatchEntry.findMany({ where: { date: { gte: startDate, lt: endDateExclusive } }, include: { shipments: true } }) : [];
     // Quality: aggregate daily averages from intakeEntries
     const byDay = {};
     for (const e of intakeEntries) {
@@ -59,7 +75,7 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
         dailyMap[day].intakeKg += i.quantityKg || 0;
     }
     // Build sheets
-    if (report === 'full' || report === 'intake') {
+    if (sheetSet.has('intake')) {
         const sheet = workbook.addWorksheet('Intake');
         addHeader(sheet, [
             { header: 'Date', key: 'date', width: 14 },
@@ -105,7 +121,7 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
         sheet.getColumn('protein').numFmt = '0.00';
         sheet.getColumn('totalCost').numFmt = '€#,##0.00';
     }
-    if (report === 'full' || report === 'production') {
+    if (sheetSet.has('production')) {
         const sheet = workbook.addWorksheet('Production');
         addHeader(sheet, [
             { header: 'Date', key: 'date', width: 14 },
@@ -120,7 +136,7 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
         }
         sheet.getColumn('kg').numFmt = '#,##0';
     }
-    if (report === 'full' || report === 'dispatch') {
+    if (sheetSet.has('dispatch')) {
         const sheet = workbook.addWorksheet('Dispatch');
         addHeader(sheet, [
             { header: 'Date', key: 'date', width: 14 },
@@ -145,7 +161,7 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
         sheet.getColumn('price').numFmt = '€#,##0.00';
         sheet.getColumn('revenue').numFmt = '€#,##0.00';
     }
-    if (report === 'full' || report === 'quality') {
+    if (sheetSet.has('quality')) {
         const sheet = workbook.addWorksheet('Quality');
         addHeader(sheet, [
             { header: 'Date', key: 'date', width: 14 },
@@ -165,7 +181,7 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
         sheet.getColumn('ph').numFmt = '0.00';
     }
     // Accounting Overview (daily rows) - simple implementation
-    if (report === 'full' || report === 'accounting') {
+    if (sheetSet.has('accounting')) {
         const sheet = workbook.addWorksheet('Accounting Overview');
         // total monthly quota across all suppliers
         const suppliers = await prisma.supplier.findMany();
@@ -207,6 +223,161 @@ export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive
         sheet.getColumn('intake').numFmt = '#,##0';
         sheet.getColumn('monthlyQuota').numFmt = '#,##0';
         sheet.getColumn('quotaReached').numFmt = '0.00%';
+    }
+    /* ── Master data sheets (not date-filtered) ── */
+    if (sheetSet.has('suppliers')) {
+        const suppliers = await prisma.supplier.findMany({ include: { pricingPeriods: { orderBy: { periodStart: 'desc' }, take: 1 } } });
+        const sheet = workbook.addWorksheet('Suppliers');
+        addHeader(sheet, [
+            { header: 'Name', key: 'name', width: 30 },
+            { header: 'Route Group', key: 'routeGroup', width: 16 },
+            { header: 'Company Code', key: 'companyCode', width: 16 },
+            { header: 'Country', key: 'country', width: 14 },
+            { header: 'Phone', key: 'phone', width: 18 },
+            { header: 'Address', key: 'address', width: 30 },
+            { header: 'Contract Quota (kg)', key: 'contractQuota', width: 18 },
+            { header: 'Base Price €/kg', key: 'basePrice', width: 14 },
+            { header: 'Normal Price €/kg', key: 'normalPrice', width: 16 },
+            { header: 'Fat Bonus €/%', key: 'fatBonus', width: 14 },
+            { header: 'Protein Bonus €/%', key: 'proteinBonus', width: 16 },
+            { header: 'Eco', key: 'eco', width: 8 },
+            { header: 'Default Milk Type', key: 'milkType', width: 16 },
+        ]);
+        for (const s of suppliers) {
+            const pp = s.pricingPeriods?.[0];
+            sheet.addRow({
+                name: s.name, routeGroup: s.routeGroup, companyCode: s.companyCode || '',
+                country: s.country || '', phone: s.phoneNumber || '',
+                address: [s.addressLine1, s.addressLine2].filter(Boolean).join(', '),
+                contractQuota: s.contractQuota ?? 0,
+                basePrice: pp?.basePricePerKg ?? s.basePricePerKg ?? 0,
+                normalPrice: pp?.normalMilkPricePerKg ?? s.normalMilkPricePerKg ?? 0,
+                fatBonus: pp?.fatBonusPerPct ?? s.fatBonusPerPct ?? 0,
+                proteinBonus: pp?.proteinBonusPerPct ?? s.proteinBonusPerPct ?? 0,
+                eco: s.isEco ? 'Yes' : 'No',
+                milkType: s.defaultMilkType || '',
+            });
+        }
+        sheet.getColumn('contractQuota').numFmt = '#,##0';
+        sheet.getColumn('basePrice').numFmt = '€#,##0.000';
+        sheet.getColumn('normalPrice').numFmt = '€#,##0.000';
+        sheet.getColumn('fatBonus').numFmt = '€#,##0.000';
+        sheet.getColumn('proteinBonus').numFmt = '€#,##0.000';
+    }
+    if (sheetSet.has('buyers')) {
+        const buyers = await prisma.buyer.findMany({ include: { contracts: { include: { product: true } } } });
+        const sheet = workbook.addWorksheet('Buyers');
+        addHeader(sheet, [
+            { header: 'Name', key: 'name', width: 26 },
+            { header: 'Company Code', key: 'companyCode', width: 16 },
+            { header: 'Country', key: 'country', width: 14 },
+            { header: 'Phone', key: 'phone', width: 18 },
+            { header: 'Address', key: 'address', width: 30 },
+        ]);
+        for (const b of buyers) {
+            sheet.addRow({
+                name: b.name, companyCode: b.companyCode || '',
+                country: b.country || '', phone: b.phoneNumber || '',
+                address: [b.addressLine1, b.addressLine2].filter(Boolean).join(', '),
+            });
+        }
+        // Contracts sub-sheet
+        const cSheet = workbook.addWorksheet('Buyer Contracts');
+        addHeader(cSheet, [
+            { header: 'Buyer', key: 'buyer', width: 26 },
+            { header: 'Contract #', key: 'contract', width: 18 },
+            { header: 'Product', key: 'product', width: 22 },
+            { header: 'Price €/kg', key: 'price', width: 12 },
+            { header: 'Agreed Kg', key: 'agreedKg', width: 14 },
+            { header: 'Start', key: 'start', width: 14 },
+            { header: 'End', key: 'end', width: 14 },
+        ]);
+        for (const b of buyers) {
+            for (const c of b.contracts) {
+                cSheet.addRow({
+                    buyer: b.name, contract: c.contractNumber, product: c.product?.name || c.productId,
+                    price: c.pricePerKg, agreedKg: c.agreedAmountKg ?? 0,
+                    start: fmtDate(c.startDate), end: fmtDate(c.endDate),
+                });
+            }
+        }
+        cSheet.getColumn('price').numFmt = '€#,##0.00';
+        cSheet.getColumn('agreedKg').numFmt = '#,##0';
+    }
+    if (sheetSet.has('products')) {
+        const products = await prisma.product.findMany({ orderBy: { sortOrder: 'asc' } });
+        const sheet = workbook.addWorksheet('Products');
+        addHeader(sheet, [
+            { header: 'ID', key: 'id', width: 20 },
+            { header: 'Name', key: 'name', width: 26 },
+            { header: 'Details', key: 'details', width: 36 },
+            { header: 'Default Pallet Wt (kg)', key: 'palletWt', width: 20 },
+            { header: 'Default Bag Wt (kg)', key: 'bagWt', width: 18 },
+            { header: 'Protein Target %', key: 'proteinTarget', width: 16 },
+            { header: 'Yield Factor', key: 'yieldFactor', width: 14 },
+        ]);
+        for (const p of products) {
+            sheet.addRow({
+                id: p.id, name: p.name, details: p.details || '',
+                palletWt: p.defaultPalletWeight, bagWt: p.defaultBagWeight,
+                proteinTarget: p.proteinTargetPct, yieldFactor: p.yieldFactor,
+            });
+        }
+        sheet.getColumn('palletWt').numFmt = '#,##0';
+        sheet.getColumn('bagWt').numFmt = '#,##0';
+        sheet.getColumn('proteinTarget').numFmt = '0.0';
+        sheet.getColumn('yieldFactor').numFmt = '0.000';
+    }
+    if (sheetSet.has('stock')) {
+        const adjustments = await prisma.stockAdjustment.findMany({ include: { product: true }, orderBy: { timestamp: 'desc' } });
+        const sheet = workbook.addWorksheet('Stock Adjustments');
+        addHeader(sheet, [
+            { header: 'Date', key: 'date', width: 14 },
+            { header: 'Product', key: 'product', width: 24 },
+            { header: 'Adjustment (kg)', key: 'adjustmentKg', width: 16 },
+            { header: 'Pallets', key: 'pallets', width: 10 },
+            { header: 'Big Bags', key: 'bigBags', width: 10 },
+            { header: 'Tanks', key: 'tanks', width: 10 },
+            { header: 'Loose Kg', key: 'looseKg', width: 12 },
+            { header: 'Type', key: 'type', width: 16 },
+            { header: 'Reason', key: 'reason', width: 30 },
+            { header: 'Performed By', key: 'performedBy', width: 22 },
+            { header: 'Note', key: 'note', width: 30 },
+        ]);
+        for (const a of adjustments) {
+            sheet.addRow({
+                date: fmtDate(a.timestamp), product: a.product?.name || a.productId,
+                adjustmentKg: a.adjustmentKg, pallets: a.pallets, bigBags: a.bigBags,
+                tanks: a.tanks, looseKg: a.looseKg,
+                type: a.type, reason: a.reason,
+                performedBy: a.performedBy || '', note: a.note || '',
+            });
+        }
+        sheet.getColumn('adjustmentKg').numFmt = '#,##0';
+    }
+    if (sheetSet.has('quotas')) {
+        const quotas = await prisma.supplierQuota.findMany({ include: { supplier: true }, orderBy: [{ year: 'desc' }, { month: 'desc' }] });
+        const sheet = workbook.addWorksheet('Supplier Quotas');
+        addHeader(sheet, [
+            { header: 'Supplier', key: 'supplier', width: 30 },
+            { header: 'Year', key: 'year', width: 10 },
+            { header: 'Month', key: 'month', width: 10 },
+            { header: 'Quota (kg)', key: 'quotaKg', width: 14 },
+            { header: 'Actual (kg)', key: 'actualKg', width: 14 },
+            { header: 'Fulfillment %', key: 'fulfillment', width: 14 },
+        ]);
+        for (const q of quotas) {
+            const fulfillment = (q.quotaKg > 0 && q.actualKg != null) ? q.actualKg / q.quotaKg : null;
+            sheet.addRow({
+                supplier: q.supplier?.name || q.supplierId,
+                year: q.year, month: q.month,
+                quotaKg: q.quotaKg, actualKg: q.actualKg ?? '',
+                fulfillment: fulfillment ?? '',
+            });
+        }
+        sheet.getColumn('quotaKg').numFmt = '#,##0';
+        sheet.getColumn('actualKg').numFmt = '#,##0';
+        sheet.getColumn('fulfillment').numFmt = '0.0%';
     }
     const buf = await workbook.xlsx.writeBuffer();
     return Buffer.from(buf);
