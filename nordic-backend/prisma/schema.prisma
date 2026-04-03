@@ -174,8 +174,9 @@ model OutputEntry {
 }
 
 model DispatchEntry {
-  id   String   @id @default(cuid())
-  date DateTime
+  id        String   @id @default(cuid())
+  date      DateTime
+  createdAt DateTime @default(now())
 
   buyerId String?
   buyer   Buyer?  @relation(fields: [buyerId], references: [id], onDelete: SetNull)

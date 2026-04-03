@@ -96,6 +96,7 @@ const toClientShipment = (s: any) => {
 const toClientDispatch = (d: any) => ({
     id: d.id,
     date: mapDate(d.date),
+    createdAt: mapDate(d.createdAt),
     buyer: d.buyerName || '',
     buyerId: d.buyerId ?? undefined,
     buyerCompanyCode: d.buyerCompanyCode ?? undefined,
@@ -1136,6 +1137,7 @@ async function startServer() {
         try {
             const created = await prisma.dispatchEntry.create({ data: {
                 date: b.date ? new Date(b.date) : new Date(),
+                createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
                 buyerId: b.buyerId ?? null,
                 buyerName: b.buyerName || b.buyer || '',
                 buyerCompanyCode: normalizeCompanyCodes(b.buyerCompanyCode) ?? getPrimaryCompanyCode(b.companyCode) ?? null,
@@ -1161,7 +1163,7 @@ async function startServer() {
 
     app.put('/api/dispatch-entries/:id', async (req, res) => {
         try {
-            const allowedKeys = ['date','buyerId','buyerName','buyerCompanyCode','contractNumber','productId','quantityKg','orderedQuantityKg','batchRefId','packagingString','pallets','bigBags','tanks','totalWeight','salesPricePerKg','totalRevenue','status'] as const;
+            const allowedKeys = ['date','createdAt','buyerId','buyerName','buyerCompanyCode','contractNumber','productId','quantityKg','orderedQuantityKg','batchRefId','packagingString','pallets','bigBags','tanks','totalWeight','salesPricePerKg','totalRevenue','status'] as const;
             const data: Record<string, any> = {};
             for (const k of allowedKeys) { if (Object.prototype.hasOwnProperty.call(req.body, k)) data[k] = req.body[k]; }
             // Also support legacy 'buyer' key mapped to buyerName
@@ -1169,6 +1171,7 @@ async function startServer() {
             const existing = await prisma.dispatchEntry.findUnique({ where: { id: req.params.id } });
             if (!existing) return res.status(404).json({ error: 'Not found' });
             if (data.date) data.date = new Date(data.date);
+            if (data.createdAt) data.createdAt = new Date(data.createdAt);
             if (Object.prototype.hasOwnProperty.call(data, 'buyerCompanyCode')) {
                 data.buyerCompanyCode = normalizeCompanyCodes(data.buyerCompanyCode) ?? null;
             }

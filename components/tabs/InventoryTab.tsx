@@ -45,6 +45,7 @@ export const InventoryTab: React.FC = () => {
   // Form State
   const [dispatchStatus, setDispatchStatus] = useState<'confirmed' | 'planned'>('confirmed');
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split('T')[0]);
+  const [plannedDispatchDate, setPlannedDispatchDate] = useState('');
   const [selectedBuyerId, setSelectedBuyerId] = useState('');
   const [selectedBuyerCompanyCode, setSelectedBuyerCompanyCode] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(products[0]?.id || '');
@@ -91,7 +92,7 @@ export const InventoryTab: React.FC = () => {
 
   // Filter State
   const [showFilter, setShowFilter] = useState(false);
-  const [filters, setFilters] = useState({ search: '', dateStart: '', dateEnd: '', status: 'all' as 'all' | 'confirmed' | 'planned', buyer: '', product: '' });
+  const [filters, setFilters] = useState({ search: '', dateStart: '', dateEnd: '', status: 'all' as 'all' | 'confirmed' | 'planned', buyer: '', product: '', contract: '' });
   const [localFilterSearch, setLocalFilterSearch] = useState('');
   const filterDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showArchivedContracts, setShowArchivedContracts] = useState(false);
@@ -149,25 +150,27 @@ export const InventoryTab: React.FC = () => {
   const activeProduct = useMemo(() => products.find(p => p.id === selectedProduct), [selectedProduct, products]);
 
   // Derived: Available Contracts for selected Buyer & Product
-  const { activeContracts, archivedContracts } = useMemo(() => {
-    if (!currentBuyer || !currentBuyer.contracts) return { activeContracts: [], archivedContracts: [] };
+  const { activeContracts, archivedContracts, contractUsage } = useMemo(() => {
+    if (!currentBuyer || !currentBuyer.contracts) return { activeContracts: [], archivedContracts: [], contractUsage: new Map<string, number>() };
     const matching = currentBuyer.contracts.filter(c => c.productId === selectedProduct);
     const now = Date.now();
     const active: typeof matching = [];
     const archived: typeof matching = [];
+    const usage = new Map<string, number>();
     for (const c of matching) {
       const usedCount = dispatchEntries
         .filter(d => d.contractNumber === c.contractNumber && d.buyerId === currentBuyer.id)
         .length;
+      usage.set(c.id, usedCount);
       const isPastEnd = c.endDate != null && c.endDate < now;
-      const isUsed = usedCount > 0;
-      if (isPastEnd || isUsed) {
+      // Only archive if expired — used contracts stay active so users can re-select or fix mistakes
+      if (isPastEnd) {
         archived.push(c);
       } else {
         active.push(c);
       }
     }
-    return { activeContracts: active, archivedContracts: archived };
+    return { activeContracts: active, archivedContracts: archived, contractUsage: usage };
   }, [currentBuyer, selectedProduct, dispatchEntries]);
 
   const allContracts = useMemo(() => [...activeContracts, ...archivedContracts], [activeContracts, archivedContracts]);
@@ -230,6 +233,7 @@ export const InventoryTab: React.FC = () => {
     if (draft.showDispatchForm) setShowDispatchForm(true);
     if (draft.dispatchStatus) setDispatchStatus(draft.dispatchStatus);
     if (draft.dispatchDate) setDispatchDate(draft.dispatchDate);
+    if (draft.plannedDispatchDate) setPlannedDispatchDate(draft.plannedDispatchDate);
     if (draft.selectedBuyerId) setSelectedBuyerId(draft.selectedBuyerId);
     if (draft.selectedBuyerCompanyCode) setSelectedBuyerCompanyCode(draft.selectedBuyerCompanyCode);
     if (draft.selectedProduct) setSelectedProduct(draft.selectedProduct);
@@ -246,6 +250,7 @@ export const InventoryTab: React.FC = () => {
       showDispatchForm,
       dispatchStatus,
       dispatchDate,
+      plannedDispatchDate,
       selectedBuyerId,
       selectedBuyerCompanyCode,
       selectedProduct,
@@ -255,7 +260,7 @@ export const InventoryTab: React.FC = () => {
       pricePerKg,
       batchRef,
     });
-  }, [showDispatchForm, dispatchStatus, dispatchDate, selectedBuyerId, selectedBuyerCompanyCode, selectedProduct, selectedContractId, quantity, pkgString, pricePerKg, batchRef, editingDispatchId]);
+  }, [showDispatchForm, dispatchStatus, dispatchDate, plannedDispatchDate, selectedBuyerId, selectedBuyerCompanyCode, selectedProduct, selectedContractId, quantity, pkgString, pricePerKg, batchRef, editingDispatchId]);
 
   // Update quantity when parser updates
   useEffect(() => {
@@ -629,7 +634,10 @@ export const InventoryTab: React.FC = () => {
 
     // Construct Pending Data
     const pendingData = {
-      date: new Date(dispatchDate).getTime(),
+      date: dispatchStatus === 'planned' && plannedDispatchDate
+        ? new Date(plannedDispatchDate).getTime()
+        : new Date(dispatchDate).getTime(),
+      createdAt: new Date(dispatchDate).getTime(),
       buyer: buyerName,
       buyerId: selectedBuyerId,
       buyerName,
@@ -680,7 +688,7 @@ export const InventoryTab: React.FC = () => {
           message: editingDispatchId 
             ? `Update dispatch entry for ${buyerName}?`
             : (dispatchStatus === 'planned' 
-                ? `Schedule PLANNED dispatch of ${qty}kg to ${buyerName} on ${dispatchDate}? Stock will not be deducted yet.`
+                ? `Schedule PLANNED dispatch of ${qty}kg to ${buyerName}${plannedDispatchDate ? ` for ${plannedDispatchDate}` : ''}? Stock will not be deducted yet.`
                 : `Confirm FINAL dispatch of ${qty}kg to ${buyerName}? Total Revenue: €${(qty*price).toLocaleString()}.`),
           pendingAction: commitAction
        });
@@ -752,7 +760,15 @@ export const InventoryTab: React.FC = () => {
   const handleEditDispatch = (entry: typeof dispatchEntries[0]) => {
     setEditingDispatchId(entry.id);
     setDispatchStatus(entry.status === 'completed' ? 'confirmed' : entry.status);
-    setDispatchDate(new Date(entry.date).toISOString().split('T')[0]);
+    // Use createdAt for the entry date, fall back to date for legacy entries
+    const createdDate = entry.createdAt ? new Date(entry.createdAt).toISOString().split('T')[0] : new Date(entry.date).toISOString().split('T')[0];
+    setDispatchDate(createdDate);
+    // For planned entries, if date differs from createdAt, that's the planned dispatch date
+    if (entry.status === 'planned' && entry.createdAt && entry.date !== entry.createdAt) {
+      setPlannedDispatchDate(new Date(entry.date).toISOString().split('T')[0]);
+    } else {
+      setPlannedDispatchDate('');
+    }
     
     const buyer = buyers.find(b => b.id === entry.buyerId) || buyers.find(b => b.name === entry.buyer);
     setSelectedBuyerId(buyer ? buyer.id : '');
@@ -867,6 +883,7 @@ export const InventoryTab: React.FC = () => {
     setSelectedContractId('');
     setDispatchStatus('confirmed');
     setDispatchDate(new Date().toISOString().split('T')[0]);
+    setPlannedDispatchDate('');
     setSelectedBuyerCompanyCode('');
     setShipmentQty('');
     setShipmentPkgString('');
@@ -953,6 +970,9 @@ export const InventoryTab: React.FC = () => {
       }
       if (filters.product) {
         data = data.filter(e => e.productId === filters.product);
+      }
+      if (filters.contract) {
+        data = data.filter(e => e.contractNumber === filters.contract);
       }
       if (filters.search) {
         const lowerQ = filters.search.toLowerCase();
@@ -1398,22 +1418,40 @@ export const InventoryTab: React.FC = () => {
                  </div>
               )}
 
-              {/* Status Toggle & Date */}
-              <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
-                 <div className="flex bg-slate-100 p-1 rounded-lg">
-                    <button onClick={() => setDispatchStatus('confirmed')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${dispatchStatus === 'confirmed' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>
-                       <CheckCircle2 size={14}/> {t('inventory.confirmedSale')}
-                    </button>
-                    <button onClick={() => setDispatchStatus('planned')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${dispatchStatus === 'planned' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500'}`}>
-                       <Clock size={14}/> {t('inventory.plannedOrder')}
-                    </button>
-                 </div>
-                 <input 
-                    type="date"
-                    value={dispatchDate}
-                    onChange={e => setDispatchDate(e.target.value)}
-                    className={`bg-white border rounded-md px-3 py-1.5 text-xs text-slate-700 font-medium outline-none focus:ring-2 focus:ring-blue-100 ${dispatchErrors.dispatchDate ? INVALID_FIELD_CLASS : 'border-slate-300'}`}
-                 />
+              {/* Status Toggle & Dates */}
+              <div className="flex flex-col gap-3 mb-4 pb-4 border-b border-slate-100">
+                <div className="flex justify-between items-center">
+                   <div className="flex bg-slate-100 p-1 rounded-lg">
+                      <button onClick={() => setDispatchStatus('confirmed')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${dispatchStatus === 'confirmed' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>
+                         <CheckCircle2 size={14}/> {t('inventory.confirmedSale')}
+                      </button>
+                      <button onClick={() => setDispatchStatus('planned')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${dispatchStatus === 'planned' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500'}`}>
+                         <Clock size={14}/> {t('inventory.plannedOrder')}
+                      </button>
+                   </div>
+                </div>
+                <div className="flex flex-wrap items-end gap-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 mb-0.5 uppercase tracking-wider">{t('inventory.entryCreatedDate')}</label>
+                    <input 
+                      type="date"
+                      value={dispatchDate}
+                      onChange={e => setDispatchDate(e.target.value)}
+                      className={`bg-white border rounded-md px-3 py-1.5 text-xs text-slate-700 font-medium outline-none focus:ring-2 focus:ring-blue-100 ${dispatchErrors.dispatchDate ? INVALID_FIELD_CLASS : 'border-slate-300'}`}
+                    />
+                  </div>
+                  {dispatchStatus === 'planned' && (
+                    <div>
+                      <label className="block text-[10px] font-semibold text-amber-500 mb-0.5 uppercase tracking-wider">{t('inventory.expectedDispatchDate')}</label>
+                      <input 
+                        type="date"
+                        value={plannedDispatchDate}
+                        onChange={e => setPlannedDispatchDate(e.target.value)}
+                        className="bg-white border border-amber-300 rounded-md px-3 py-1.5 text-xs text-amber-700 font-medium outline-none focus:ring-2 focus:ring-amber-100"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -1468,15 +1506,17 @@ export const InventoryTab: React.FC = () => {
                 <div className="md:col-span-2">
                    <div className="flex items-center justify-between mb-1">
                      <label className="text-xs font-semibold text-slate-500">{t('inventory.contractOptional')}</label>
-                     {archivedContracts.length > 0 && (
-                       <button
-                         type="button"
-                         onClick={() => setShowArchivedContracts(!showArchivedContracts)}
-                         className="text-[10px] text-slate-400 hover:text-blue-600 font-medium"
-                       >
-                         {showArchivedContracts ? t('inventory.hideExpired') : t('inventory.showExpired')} ({archivedContracts.length})
-                       </button>
-                     )}
+                     <div className="flex items-center gap-2">
+                       {archivedContracts.length > 0 && (
+                         <button
+                           type="button"
+                           onClick={() => setShowArchivedContracts(!showArchivedContracts)}
+                           className="text-[10px] text-slate-400 hover:text-blue-600 font-medium"
+                         >
+                           {showArchivedContracts ? t('inventory.hideExpired') : t('inventory.showExpired')} ({archivedContracts.length})
+                         </button>
+                       )}
+                     </div>
                    </div>
                    <div className="flex gap-1">
                      <select
@@ -1487,20 +1527,26 @@ export const InventoryTab: React.FC = () => {
                         <option value="">-- {t('inventory.noContract')} --</option>
                         {activeContracts.length > 0 && (
                           <optgroup label={t('inventory.active')}>
-                            {activeContracts.map(c => (
-                              <option key={c.id} value={c.id}>
-                                {c.contractNumber} — €{c.pricePerKg}/kg{c.agreedAmountKg ? ` (${c.agreedAmountKg.toLocaleString()} kg)` : ''}
-                              </option>
-                            ))}
+                            {activeContracts.map(c => {
+                              const used = contractUsage.get(c.id) || 0;
+                              return (
+                                <option key={c.id} value={c.id}>
+                                  {c.contractNumber} — €{c.pricePerKg}/kg{c.agreedAmountKg ? ` (${c.agreedAmountKg.toLocaleString()} kg)` : ''}{used > 0 ? ` [${t('inventory.usedTimes', { count: used })}]` : ''}
+                                </option>
+                              );
+                            })}
                           </optgroup>
                         )}
                         {showArchivedContracts && archivedContracts.length > 0 && (
-                          <optgroup label={t('inventory.expiredFulfilled')}>
-                            {archivedContracts.map(c => (
-                              <option key={c.id} value={c.id}>
-                                {c.contractNumber} — €{c.pricePerKg}/kg (archived)
-                              </option>
-                            ))}
+                          <optgroup label={t('inventory.expiredContracts')}>
+                            {archivedContracts.map(c => {
+                              const used = contractUsage.get(c.id) || 0;
+                              return (
+                                <option key={c.id} value={c.id}>
+                                  {c.contractNumber} — €{c.pricePerKg}/kg ({t('inventory.expired')}){used > 0 ? ` [${t('inventory.usedTimes', { count: used })}]` : ''}
+                                </option>
+                              );
+                            })}
                           </optgroup>
                         )}
                      </select>
@@ -1805,7 +1851,7 @@ export const InventoryTab: React.FC = () => {
                   />
                 </div>
 
-                <div className="col-span-6">
+                <div className="col-span-4">
                   <select
                     value={filters.buyer}
                     onChange={(e) => setFilters(prev => ({ ...prev, buyer: e.target.value }))}
@@ -1817,7 +1863,7 @@ export const InventoryTab: React.FC = () => {
                     ))}
                   </select>
                 </div>
-                <div className="col-span-6">
+                <div className="col-span-4">
                   <select
                     value={filters.product}
                     onChange={(e) => setFilters(prev => ({ ...prev, product: e.target.value }))}
@@ -1826,6 +1872,18 @@ export const InventoryTab: React.FC = () => {
                     <option value="">{t('inventory.allProducts')}</option>
                     {[...new Set(dispatchEntries.map(e => e.productId))].sort().map(p => (
                       <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-4">
+                  <select
+                    value={filters.contract}
+                    onChange={(e) => setFilters(prev => ({ ...prev, contract: e.target.value }))}
+                    className="w-full bg-white text-slate-700 text-[11px] border border-slate-200 rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">{t('inventory.allContracts')}</option>
+                    {[...new Set(dispatchEntries.map(e => e.contractNumber).filter(Boolean))].sort().map(c => (
+                      <option key={c} value={c!}>{c}</option>
                     ))}
                   </select>
                 </div>
@@ -1928,7 +1986,12 @@ export const InventoryTab: React.FC = () => {
                           className="rounded border-slate-300"
                         />
                       </td>}
-                      <td className="p-3 text-slate-500 font-mono text-xs whitespace-nowrap">{new Date(entry.date).toLocaleDateString()}</td>
+                      <td className="p-3 text-slate-500 font-mono text-xs whitespace-nowrap">
+                        <div>{new Date(entry.date).toLocaleDateString()}</div>
+                        {entry.createdAt && entry.date !== entry.createdAt && (
+                          <div className="text-[9px] text-slate-400">{t('inventory.created')}: {new Date(entry.createdAt).toLocaleDateString()}</div>
+                        )}
+                      </td>
                       <td className="p-3 font-medium text-slate-700">{entry.buyer}</td>
                       <td className="p-3 text-slate-600">
                         <div className="flex flex-col">

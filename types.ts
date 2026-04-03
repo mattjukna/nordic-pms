@@ -154,6 +154,7 @@ export interface DispatchShipment {
 export interface DispatchEntry {
   id: string;
   date: number | null;
+  createdAt?: number | null;
   buyer: string;
   buyerId?: string;
   buyerCompanyCode?: string;

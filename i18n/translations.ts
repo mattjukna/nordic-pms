@@ -368,6 +368,9 @@ const en = {
     showExpired: 'Show expired',
     active: 'Active',
     expiredFulfilled: 'Expired / Fulfilled',
+    expiredContracts: 'Expired',
+    expired: 'expired',
+    usedTimes: 'used {count}x',
     addContract: 'Add Contract',
     failedCreateContract: 'Failed to create contract',
     result: 'Result',
@@ -387,6 +390,10 @@ const en = {
     searchPlaceholder: 'Search buyer, product, contract...',
     allBuyers: 'All buyers',
     allProducts: 'All products',
+    allContracts: 'All contracts',
+    entryCreatedDate: 'Entry date',
+    expectedDispatchDate: 'Expected dispatch',
+    created: 'Created',
   },
 
   // ─── Settings tab ───────────────────────────────────────────────
@@ -1204,6 +1211,9 @@ const lt: TranslationDict = {
     showExpired: 'Rodyti pasibaigusias',
     active: 'Aktyvios',
     expiredFulfilled: 'Pasibaigusios / Įvykdytos',
+    expiredContracts: 'Pasibaigusios',
+    expired: 'pasibaigusi',
+    usedTimes: 'naudota {count}x',
     addContract: 'Pridėti sutartį',
     failedCreateContract: 'Nepavyko sukurti sutarties',
     result: 'Rezultatas',
@@ -1223,6 +1233,10 @@ const lt: TranslationDict = {
     searchPlaceholder: 'Ieškoti pirkėjo, produkto, sutarties...',
     allBuyers: 'Visi pirkėjai',
     allProducts: 'Visi produktai',
+    allContracts: 'Visos sutartys',
+    entryCreatedDate: 'Įrašo data',
+    expectedDispatchDate: 'Numatomas išsiuntimas',
+    created: 'Sukurta',
   },
 
   settings: {
