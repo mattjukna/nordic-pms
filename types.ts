@@ -32,6 +32,16 @@ export interface Supplier {
   // Milk Characteristics
   isEco: boolean;
   defaultMilkType: string;
+  quotas?: SupplierQuota[];
+}
+
+export interface SupplierQuota {
+  id: string;
+  supplierId: string;
+  year: number;
+  month: number; // 1-12
+  quotaKg: number;
+  actualKg: number | null;
 }
 
 export interface BuyerContract {

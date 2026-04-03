@@ -29,6 +29,20 @@ model Supplier {
 
   pricingPeriods SupplierPricingPeriod[]
   intakes        IntakeEntry[]
+  quotas         SupplierQuota[]
+}
+
+model SupplierQuota {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  year       Int
+  month      Int      // 1-12
+  quotaKg    Float
+  actualKg   Float?   // null = not yet recorded
+
+  @@unique([supplierId, year, month])
+  @@index([year, month])
 }
 
 model SupplierPricingPeriod {

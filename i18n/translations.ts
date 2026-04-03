@@ -499,6 +499,18 @@ const en = {
     usedContracts: 'used contracts',
     activeContracts: 'active',
     usedLabel: 'used',
+    // Quotas
+    monthlyQuotas: 'Monthly Quotas',
+    quotaLabel: 'Quota',
+    actualLabel: 'Actual',
+    fulfillmentLabel: '% Filled',
+    total: 'Total',
+    quotasTab: 'Quotas',
+    quotasOverview: 'Quota Overview — All Suppliers',
+    yearTotal: 'Year',
+    thSupplier: 'Supplier',
+    allSuppliers: 'All Suppliers',
+    noQuotasForYear: 'No quota data for this year.',
     // No data
     noSuppliers: 'No suppliers found.',
     noProducts: 'No products found.',
@@ -1305,6 +1317,18 @@ const lt: TranslationDict = {
     usedContracts: 'panaudotos sutartys',
     activeContracts: 'aktyvios',
     usedLabel: 'panaudotos',
+    // Quotas
+    monthlyQuotas: 'Mėnesinės kvotos',
+    quotaLabel: 'Kvota',
+    actualLabel: 'Faktinis',
+    fulfillmentLabel: '% Įvykd.',
+    total: 'Viso',
+    quotasTab: 'Kvotos',
+    quotasOverview: 'Kvotų apžvalga — visi tiekėjai',
+    yearTotal: 'Metai',
+    thSupplier: 'Tiekėjas',
+    allSuppliers: 'Visi tiekėjai',
+    noQuotasForYear: 'Šiems metams kvotų duomenų nėra.',
   },
 
   liveView: {

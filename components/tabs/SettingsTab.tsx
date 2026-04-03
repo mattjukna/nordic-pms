@@ -3,8 +3,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
-import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calendar, Globe, ChevronDown, ChevronUp, Pencil, Building2, FileText, CheckCircle, RotateCcw, Package, Droplets, GripVertical } from 'lucide-react';
-import { Supplier, Buyer, BuyerContract, Product } from '../../types';
+import { Users, Trash2, Plus, Briefcase, Save, X, Search, Phone, MapPin, Calendar, Globe, ChevronDown, ChevronUp, Pencil, Building2, FileText, CheckCircle, RotateCcw, Package, Droplets, GripVertical, BarChart3 } from 'lucide-react';
+import { Supplier, Buyer, BuyerContract, Product, SupplierQuota } from '../../types';
 import { normalizeCompanyCodes } from '../../utils/companyCodes';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
@@ -104,7 +104,8 @@ export const SettingsTab: React.FC = () => {
     products, addProduct, updateProduct, removeProduct, reorderProducts,
     milkTypes, addMilkType, removeMilkType, reorderMilkTypes,
     dispatchEntries,
-    isHydrating
+    isHydrating,
+    addSupplierQuota, updateSupplierQuota, removeSupplierQuota,
   } = useStore();
   const undoableDelete = useUndoDelete();
   const { t } = useTranslation();
@@ -112,7 +113,7 @@ export const SettingsTab: React.FC = () => {
   // Search State
   const [supplierSearch, setSupplierSearch] = useState('');
   const [buyerSearch, setBuyerSearch] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'suppliers' | 'products' | 'buyers'>('suppliers');
+  const [activeSubTab, setActiveSubTab] = useState<'suppliers' | 'products' | 'buyers' | 'quotas'>('suppliers');
 
   // Expansion State
   const [expandedSupplierId, setExpandedSupplierId] = useState<string | null>(null);
@@ -189,6 +190,11 @@ export const SettingsTab: React.FC = () => {
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]
   });
+
+  // Quota State
+  const [quotaYear, setQuotaYear] = useState(new Date().getFullYear());
+  const [editingQuotaCell, setEditingQuotaCell] = useState<{ supplierId: string; month: number; field: 'quotaKg' | 'actualKg' } | null>(null);
+  const [quotaCellValue, setQuotaCellValue] = useState('');
 
   // Confirmation Modal
   const [confirmModal, setConfirmModal] = useState<{
@@ -675,6 +681,14 @@ export const SettingsTab: React.FC = () => {
             <Briefcase size={16} /> Buyers
           </div>
         </button>
+        <button 
+          onClick={() => setActiveSubTab('quotas')}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeSubTab === 'quotas' ? 'bg-violet-100 text-violet-700' : 'text-slate-500 hover:bg-slate-100'}`}
+        >
+          <div className="flex items-center gap-2">
+            <BarChart3 size={16} /> {t('settings.quotasTab')}
+          </div>
+        </button>
       </div>
 
       {/* --- Suppliers Section --- */}
@@ -858,6 +872,121 @@ export const SettingsTab: React.FC = () => {
                                   <Calendar size={16} className="text-slate-400 shrink-0"/>
                                   <div className="text-slate-500 text-xs">{t('settings.createdPrefix')} {new Date(s.createdOn).toLocaleDateString()}</div>
                                </div>
+                            </div>
+                          </div>
+
+                          {/* Monthly Quotas Section */}
+                          <div className="border-t border-slate-200 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <FileText size={12} /> {t('settings.monthlyQuotas')}
+                              </h5>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => setQuotaYear(y => y - 1)} className="text-slate-400 hover:text-slate-600 text-xs px-1.5 py-0.5 border border-slate-200 rounded hover:bg-slate-100">←</button>
+                                <span className="text-xs font-bold text-slate-700 min-w-[40px] text-center">{quotaYear}</span>
+                                <button onClick={() => setQuotaYear(y => y + 1)} className="text-slate-400 hover:text-slate-600 text-xs px-1.5 py-0.5 border border-slate-200 rounded hover:bg-slate-100">→</button>
+                              </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs border-collapse">
+                                <thead>
+                                  <tr className="border-b border-slate-200">
+                                    <th className="p-1.5 text-left text-slate-400 font-medium w-16"></th>
+                                    {Array.from({ length: 12 }, (_, i) => (
+                                      <th key={i} className="p-1.5 text-center text-slate-500 font-medium">
+                                        {new Date(2000, i, 1).toLocaleString('default', { month: 'short' })}
+                                      </th>
+                                    ))}
+                                    <th className="p-1.5 text-center text-slate-600 font-bold">{t('settings.total')}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(['quotaKg', 'actualKg'] as const).map(field => {
+                                    const yearQuotas = (s.quotas || []).filter(q => q.year === quotaYear);
+                                    const totalForField = yearQuotas.reduce((sum, q) => sum + (field === 'quotaKg' ? q.quotaKg : (q.actualKg ?? 0)), 0);
+                                    return (
+                                      <tr key={field} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                        <td className="p-1.5 text-slate-500 font-medium whitespace-nowrap">
+                                          {field === 'quotaKg' ? t('settings.quotaLabel') : t('settings.actualLabel')}
+                                        </td>
+                                        {Array.from({ length: 12 }, (_, i) => {
+                                          const month = i + 1;
+                                          const quota = yearQuotas.find(q => q.month === month);
+                                          const value = quota ? (field === 'quotaKg' ? quota.quotaKg : quota.actualKg) : null;
+                                          const isEditing = editingQuotaCell?.supplierId === s.id && editingQuotaCell?.month === month && editingQuotaCell?.field === field;
+                                          
+                                          return (
+                                            <td key={i} className="p-0.5 text-center">
+                                              {isEditing ? (
+                                                <input
+                                                  autoFocus
+                                                  type="number"
+                                                  className="w-full bg-white border border-blue-400 rounded px-1 py-0.5 text-xs text-center focus:outline-none"
+                                                  value={quotaCellValue}
+                                                  onChange={e => setQuotaCellValue(e.target.value)}
+                                                  onBlur={async () => {
+                                                    const numVal = parseFloat(quotaCellValue);
+                                                    if (quota) {
+                                                      if (quotaCellValue.trim() === '' && field === 'actualKg') {
+                                                        await updateSupplierQuota(quota.id, { [field]: null });
+                                                      } else if (Number.isFinite(numVal)) {
+                                                        await updateSupplierQuota(quota.id, { [field]: numVal });
+                                                      }
+                                                    } else if (Number.isFinite(numVal)) {
+                                                      await addSupplierQuota(s.id, { year: quotaYear, month, quotaKg: field === 'quotaKg' ? numVal : 0, actualKg: field === 'actualKg' ? numVal : null });
+                                                    }
+                                                    setEditingQuotaCell(null);
+                                                  }}
+                                                  onKeyDown={e => {
+                                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                    if (e.key === 'Escape') setEditingQuotaCell(null);
+                                                  }}
+                                                />
+                                              ) : (
+                                                <div
+                                                  className={`cursor-pointer rounded px-1 py-0.5 hover:bg-blue-50 transition-colors min-h-[20px] ${value != null ? '' : 'text-slate-300'}`}
+                                                  onClick={(e) => { e.stopPropagation(); setEditingQuotaCell({ supplierId: s.id, month, field }); setQuotaCellValue(value != null ? value.toString() : ''); }}
+                                                >
+                                                  {value != null ? Math.round(value).toLocaleString() : '—'}
+                                                </div>
+                                              )}
+                                            </td>
+                                          );
+                                        })}
+                                        <td className="p-1.5 text-center font-bold text-slate-700">
+                                          {totalForField > 0 ? Math.round(totalForField).toLocaleString() : '—'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                  {/* Fulfillment % row */}
+                                  <tr className="bg-slate-50/80">
+                                    <td className="p-1.5 text-slate-500 font-medium whitespace-nowrap">{t('settings.fulfillmentLabel')}</td>
+                                    {Array.from({ length: 12 }, (_, i) => {
+                                      const month = i + 1;
+                                      const quota = (s.quotas || []).find(q => q.year === quotaYear && q.month === month);
+                                      if (!quota || !quota.quotaKg) return <td key={i} className="p-1.5 text-center text-slate-300">—</td>;
+                                      const pct = quota.actualKg != null ? Math.round((quota.actualKg / quota.quotaKg) * 100) : null;
+                                      return (
+                                        <td key={i} className={`p-1.5 text-center font-bold ${pct == null ? 'text-slate-300' : pct >= 100 ? 'text-emerald-600' : pct >= 80 ? 'text-amber-600' : 'text-red-500'}`}>
+                                          {pct != null ? `${pct}%` : '—'}
+                                        </td>
+                                      );
+                                    })}
+                                    {(() => {
+                                      const yearQuotas = (s.quotas || []).filter(q => q.year === quotaYear);
+                                      const totalQuota = yearQuotas.reduce((s, q) => s + q.quotaKg, 0);
+                                      const totalActual = yearQuotas.reduce((s, q) => s + (q.actualKg ?? 0), 0);
+                                      const totalPct = totalQuota > 0 ? Math.round((totalActual / totalQuota) * 100) : null;
+                                      return (
+                                        <td className={`p-1.5 text-center font-bold ${totalPct == null ? 'text-slate-300' : totalPct >= 100 ? 'text-emerald-600' : totalPct >= 80 ? 'text-amber-600' : 'text-red-500'}`}>
+                                          {totalPct != null ? `${totalPct}%` : '—'}
+                                        </td>
+                                      );
+                                    })()}
+                                  </tr>
+                                </tbody>
+                              </table>
                             </div>
                           </div>
                         </td>
@@ -1317,6 +1446,116 @@ export const SettingsTab: React.FC = () => {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+      )}
+
+      {/* --- Quotas Overview Section --- */}
+      {activeSubTab === 'quotas' && (
+      <div className="flex-1 flex flex-col gap-4 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+            <BarChart3 size={16} /> {t('settings.quotasOverview')}
+          </h3>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setQuotaYear(y => y - 1)} className="text-slate-400 hover:text-slate-600 text-sm px-2 py-1 border border-slate-200 rounded hover:bg-slate-100">←</button>
+            <span className="text-sm font-bold text-slate-700 min-w-[50px] text-center">{quotaYear}</span>
+            <button onClick={() => setQuotaYear(y => y + 1)} className="text-slate-400 hover:text-slate-600 text-sm px-2 py-1 border border-slate-200 rounded hover:bg-slate-100">→</button>
+          </div>
+        </div>
+
+        <div className="w-full overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-50 sticky top-0 z-10">
+              <tr className="border-b border-slate-200">
+                <th className="p-2 text-slate-500 font-bold text-xs uppercase min-w-[140px]">{t('settings.thSupplier')}</th>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <th key={i} className="p-2 text-center text-slate-500 font-bold text-[10px] uppercase">
+                    {new Date(2000, i, 1).toLocaleString('default', { month: 'short' })}
+                  </th>
+                ))}
+                <th className="p-2 text-center text-slate-600 font-bold text-[10px] uppercase">{t('settings.yearTotal')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {suppliers.filter(s => (s.quotas || []).some(q => q.year === quotaYear)).map(s => {
+                const yearQuotas = (s.quotas || []).filter(q => q.year === quotaYear);
+                const totalQuota = yearQuotas.reduce((sum, q) => sum + q.quotaKg, 0);
+                const totalActual = yearQuotas.reduce((sum, q) => sum + (q.actualKg ?? 0), 0);
+                const totalPct = totalQuota > 0 ? Math.round((totalActual / totalQuota) * 100) : null;
+                return (
+                  <tr key={s.id} className="hover:bg-slate-50/50">
+                    <td className="p-2 font-medium text-slate-800 whitespace-nowrap">{s.name}</td>
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const month = i + 1;
+                      const quota = yearQuotas.find(q => q.month === month);
+                      if (!quota) return <td key={i} className="p-1 text-center text-slate-200">—</td>;
+                      const pct = quota.actualKg != null && quota.quotaKg > 0 ? Math.round((quota.actualKg / quota.quotaKg) * 100) : null;
+                      return (
+                        <td key={i} className="p-1 text-center">
+                          <div className={`rounded px-1 py-0.5 text-[10px] font-bold ${pct == null ? 'text-slate-400 bg-slate-50' : pct >= 100 ? 'text-emerald-700 bg-emerald-50' : pct >= 80 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50'}`}>
+                            {pct != null ? `${pct}%` : `${Math.round(quota.quotaKg / 1000)}t`}
+                          </div>
+                          <div className="text-[9px] text-slate-400 mt-0.5">
+                            {quota.actualKg != null ? `${Math.round(quota.actualKg).toLocaleString()}` : '—'} / {Math.round(quota.quotaKg).toLocaleString()}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td className="p-1 text-center">
+                      <div className={`rounded px-1.5 py-0.5 text-xs font-bold ${totalPct == null ? 'text-slate-400' : totalPct >= 100 ? 'text-emerald-700 bg-emerald-50' : totalPct >= 80 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50'}`}>
+                        {totalPct != null ? `${totalPct}%` : '—'}
+                      </div>
+                      <div className="text-[9px] text-slate-400 mt-0.5">
+                        {Math.round(totalActual).toLocaleString()} / {Math.round(totalQuota).toLocaleString()}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {/* Totals row */}
+              {(() => {
+                const allQuotas = suppliers.flatMap(s => (s.quotas || []).filter(q => q.year === quotaYear));
+                if (allQuotas.length === 0) return null;
+                return (
+                  <tr className="bg-slate-100/80 font-bold border-t-2 border-slate-300">
+                    <td className="p-2 text-slate-700 uppercase text-[10px]">{t('settings.allSuppliers')}</td>
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const month = i + 1;
+                      const monthQuotas = allQuotas.filter(q => q.month === month);
+                      const mQuota = monthQuotas.reduce((s, q) => s + q.quotaKg, 0);
+                      const mActual = monthQuotas.reduce((s, q) => s + (q.actualKg ?? 0), 0);
+                      const mPct = mQuota > 0 ? Math.round((mActual / mQuota) * 100) : null;
+                      return (
+                        <td key={i} className="p-1 text-center">
+                          <div className={`text-[10px] font-bold ${mPct == null ? 'text-slate-400' : mPct >= 100 ? 'text-emerald-700' : mPct >= 80 ? 'text-amber-700' : 'text-red-700'}`}>
+                            {mPct != null ? `${mPct}%` : '—'}
+                          </div>
+                          <div className="text-[9px] text-slate-400">{Math.round(mActual / 1000)}t / {Math.round(mQuota / 1000)}t</div>
+                        </td>
+                      );
+                    })}
+                    {(() => {
+                      const totalQ = allQuotas.reduce((s, q) => s + q.quotaKg, 0);
+                      const totalA = allQuotas.reduce((s, q) => s + (q.actualKg ?? 0), 0);
+                      const pct = totalQ > 0 ? Math.round((totalA / totalQ) * 100) : null;
+                      return (
+                        <td className="p-1 text-center">
+                          <div className={`text-xs font-bold ${pct == null ? 'text-slate-400' : pct >= 100 ? 'text-emerald-700' : pct >= 80 ? 'text-amber-700' : 'text-red-700'}`}>
+                            {pct != null ? `${pct}%` : '—'}
+                          </div>
+                          <div className="text-[9px] text-slate-400">{Math.round(totalA / 1000)}t / {Math.round(totalQ / 1000)}t</div>
+                        </td>
+                      );
+                    })()}
+                  </tr>
+                );
+              })()}
+            </tbody>
+          </table>
+          {suppliers.filter(s => (s.quotas || []).some(q => q.year === quotaYear)).length === 0 && (
+            <div className="p-8 text-center text-slate-400 text-sm">{t('settings.noQuotasForYear')}</div>
+          )}
         </div>
       </div>
       )}

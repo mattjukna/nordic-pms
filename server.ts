@@ -120,6 +120,7 @@ const toClientSupplier = (s: any) => ({
     normalMilkPricePerKg: typeof s.normalMilkPricePerKg === 'number' ? s.normalMilkPricePerKg : null,
     fatBonusPerPct: typeof s.fatBonusPerPct === 'number' ? s.fatBonusPerPct : 0,
     proteinBonusPerPct: typeof s.proteinBonusPerPct === 'number' ? s.proteinBonusPerPct : 0,
+    quotas: Array.isArray(s.quotas) ? s.quotas : [],
 });
 
 const classifyBootstrapError = (err: any) => {
@@ -556,7 +557,7 @@ async function startServer() {
     app.get('/api/bootstrap', async (req, res) => {
         try {
             const [suppliers, buyers, products, milkTypes, intakeEntries, outputEntries, dispatchEntries, stockAdjustments] = await Promise.all([
-                prisma.supplier.findMany(),
+                prisma.supplier.findMany({ include: { quotas: true } }),
                 prisma.buyer.findMany({ include: { contracts: true } }),
                 prisma.product.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
                 prisma.milkType.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
@@ -641,6 +642,59 @@ async function startServer() {
             void logAudit(req, { action: 'DELETE', tableName: 'Supplier', recordId: id, details: JSON.stringify({ id }) });
             res.json({ ok: true });
         } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
+    // Supplier Quotas
+    app.post('/api/suppliers/:id/quotas', async (req, res) => {
+        const supplierId = req.params.id;
+        const { year, month, quotaKg, actualKg } = req.body;
+        if (!year || !month || quotaKg == null) return res.status(400).json({ error: 'Missing year, month, or quotaKg' });
+        try {
+            const created = await prisma.supplierQuota.create({ data: { supplierId, year: Number(year), month: Number(month), quotaKg: Number(quotaKg), actualKg: actualKg != null ? Number(actualKg) : null } });
+            void logAudit(req, { action: 'CREATE', tableName: 'SupplierQuota', recordId: created.id, details: JSON.stringify(created) });
+            res.json(created);
+        } catch (err: any) { res.status(500).json({ error: err.message }); }
+    });
+
+    app.put('/api/supplier-quotas/:id', async (req, res) => {
+        try {
+            const allowedKeys = ['year', 'month', 'quotaKg', 'actualKg'] as const;
+            const data: Record<string, any> = {};
+            for (const k of allowedKeys) { if (Object.prototype.hasOwnProperty.call(req.body, k)) data[k] = req.body[k] != null ? Number(req.body[k]) : null; }
+            if (data.year != null) data.year = Number(data.year);
+            if (data.month != null) data.month = Number(data.month);
+            const updated = await prisma.supplierQuota.update({ where: { id: req.params.id }, data });
+            void logAudit(req, { action: 'UPDATE', tableName: 'SupplierQuota', recordId: updated.id, details: JSON.stringify(updated) });
+            res.json(updated);
+        } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
+    app.delete('/api/supplier-quotas/:id', async (req, res) => {
+        try {
+            await prisma.supplierQuota.delete({ where: { id: req.params.id } });
+            void logAudit(req, { action: 'DELETE', tableName: 'SupplierQuota', recordId: req.params.id, details: JSON.stringify({ id: req.params.id }) });
+            res.json({ ok: true });
+        } catch (err: any) { res.status(400).json({ error: err.message }); }
+    });
+
+    // Bulk upsert quotas for a supplier (used by import)
+    app.post('/api/suppliers/:id/quotas/bulk', async (req, res) => {
+        const supplierId = req.params.id;
+        const { quotas } = req.body;
+        if (!Array.isArray(quotas)) return res.status(400).json({ error: 'quotas must be an array' });
+        try {
+            const results = [];
+            for (const q of quotas) {
+                const result = await prisma.supplierQuota.upsert({
+                    where: { supplierId_year_month: { supplierId, year: Number(q.year), month: Number(q.month) } },
+                    create: { supplierId, year: Number(q.year), month: Number(q.month), quotaKg: Number(q.quotaKg), actualKg: q.actualKg != null ? Number(q.actualKg) : null },
+                    update: { quotaKg: Number(q.quotaKg), actualKg: q.actualKg != null ? Number(q.actualKg) : null },
+                });
+                results.push(result);
+            }
+            void logAudit(req, { action: 'BULK_UPSERT', tableName: 'SupplierQuota', recordId: supplierId, details: JSON.stringify({ count: results.length }) });
+            res.json(results);
+        } catch (err: any) { res.status(500).json({ error: err.message }); }
     });
 
     // Buyers + Contracts
@@ -1364,6 +1418,32 @@ async function startServer() {
         env: process.env.NODE_ENV,
         port: process.env.PORT,
     });
+
+    // ── Schema migration: ensure SupplierQuota table exists ──────────
+    if (prismaAvailable) {
+        try {
+            await prisma.$executeRawUnsafe(`
+                IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SupplierQuota')
+                BEGIN
+                    CREATE TABLE [dbo].[SupplierQuota] (
+                        [id] NVARCHAR(1000) NOT NULL,
+                        [supplierId] NVARCHAR(1000) NOT NULL,
+                        [year] INT NOT NULL,
+                        [month] INT NOT NULL,
+                        [quotaKg] FLOAT(53) NOT NULL,
+                        [actualKg] FLOAT(53),
+                        CONSTRAINT [SupplierQuota_pkey] PRIMARY KEY CLUSTERED ([id]),
+                        CONSTRAINT [SupplierQuota_supplierId_year_month_key] UNIQUE NONCLUSTERED ([supplierId], [year], [month])
+                    );
+                    CREATE NONCLUSTERED INDEX [SupplierQuota_year_month_idx] ON [dbo].[SupplierQuota]([year], [month]);
+                    ALTER TABLE [dbo].[SupplierQuota] ADD CONSTRAINT [SupplierQuota_supplierId_fkey] FOREIGN KEY ([supplierId]) REFERENCES [dbo].[Supplier]([id]) ON DELETE CASCADE ON UPDATE CASCADE;
+                END
+            `);
+            console.log('[BOOT] SupplierQuota table ensured.');
+        } catch (err: any) {
+            console.warn('[BOOT] SupplierQuota migration failed (non-fatal):', err?.message ?? err);
+        }
+    }
 
     // ── One-time seed: create initial_balance reset records ───────────
     // Uses name matching to find products (handles user-created products with custom IDs).

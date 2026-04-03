@@ -1,7 +1,7 @@
 
 import { create } from 'zustand';
 import { apiFetch, AuthError } from './services/apiFetch';
-import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract, StockAdjustment } from './types';
+import { IntakeEntry, OutputEntry, Alert, DispatchEntry, Supplier, Buyer, GlobalConfig, Product, BuyerContract, StockAdjustment, SupplierQuota } from './types';
 import { DEFAULT_CONFIG } from './constants';
 import { getEffectiveIntakeQuantityKg } from './utils/intakeCoefficient';
 
@@ -82,6 +82,11 @@ interface AppState {
   updateContract: (id: string, updates: Partial<BuyerContract>) => Promise<void>;
   removeContract: (id: string) => Promise<void>;
 
+  addSupplierQuota: (supplierId: string, quota: Omit<SupplierQuota, 'id' | 'supplierId'>) => Promise<void>;
+  updateSupplierQuota: (id: string, updates: Partial<SupplierQuota>) => Promise<void>;
+  removeSupplierQuota: (id: string) => Promise<void>;
+  bulkUpsertSupplierQuotas: (supplierId: string, quotas: Omit<SupplierQuota, 'id' | 'supplierId'>[]) => Promise<void>;
+
   addProduct: (product: Product) => Promise<void>;
   updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
   removeProduct: (id: string) => Promise<void>;
@@ -125,9 +130,19 @@ const parseDate = (d: any): number | null => {
   return isNaN(date.getTime()) ? null : date.getTime();
 };
 
+const parseSupplierQuota = (q: any): SupplierQuota => ({
+  id: q.id,
+  supplierId: q.supplierId,
+  year: q.year,
+  month: q.month,
+  quotaKg: q.quotaKg,
+  actualKg: q.actualKg ?? null,
+});
+
 const parseSupplier = (s: any): Supplier => ({
   ...s,
   createdOn: parseDate(s?.createdOn),
+  quotas: Array.isArray(s?.quotas) ? s.quotas.map(parseSupplierQuota) : [],
 });
 
 const parseBuyerContract = (c: any): BuyerContract => ({
@@ -387,6 +402,35 @@ export const useStore = create<AppState>((set, get) => ({
   removeContract: async (id) => {
     await api(`/api/contracts/${id}`, { method: 'DELETE' });
     set((state) => ({ buyers: state.buyers.map(b => ({ ...b, contracts: b.contracts?.filter(c => c.id !== id) || [] })) }));
+  },
+
+  addSupplierQuota: async (supplierId, quota) => {
+    const created = await api<SupplierQuota>(`/api/suppliers/${supplierId}/quotas`, { method: 'POST', body: JSON.stringify(quota) });
+    const parsed = parseSupplierQuota(created);
+    set((state) => ({ suppliers: state.suppliers.map(s => s.id === supplierId ? { ...s, quotas: [...(s.quotas || []), parsed] } : s) }));
+  },
+
+  updateSupplierQuota: async (id, updates) => {
+    const updated = await api<SupplierQuota>(`/api/supplier-quotas/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+    const parsed = parseSupplierQuota(updated);
+    set((state) => ({ suppliers: state.suppliers.map(s => ({ ...s, quotas: (s.quotas || []).map(q => q.id === id ? { ...q, ...parsed } : q) })) }));
+  },
+
+  removeSupplierQuota: async (id) => {
+    await api(`/api/supplier-quotas/${id}`, { method: 'DELETE' });
+    set((state) => ({ suppliers: state.suppliers.map(s => ({ ...s, quotas: (s.quotas || []).filter(q => q.id !== id) })) }));
+  },
+
+  bulkUpsertSupplierQuotas: async (supplierId, quotas) => {
+    const results = await api<SupplierQuota[]>(`/api/suppliers/${supplierId}/quotas/bulk`, { method: 'POST', body: JSON.stringify({ quotas }) });
+    const parsed = results.map(parseSupplierQuota);
+    set((state) => ({
+      suppliers: state.suppliers.map(s => {
+        if (s.id !== supplierId) return s;
+        const existing = (s.quotas || []).filter(q => !parsed.some(p => p.year === q.year && p.month === q.month));
+        return { ...s, quotas: [...existing, ...parsed] };
+      })
+    }));
   },
 
   addProduct: async (product) => {
