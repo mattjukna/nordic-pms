@@ -1,9 +1,7 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import prisma from './prisma';
 function addHeader(worksheet, headers) {
-    // Fix ExcelJS bug: dyDescent defaults to 55 (twips) instead of 0.25 (points),
-    // causing Excel to miscalculate row heights during printing → hang/crash.
-    worksheet.properties.dyDescent = 0.25;
     worksheet.columns = headers.map(h => ({ header: h.header, key: h.key, width: h.width || 15 }));
     // style header
     worksheet.getRow(1).font = { bold: true };
@@ -23,18 +21,55 @@ function addHeader(worksheet, headers) {
         from: { row: 1, column: 1 },
         to: { row: 1, column: headers.length }
     };
-    // Print setup
-    worksheet.pageSetup = {
-        paperSize: 9, // A4
-        orientation: 'landscape',
-        horizontalCentered: true,
-        margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
-    };
-    worksheet.headerFooter = {
-        oddFooter: '&C&P of &N',
-    };
-    // Repeat header row on every printed page
-    worksheet.pageSetup.printTitlesRow = '1:1';
+    // Print settings are NOT set here — they are injected via patchPrintSettings()
+    // to bypass ExcelJS serialization bugs that cause Excel to hang/crash on print.
+}
+/**
+ * Post-process the XLSX buffer to inject clean, standards-compliant print XML.
+ * Bypasses ExcelJS bugs (dyDescent=55, broken fitToPage, etc.).
+ */
+async function patchPrintSettings(raw) {
+    const zip = await JSZip.loadAsync(raw);
+    // ── Patch each worksheet ──
+    let idx = 1;
+    while (true) {
+        const p = `xl/worksheets/sheet${idx}.xml`;
+        const f = zip.file(p);
+        if (!f)
+            break;
+        let xml = await f.async('string');
+        // 1. Force every dyDescent to 0.25 (ExcelJS 4.x defaults to 55)
+        xml = xml.replace(/dyDescent="[^"]*"/g, 'dyDescent="0.25"');
+        // 2. Strip noisy zero-value outline attrs
+        xml = xml.replace(/ outlineLevelRow="0"/g, '');
+        xml = xml.replace(/ outlineLevelCol="0"/g, '');
+        // 3. Remove any ExcelJS-generated print elements
+        xml = xml.replace(/<printOptions[^/]*\/>/g, '');
+        xml = xml.replace(/<pageMargins[^/]*\/>/g, '');
+        xml = xml.replace(/<pageSetup[^/]*\/>/g, '');
+        xml = xml.replace(/<headerFooter[\s\S]*?<\/headerFooter>/g, '');
+        // 4. Inject clean print XML right before </worksheet>
+        const printBlock = '<printOptions horizontalCentered="1"/>' +
+            '<pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
+            '<pageSetup paperSize="9" orientation="landscape"/>' +
+            '<headerFooter><oddFooter>&amp;C&amp;P of &amp;N</oddFooter></headerFooter>';
+        xml = xml.replace('</worksheet>', printBlock + '</worksheet>');
+        zip.file(p, xml);
+        idx++;
+    }
+    // ── Patch workbook.xml: clean Print_Titles ──
+    const wbFile = zip.file('xl/workbook.xml');
+    if (wbFile) {
+        let wb = await wbFile.async('string');
+        wb = wb.replace(/<definedNames[\s\S]*?<\/definedNames>/g, '');
+        const names = [...wb.matchAll(/<sheet[^>]+name="([^"]+)"/g)].map(m => m[1]);
+        if (names.length) {
+            const defs = names.map((n, i) => `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">&apos;${n}&apos;!$1:$1</definedName>`).join('');
+            wb = wb.replace('</sheets>', `</sheets><definedNames>${defs}</definedNames>`);
+        }
+        zip.file('xl/workbook.xml', wb);
+    }
+    return Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
 }
 /* ── Legacy wrapper (keeps old /api/reports/monthly working) ── */
 export async function buildMonthlyWorkbook({ report, startDate, endDateExclusive }) {
@@ -394,7 +429,7 @@ export async function buildExportWorkbook({ sheets, startDate, endDateExclusive 
         sheet.getColumn('actualKg').numFmt = '#,##0';
         sheet.getColumn('fulfillment').numFmt = '0.0%';
     }
-    const buf = await workbook.xlsx.writeBuffer();
-    return Buffer.from(buf);
+    const rawBuf = await workbook.xlsx.writeBuffer();
+    return patchPrintSettings(Buffer.from(rawBuf));
 }
 export default buildMonthlyWorkbook;
