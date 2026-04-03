@@ -305,11 +305,11 @@ export const InputTab: React.FC = () => {
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id || '');
   const [outputDate, setOutputDate] = useState(new Date().toISOString().split('T')[0]);
   const makeBatchId = (pid: string, d: string) => `${pid.replace(/\s+/g, '')}-${d}`;
-  const [batchId, setBatchId] = useState(() => makeBatchId(products[0]?.id || 'MPC', new Date().toISOString().split('T')[0]));
+  const [batchId, setBatchId] = useState('');
   const [pkgString, setPkgString] = useState('');
   const [showWizard, setShowWizard] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const defaultBatchId = makeBatchId(selectedProductId || 'MPC', outputDate);
+  const defaultBatchId = selectedProductId ? makeBatchId(selectedProductId, outputDate) : '';
 
   // Supplier Options for SmartSelect
   const supplierOptions = useMemo(() => suppliers.map(s => ({
@@ -401,7 +401,8 @@ export const InputTab: React.FC = () => {
   // Auto-update batch ID when product or date changes (only if not editing)
   useEffect(() => {
     if (editingOutputId) return;
-    setBatchId(makeBatchId(selectedProductId || 'MPC', outputDate));
+    if (!selectedProductId) return;
+    setBatchId(makeBatchId(selectedProductId, outputDate));
   }, [selectedProductId, outputDate, editingOutputId]);
 
   // Track previous supplier to only auto-fill on actual supplier change
