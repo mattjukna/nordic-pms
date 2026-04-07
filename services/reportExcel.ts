@@ -30,8 +30,50 @@ function addHeader(worksheet: any, headers: { header: string; key: string; width
 }
 
 /**
+ * Find the correct insertion point for print elements per ECMA-376 CT_Worksheet
+ * sequence. Print elements (printOptions, pageMargins, pageSetup, headerFooter)
+ * must appear AFTER sheetData/autoFilter/mergeCells/etc. but BEFORE rowBreaks,
+ * colBreaks, ignoredErrors, drawing, tableParts, extLst, etc.
+ */
+function findPrintInsertionIndex(xml: string): number {
+  // Elements that must come AFTER print elements in CT_Worksheet order.
+  // We find the earliest one and insert print XML right before it.
+  const afterPrintElements = [
+    '<rowBreaks',
+    '<colBreaks',
+    '<customProperties',
+    '<cellWatches',
+    '<ignoredErrors',
+    '<smartTags',
+    '<drawing ',
+    '<drawing>',
+    '<drawingHF',
+    '<picture ',
+    '<picture>',
+    '<oleObjects',
+    '<controls ',
+    '<controls>',
+    '<webPublishItems',
+    '<tableParts',
+    '<extLst',
+    '</worksheet>',
+  ];
+  let earliest = xml.length;
+  for (const tag of afterPrintElements) {
+    const pos = xml.indexOf(tag);
+    if (pos !== -1 && pos < earliest) {
+      earliest = pos;
+    }
+  }
+  return earliest;
+}
+
+/**
  * Post-process the XLSX buffer to inject clean, standards-compliant print XML.
  * Bypasses ExcelJS bugs (dyDescent=55, broken fitToPage, etc.).
+ *
+ * Key fix: print elements are inserted at the correct position per ECMA-376
+ * CT_Worksheet sequence (before ignoredErrors/drawing/extLst), not at the end.
  */
 async function patchPrintSettings(raw: Buffer): Promise<Buffer> {
   const zip = await JSZip.loadAsync(raw);
@@ -51,36 +93,60 @@ async function patchPrintSettings(raw: Buffer): Promise<Buffer> {
     xml = xml.replace(/ outlineLevelRow="0"/g, '');
     xml = xml.replace(/ outlineLevelCol="0"/g, '');
 
-    // 3. Remove any ExcelJS-generated print elements
-    xml = xml.replace(/<printOptions[^/]*\/>/g, '');
-    xml = xml.replace(/<pageMargins[^/]*\/>/g, '');
-    xml = xml.replace(/<pageSetup[^/]*\/>/g, '');
-    xml = xml.replace(/<headerFooter[\s\S]*?<\/headerFooter>/g, '');
+    // 3. Remove ALL existing print elements (both self-closing AND non-self-closing)
+    xml = xml.replace(/<printOptions[^>]*\/>/g, '');
+    xml = xml.replace(/<printOptions[^>]*>[\s\S]*?<\/printOptions>/g, '');
+    xml = xml.replace(/<pageMargins[^>]*\/>/g, '');
+    xml = xml.replace(/<pageMargins[^>]*>[\s\S]*?<\/pageMargins>/g, '');
+    xml = xml.replace(/<pageSetup[^>]*\/>/g, '');
+    xml = xml.replace(/<pageSetup[^>]*>[\s\S]*?<\/pageSetup>/g, '');
+    xml = xml.replace(/<headerFooter[^>]*\/>/g, '');
+    xml = xml.replace(/<headerFooter[^>]*>[\s\S]*?<\/headerFooter>/g, '');
 
-    // 4. Inject clean print XML right before </worksheet>
+    // 4. Inject clean print XML at the CORRECT position per ECMA-376 ordering
     const printBlock =
       '<printOptions horizontalCentered="1"/>' +
       '<pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
       '<pageSetup paperSize="9" orientation="landscape"/>' +
       '<headerFooter><oddFooter>&amp;C&amp;P of &amp;N</oddFooter></headerFooter>';
-    xml = xml.replace('</worksheet>', printBlock + '</worksheet>');
+
+    const insertAt = findPrintInsertionIndex(xml);
+    xml = xml.slice(0, insertAt) + printBlock + xml.slice(insertAt);
 
     zip.file(p, xml);
     idx++;
   }
 
-  // ── Patch workbook.xml: clean Print_Titles ──
+  // ── Patch workbook.xml: preserve existing definedNames, fix Print_Titles ──
   const wbFile = zip.file('xl/workbook.xml');
   if (wbFile) {
     let wb = await wbFile.async('string');
-    wb = wb.replace(/<definedNames[\s\S]*?<\/definedNames>/g, '');
-    const names = [...wb.matchAll(/<sheet[^>]+name="([^"]+)"/g)].map(m => m[1]);
-    if (names.length) {
-      const defs = names.map((n, i) =>
-        `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">&apos;${n}&apos;!$1:$1</definedName>`
-      ).join('');
-      wb = wb.replace('</sheets>', `</sheets><definedNames>${defs}</definedNames>`);
+
+    // Extract existing definedNames (if any), keeping non-Print_Titles entries
+    const existingBlock = wb.match(/<definedNames>([\s\S]*?)<\/definedNames>/);
+    let preservedNames = '';
+    if (existingBlock) {
+      // Keep every <definedName> that is NOT Print_Titles
+      const allDefs = [...existingBlock[1].matchAll(/<definedName[^>]*>[\s\S]*?<\/definedName>/g)];
+      preservedNames = allDefs
+        .map(m => m[0])
+        .filter(d => !d.includes('_xlnm.Print_Titles'))
+        .join('');
+      // Remove the old block entirely; we'll rebuild it
+      wb = wb.replace(/<definedNames>[\s\S]*?<\/definedNames>/g, '');
     }
+
+    // Build new Print_Titles for each sheet
+    const sheetNames = [...wb.matchAll(/<sheet[^>]+name="([^"]+)"/g)].map(m => m[1]);
+    const printTitleDefs = sheetNames.map((n, i) =>
+      `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">&apos;${n}&apos;!$1:$1</definedName>`
+    ).join('');
+
+    const allDefs = preservedNames + printTitleDefs;
+    if (allDefs) {
+      wb = wb.replace('</sheets>', `</sheets><definedNames>${allDefs}</definedNames>`);
+    }
+
     zip.file('xl/workbook.xml', wb);
   }
 
