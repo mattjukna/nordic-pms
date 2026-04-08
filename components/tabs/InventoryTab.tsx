@@ -707,16 +707,17 @@ export const InventoryTab: React.FC = () => {
   };
 
   const convertToConfirmed = (entry: any) => {
+    const orderedKg = entry.orderedQuantityKg || entry.quantityKg;
+    const price = entry.salesPricePerKg || 0;
     const currentStock = stockLevels.find(p => p.id === entry.productId)?.realStockKg || 0;
-    const isNegativeStock = (currentStock - entry.quantityKg) < 0;
+    const isNegativeStock = (currentStock - orderedKg) < 0;
 
     const commitAction = () => {
       updateDispatchEntry(entry.id, { 
         status: 'confirmed',
-        orderedQuantityKg: entry.orderedQuantityKg || entry.quantityKg,
-        quantityKg: 0, // Reset shipped to 0 until shipments are added
-        totalRevenue: 0,
-        shipments: []
+        orderedQuantityKg: orderedKg,
+        quantityKg: orderedKg, // Keep ordered quantity as the confirmed amount
+        totalRevenue: orderedKg * price, // Preserve sale revenue
       });
     };
 
@@ -724,14 +725,14 @@ export const InventoryTab: React.FC = () => {
       setConfirmState({
         isOpen: true,
         type: 'override',
-        message: `Confirming this plan will result in negative stock (${currentStock}kg available). Proceed?`,
+        message: `Confirming this plan will result in negative stock (${currentStock.toLocaleString()}kg available). Proceed?`,
         pendingAction: commitAction
       });
     } else {
       setConfirmState({
         isOpen: true,
         type: 'standard',
-        message: `Mark dispatch to ${entry.buyer} as CONFIRMED? Stock will be deducted and revenue recognized.`,
+        message: `Mark dispatch to ${entry.buyer} as CONFIRMED? Sale price: €${(orderedKg * price).toLocaleString()}.`,
         pendingAction: commitAction
       });
     }
@@ -1847,26 +1848,41 @@ export const InventoryTab: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Completion Toggle */}
-                  <div className="mt-4 flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
-                    <div className="text-xs">
-                      <div className="font-bold text-blue-800">{t('inventory.orderStatus')}</div>
-                      <div className="text-blue-600">
-                        {dispatchEntries.find(e => e.id === editingDispatchId)?.status === 'completed' 
-                          ? t('inventory.orderCompleted') 
-                          : t('inventory.markCompletedHint')}
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => toggleComplete(editingDispatchId!, dispatchEntries.find(e => e.id === editingDispatchId)!.status)}
-                      className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${
-                        dispatchEntries.find(e => e.id === editingDispatchId)?.status === 'completed'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-blue-600 border border-blue-200'
-                      }`}
-                    >
-                      {dispatchEntries.find(e => e.id === editingDispatchId)?.status === 'completed' ? t('inventory.reopenOrder') : t('inventory.markCompleted')}
-                    </button>
+                  {/* Status Selector */}
+                  <div className="mt-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                    <div className="text-xs font-bold text-blue-800 mb-2">{t('inventory.orderStatus')}</div>
+                    {(() => {
+                      const currentEntry = dispatchEntries.find(e => e.id === editingDispatchId);
+                      const currentStatus = currentEntry?.status || 'planned';
+                      const statuses: Array<{ value: 'planned' | 'confirmed' | 'completed'; label: string; color: string; activeColor: string }> = [
+                        { value: 'planned', label: t('inventory.plan'), color: 'text-amber-600 border-amber-200 hover:bg-amber-50', activeColor: 'bg-amber-500 text-white border-amber-500' },
+                        { value: 'confirmed', label: t('inventory.done'), color: 'text-emerald-600 border-emerald-200 hover:bg-emerald-50', activeColor: 'bg-emerald-500 text-white border-emerald-500' },
+                        { value: 'completed', label: t('inventory.completed'), color: 'text-blue-600 border-blue-200 hover:bg-blue-50', activeColor: 'bg-blue-600 text-white border-blue-600' },
+                      ];
+                      return (
+                        <div className="flex gap-1">
+                          {statuses.map(s => (
+                            <button
+                              key={s.value}
+                              onClick={() => {
+                                if (s.value !== currentStatus) {
+                                  if (s.value === 'confirmed' && currentStatus === 'planned') {
+                                    convertToConfirmed(currentEntry!);
+                                  } else {
+                                    updateDispatchEntry(editingDispatchId!, { status: s.value });
+                                  }
+                                }
+                              }}
+                              className={`flex-1 px-3 py-1.5 rounded-md text-xs font-bold border transition-all ${
+                                currentStatus === s.value ? s.activeColor : `bg-white ${s.color}`
+                              }`}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -2111,34 +2127,44 @@ export const InventoryTab: React.FC = () => {
                         </div>
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-slate-700 whitespace-nowrap">
-                         {entry.status === 'confirmed' ? (
-                            <span className="text-emerald-600">€{entry.totalRevenue.toLocaleString()}</span>
-                         ) : (
-                            <span className="text-amber-600 italic">~€{entry.totalRevenue.toLocaleString()}</span>
-                         )}
+                         {(() => {
+                            const revenue = entry.totalRevenue || ((entry.orderedQuantityKg || entry.quantityKg) * entry.salesPricePerKg);
+                            if (entry.status === 'completed') {
+                              return <span className="text-blue-600">€{revenue.toLocaleString()}</span>;
+                            } else if (entry.status === 'confirmed') {
+                              return <span className="text-emerald-600">€{revenue.toLocaleString()}</span>;
+                            } else {
+                              return <span className="text-amber-600 italic">~€{revenue.toLocaleString()}</span>;
+                            }
+                         })()}
                       </td>
                       <td className="p-3 text-center">
-                         {entry.status === 'completed' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
-                               <CheckCircle2 size={10}/> {t('inventory.completed')}
-                            </span>
-                         ) : entry.status === 'confirmed' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
-                               <CheckCircle2 size={10}/> {entry.shipments && entry.shipments.length > 0 ? t('inventory.shipping') : t('inventory.done')}
-                            </span>
-                         ) : (
-                            <div className="flex flex-col items-center gap-1">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                                  <Clock size={10}/> {t('inventory.plan')}
-                                </span>
-                                <button 
-                                  onClick={() => convertToConfirmed(entry)}
-                                  className="text-[10px] text-blue-600 hover:underline font-bold"
-                                >
-                                  {t('inventory.markDone')}
-                                </button>
-                            </div>
-                         )}
+                         <div className="flex flex-col items-center gap-1">
+                           <select
+                             value={entry.status}
+                             onChange={(e) => {
+                               const newStatus = e.target.value as 'planned' | 'confirmed' | 'completed';
+                               if (newStatus === entry.status) return;
+                               if (newStatus === 'confirmed' && entry.status === 'planned') {
+                                 convertToConfirmed(entry);
+                               } else {
+                                 updateDispatchEntry(entry.id, { status: newStatus });
+                               }
+                             }}
+                             onClick={(e) => e.stopPropagation()}
+                             className={`appearance-none text-center cursor-pointer px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+                               entry.status === 'completed'
+                                 ? 'bg-blue-100 text-blue-700 border-blue-200 focus:ring-blue-300'
+                                 : entry.status === 'confirmed'
+                                 ? 'bg-emerald-100 text-emerald-700 border-emerald-200 focus:ring-emerald-300'
+                                 : 'bg-amber-100 text-amber-700 border-amber-200 focus:ring-amber-300'
+                             }`}
+                           >
+                             <option value="planned">{t('inventory.plan')}</option>
+                             <option value="confirmed">{t('inventory.done')}</option>
+                             <option value="completed">{t('inventory.completed')}</option>
+                           </select>
+                         </div>
                       </td>
                       <td className="p-3 text-center">
                          <div className="flex gap-2 justify-center">
