@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useDeferredValue } from 'react';
 import { useStore } from '../../store';
 import { GlassCard } from '../ui/GlassCard';
 import { ConfirmationModal } from '../ui/ConfirmationModal';
@@ -121,9 +121,16 @@ export const SettingsTab: React.FC = () => {
   const [expandedBuyerId, setExpandedBuyerId] = useState<string | null>(null);
   const [showUsedContracts, setShowUsedContracts] = useState<Record<string, boolean>>({});
 
-  // Helper: check if a contract has been used in dispatches
+  // Pre-compute used contract keys for O(1) lookups instead of O(D) per contract
+  const usedContractKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const d of dispatchEntries) {
+      if (d.contractNumber && d.buyerId) keys.add(`${d.buyerId}:${d.contractNumber}`);
+    }
+    return keys;
+  }, [dispatchEntries]);
   const isContractUsed = (buyerId: string, contractNumber: string) =>
-    dispatchEntries.some(d => d.contractNumber === contractNumber && d.buyerId === buyerId);
+    usedContractKeys.has(`${buyerId}:${contractNumber}`);
 
   // Edit Mode State
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
@@ -653,25 +660,28 @@ export const SettingsTab: React.FC = () => {
 
   // --- Filtering ---
 
+  const deferredSupplierSearch = useDeferredValue(supplierSearch);
+  const deferredBuyerSearch = useDeferredValue(buyerSearch);
+
   const filteredSuppliers = useMemo(() => {
-    if (!supplierSearch) return suppliers;
-    const lower = supplierSearch.toLowerCase();
+    if (!deferredSupplierSearch) return suppliers;
+    const lower = deferredSupplierSearch.toLowerCase();
     return suppliers.filter(s => 
       s.name.toLowerCase().includes(lower) || 
       s.companyCode.toLowerCase().includes(lower) || 
       s.routeGroup.toLowerCase().includes(lower)
     );
-  }, [suppliers, supplierSearch]);
+  }, [suppliers, deferredSupplierSearch]);
 
   const filteredBuyers = useMemo(() => {
-    if (!buyerSearch) return buyers;
-    const lower = buyerSearch.toLowerCase();
+    if (!deferredBuyerSearch) return buyers;
+    const lower = deferredBuyerSearch.toLowerCase();
     return buyers.filter(b => 
       b.name.toLowerCase().includes(lower) || 
       b.companyCode.toLowerCase().includes(lower) || 
       b.country.toLowerCase().includes(lower)
     );
-  }, [buyers, buyerSearch]);
+  }, [buyers, deferredBuyerSearch]);
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in h-full">
