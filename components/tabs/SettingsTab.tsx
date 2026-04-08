@@ -106,6 +106,7 @@ export const SettingsTab: React.FC = () => {
     dispatchEntries,
     isHydrating,
     addSupplierQuota, updateSupplierQuota, removeSupplierQuota,
+    addContract, updateContract, removeContract,
   } = useStore();
   const undoableDelete = useUndoDelete();
   const { t } = useTranslation();
@@ -482,7 +483,20 @@ export const SettingsTab: React.FC = () => {
     if (editingBuyerId) {
       await updateBuyer(editingBuyerId, buyerData);
     } else {
-      await addBuyer(buyerData);
+      const created = await addBuyer(buyerData);
+      // Create any contracts accumulated during new buyer creation
+      if (created?.id && newBuyer.contracts.length > 0) {
+        for (const c of newBuyer.contracts) {
+          await addContract(created.id, {
+            contractNumber: c.contractNumber,
+            productId: c.productId,
+            pricePerKg: c.pricePerKg,
+            agreedAmountKg: c.agreedAmountKg || 0,
+            startDate: c.startDate,
+            endDate: c.endDate,
+          });
+        }
+      }
     }
 
     resetBuyerForm();
@@ -538,40 +552,55 @@ export const SettingsTab: React.FC = () => {
   };
 
   // Contract Logic
-  const handleContractSubmit = () => {
+  const handleContractSubmit = async () => {
     if (!contractForm.contractNumber || !contractForm.pricePerKg || Object.keys(contractErrors).length > 0) return;
 
+    const contractData = {
+      contractNumber: contractForm.contractNumber,
+      productId: contractForm.productId,
+      pricePerKg: parseFloat(contractForm.pricePerKg),
+      agreedAmountKg: parseFloat(contractForm.agreedAmountKg) || 0,
+      startDate: new Date(contractForm.startDate).getTime(),
+      endDate: new Date(contractForm.endDate).getTime()
+    };
+
     if (editingContractId) {
-       // Update existing
-       setNewBuyer(prev => ({
-         ...prev,
-         contracts: prev.contracts.map(c => c.id === editingContractId ? {
-            ...c,
-            contractNumber: contractForm.contractNumber,
-            productId: contractForm.productId,
-            pricePerKg: parseFloat(contractForm.pricePerKg),
-            agreedAmountKg: parseFloat(contractForm.agreedAmountKg) || 0,
-            startDate: new Date(contractForm.startDate).getTime(),
-            endDate: new Date(contractForm.endDate).getTime()
-         } : c)
-       }));
+       if (editingBuyerId) {
+         // Existing buyer — persist to DB immediately
+         await updateContract(editingContractId, contractData);
+         // Refresh local copy so the list reflects changes
+         setNewBuyer(prev => ({
+           ...prev,
+           contracts: prev.contracts.map(c => c.id === editingContractId ? { ...c, ...contractData } : c)
+         }));
+       } else {
+         // New buyer (not yet saved) — update local only
+         setNewBuyer(prev => ({
+           ...prev,
+           contracts: prev.contracts.map(c => c.id === editingContractId ? { ...c, ...contractData } : c)
+         }));
+       }
        setEditingContractId(null);
     } else {
-       // Add new
-       const newContract: BuyerContract = {
-          id: Math.random().toString(36).substr(2, 9),
-          contractNumber: contractForm.contractNumber,
-          productId: contractForm.productId,
-          pricePerKg: parseFloat(contractForm.pricePerKg),
-          agreedAmountKg: parseFloat(contractForm.agreedAmountKg) || 0,
-          startDate: new Date(contractForm.startDate).getTime(),
-          endDate: new Date(contractForm.endDate).getTime()
-       };
-
-       setNewBuyer(prev => ({
-         ...prev,
-         contracts: [...prev.contracts, newContract]
-       }));
+       if (editingBuyerId) {
+         // Existing buyer — persist new contract to DB immediately
+         await addContract(editingBuyerId, contractData);
+         // Refresh local copy from the store
+         const updatedBuyer = useStore.getState().buyers.find(b => b.id === editingBuyerId);
+         if (updatedBuyer) {
+           setNewBuyer(prev => ({ ...prev, contracts: updatedBuyer.contracts || [] }));
+         }
+       } else {
+         // New buyer (not yet saved) — accumulate locally
+         const newContract: BuyerContract = {
+            id: Math.random().toString(36).substr(2, 9),
+            ...contractData,
+         };
+         setNewBuyer(prev => ({
+           ...prev,
+           contracts: [...prev.contracts, newContract]
+         }));
+       }
     }
 
     setContractForm({ 
@@ -608,7 +637,11 @@ export const SettingsTab: React.FC = () => {
     });
   };
 
-  const removeContractFromBuyer = (contractId: string) => {
+  const removeContractFromBuyer = async (contractId: string) => {
+    if (editingBuyerId) {
+      // Existing buyer — delete from DB
+      await removeContract(contractId);
+    }
     setNewBuyer(prev => ({
       ...prev,
       contracts: prev.contracts.filter(c => c.id !== contractId)

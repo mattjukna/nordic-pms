@@ -27,7 +27,7 @@ const DISPATCH_DRAFT_KEY = 'nordic-pms-draft-dispatch';
 const INVALID_FIELD_CLASS = 'border-red-300 bg-red-50/40 focus:border-red-400 focus:ring-red-500/10';
 
 export const InventoryTab: React.FC = () => {
-  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating, stockAdjustments, addStockAdjustment, removeStockAdjustment, addContract } = useStore();
+  const { outputEntries, dispatchEntries, addDispatchEntry, updateDispatchEntry, removeDispatchEntry, addDispatchShipment, removeDispatchShipment, updateDispatchShipment, buyers, products, setActiveTab, setEditingOutputId, userSettings, isHydrating, stockAdjustments, addStockAdjustment, removeStockAdjustment, addContract, updateContract } = useStore();
   const undoableDelete = useUndoDelete();
   const { t } = useTranslation();
   const [showDispatchForm, setShowDispatchForm] = useState(false);
@@ -119,6 +119,17 @@ export const InventoryTab: React.FC = () => {
   const [inlineContractEnd, setInlineContractEnd] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split('T')[0]; });
   const [inlineContractSubmitting, setInlineContractSubmitting] = useState(false);
   const [inlineContractError, setInlineContractError] = useState('');
+
+  // Inline contract editing state
+  const [editingInlineContractId, setEditingInlineContractId] = useState<string | null>(null);
+  const [editContractNumber, setEditContractNumber] = useState('');
+  const [editContractPrice, setEditContractPrice] = useState('');
+  const [editContractAmount, setEditContractAmount] = useState('');
+  const [editContractProductId, setEditContractProductId] = useState('');
+  const [editContractStart, setEditContractStart] = useState('');
+  const [editContractEnd, setEditContractEnd] = useState('');
+  const [editContractSubmitting, setEditContractSubmitting] = useState(false);
+  const [editContractError, setEditContractError] = useState('');
 
   useEffect(() => {
     if (buyers.length === 0) {
@@ -1550,15 +1561,88 @@ export const InventoryTab: React.FC = () => {
                           </optgroup>
                         )}
                      </select>
+                     {selectedContractId && (
+                       <button
+                         type="button"
+                         onClick={() => {
+                           const contract = allContracts.find(c => c.id === selectedContractId);
+                           if (!contract) return;
+                           setEditingInlineContractId(contract.id);
+                           setEditContractNumber(contract.contractNumber);
+                           setEditContractPrice(contract.pricePerKg.toString());
+                           setEditContractAmount(contract.agreedAmountKg?.toString() || '');
+                           setEditContractProductId(contract.productId);
+                           setEditContractStart(new Date(contract.startDate).toISOString().split('T')[0]);
+                           setEditContractEnd(new Date(contract.endDate).toISOString().split('T')[0]);
+                           setEditContractError('');
+                           setShowInlineContract(false);
+                         }}
+                         className="p-2 rounded-md border text-sm font-bold transition-colors bg-white border-slate-300 text-slate-500 hover:text-amber-600 hover:border-amber-300"
+                         title={t('settings.editContract')}
+                       >
+                         <Pencil size={14} />
+                       </button>
+                     )}
                      <button
                        type="button"
-                       onClick={() => { setShowInlineContract(!showInlineContract); setInlineContractError(''); }}
+                       onClick={() => { setShowInlineContract(!showInlineContract); setInlineContractError(''); setEditingInlineContractId(null); }}
                        className={`p-2 rounded-md border text-sm font-bold transition-colors ${showInlineContract ? 'bg-blue-50 border-blue-300 text-blue-600' : 'bg-white border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-300'}`}
                        title="Quick-add contract"
                      >
                        <Plus size={14} />
                      </button>
                    </div>
+                   {editingInlineContractId && (
+                     <div className="mt-2 p-2.5 bg-amber-50/60 border border-amber-200 rounded-lg space-y-2">
+                       <div className="text-xs font-bold text-amber-700 mb-1">{t('settings.editContract')}</div>
+                       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                         <input className="bg-white border border-slate-300 rounded p-1.5 text-xs" placeholder="Contract No.*" value={editContractNumber} onChange={e => setEditContractNumber(e.target.value)} />
+                         <select className="bg-white border border-slate-300 rounded p-1.5 text-xs" value={editContractProductId} onChange={e => setEditContractProductId(e.target.value)}>
+                           {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                         </select>
+                         <input type="number" className="bg-white border border-slate-300 rounded p-1.5 text-xs" placeholder="Price €/kg*" value={editContractPrice} onChange={e => setEditContractPrice(e.target.value)} step="0.01" />
+                         <input type="number" className="bg-white border border-slate-300 rounded p-1.5 text-xs" placeholder="Amount (kg)" value={editContractAmount} onChange={e => setEditContractAmount(e.target.value)} />
+                         <div className="flex gap-1">
+                           <input type="date" className="flex-1 bg-white border border-slate-300 rounded p-1.5 text-[10px]" value={editContractStart} onChange={e => setEditContractStart(e.target.value)} title="Start date" />
+                           <input type="date" className="flex-1 bg-white border border-slate-300 rounded p-1.5 text-[10px]" value={editContractEnd} onChange={e => setEditContractEnd(e.target.value)} title="End date" />
+                         </div>
+                       </div>
+                       {editContractError && <div className="text-xs text-red-600">{editContractError}</div>}
+                       <div className="flex gap-2">
+                         <button
+                           type="button"
+                           disabled={editContractSubmitting || !editContractNumber.trim() || !editContractPrice}
+                           onClick={async () => {
+                             setEditContractSubmitting(true);
+                             setEditContractError('');
+                             try {
+                               await updateContract(editingInlineContractId, {
+                                 contractNumber: editContractNumber.trim(),
+                                 productId: editContractProductId,
+                                 pricePerKg: parseFloat(editContractPrice) || 0,
+                                 agreedAmountKg: parseFloat(editContractAmount) || 0,
+                                 startDate: new Date(editContractStart).getTime(),
+                                 endDate: new Date(editContractEnd).getTime(),
+                               });
+                               setEditingInlineContractId(null);
+                               // If product changed, the contract may no longer match current product filter
+                               if (editContractProductId !== selectedProduct) {
+                                 setSelectedContractId('');
+                               }
+                             } catch (err: any) {
+                               setEditContractError(err?.message || 'Failed to update contract');
+                             } finally {
+                               setEditContractSubmitting(false);
+                             }
+                           }}
+                           className="px-3 py-1 text-xs font-bold rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 transition-all"
+                         >
+                           {editContractSubmitting ? t('common.saving') : t('common.save')}
+                         </button>
+                         <button type="button" onClick={() => setEditingInlineContractId(null)} className="px-3 py-1 text-xs font-bold rounded bg-slate-100 text-slate-600 hover:bg-slate-200">{t('common.cancel')}</button>
+                       </div>
+                     </div>
+                   )}
                    {showInlineContract && (
                      <div className="mt-2 p-2.5 bg-blue-50/60 border border-blue-200 rounded-lg space-y-2">
                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">

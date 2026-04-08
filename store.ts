@@ -74,7 +74,7 @@ interface AppState {
   updateSupplier: (id: string, updates: Partial<Supplier>) => Promise<void>;
   removeSupplier: (id: string) => Promise<void>;
 
-  addBuyer: (buyer: Omit<Buyer, 'id'>) => Promise<void>;
+  addBuyer: (buyer: Omit<Buyer, 'id' | 'contracts'>) => Promise<Buyer>;
   updateBuyer: (id: string, updates: Partial<Buyer>) => Promise<void>;
   removeBuyer: (id: string) => Promise<void>;
 
@@ -374,7 +374,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   addBuyer: async (buyer) => {
     const created = await api<Buyer>('/api/buyers', { method: 'POST', body: JSON.stringify(buyer) });
-    set((state) => ({ buyers: [parseBuyer(created), ...state.buyers] }));
+    const parsed = parseBuyer(created);
+    set((state) => ({ buyers: [parsed, ...state.buyers] }));
+    return parsed;
   },
 
   updateBuyer: async (id, updates) => {
