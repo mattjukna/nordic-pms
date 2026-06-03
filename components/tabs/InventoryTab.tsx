@@ -418,8 +418,30 @@ export const InventoryTab: React.FC = () => {
             }
           }
         } else if (isAfterCutoff) {
-          unmappedDispatches.push(d);
-          if (d.packagingString || d.parsed) problematicShipments.push({ type: 'dispatch', entry: d });
+          const dispatchSegs = d.packagingString ? parsePackagingSegments(d.packagingString, defPad, defBb) : [];
+          const dispatchParsedKg = d.parsed?.totalWeight || 0;
+          const dispatchQty = d.quantityKg || dispatchParsedKg || d.orderedQuantityKg || 0;
+          shippedKg += dispatchQty;
+
+          if (dispatchSegs.length > 0) {
+            for (const seg of dispatchSegs) {
+              if (seg.unit === 'kg') { shippedLooseKg += seg.count; }
+              else {
+                const w = seg.unitWeight || (seg.unit === 'pad' ? defPad : seg.unit === 'bb' ? defBb : 25000);
+                addShippedLot(seg.unit, w, seg.count);
+              }
+            }
+            const segTotal = dispatchSegs.reduce((sum, seg) => {
+              if (seg.unit === 'kg') return sum + seg.count;
+              const w = seg.unitWeight || (seg.unit === 'pad' ? defPad : seg.unit === 'bb' ? defBb : 25000);
+              return sum + (seg.count * w);
+            }, 0);
+            if (Math.abs(segTotal - dispatchQty) > 25) problematicShipments.push({ type: 'dispatch', entry: d });
+          } else {
+            unmappedDispatches.push(d);
+            unmappedKgForUnits += dispatchQty;
+            if (d.packagingString || d.parsed) problematicShipments.push({ type: 'dispatch', entry: d });
+          }
         } else {
           hasLegacyUnmappedData = true;
         }
@@ -1201,7 +1223,18 @@ export const InventoryTab: React.FC = () => {
                    {/* Expand/collapse lot details */}
                    {item.currentLots.length > 0 && (
                      <button
-                       onClick={(e) => { e.stopPropagation(); setExpandedCards(prev => { const next = new Set(prev); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; }); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedCards(prev => {
+                            const next = new Set(prev);
+                            if (next.has(item.id)) {
+                              next.delete(item.id);
+                            } else {
+                              next.add(item.id);
+                            }
+                            return next;
+                          });
+                        }}
                        className="flex items-center gap-1 text-[10px] text-blue-600 font-bold mt-1 hover:text-blue-800 transition-colors"
                      >
                        {expandedCards.has(item.id) ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}

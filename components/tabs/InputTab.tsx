@@ -7,7 +7,7 @@ import { PackagingWizard } from '../ui/PackagingWizard';
 import ReportExportModal from '../ui/ReportExportModal';
 import { SmartSelect } from '../ui/SmartSelect';
 import { Plus, Trash2, Tag, Pencil, Check, X, Hash, Filter, Search, Calendar, ChevronDown, ChevronUp, Leaf, Calculator, Droplets, Factory, Ban, Receipt } from 'lucide-react';
-import { parsePackagingString } from '../../utils/parser';
+import { parsePackagingString, parsePackagingSegments } from '../../utils/parser';
 import { anyFractional } from '../../utils/wholeUnits';
 import { buildIntakeTags } from '../../utils/intakeRules';
 import { getEffectiveIntakeQuantityKg, isRawMilkType, resolveEffectiveQuantityKg } from '../../utils/intakeCoefficient';
@@ -21,6 +21,7 @@ import { validateIntakeForm, validateOutputForm } from '../../utils/validation';
 import type { IntakePricingMode, IntakeUnitPriceBasis } from '../../types';
 import { PurchaseDataTab } from './PurchaseDataTab';
 import { useTranslation } from '../../i18n/useTranslation';
+import { buildStockLevels } from '../../utils/stockLevels';
 
 // --- Smart Note Input Component ---
 const SUGGESTED_TAGS = ['#HighTemp', '#HighAcid', '#LowProtein', '#DamagedPackaging', '#LateArrival'];
@@ -273,6 +274,8 @@ export const InputTab: React.FC = () => {
     addOutputEntry, 
     updateOutputEntry,
     removeOutputEntry,
+    dispatchEntries,
+    stockAdjustments,
     editingOutputId,
     setEditingOutputId,
     products,
@@ -504,6 +507,48 @@ export const InputTab: React.FC = () => {
     if (!activeProduct) return null;
     return parsePackagingString(pkgString, activeProduct.defaultPalletWeight, activeProduct.defaultBagWeight);
   }, [pkgString, activeProduct]);
+  const activeStockLevel = useMemo(() => {
+    if (!activeProduct) return null;
+    return buildStockLevels({
+      products: [activeProduct],
+      outputEntries,
+      dispatchEntries,
+      stockAdjustments,
+    }).find(level => level.id === activeProduct.id) || null;
+  }, [activeProduct, outputEntries, dispatchEntries, stockAdjustments]);
+  const carryoverPreview = useMemo(() => {
+    if (!activeProduct || !parserPreview?.isValid) return null;
+
+    const segments = parsePackagingSegments(pkgString, activeProduct.defaultPalletWeight, activeProduct.defaultBagWeight);
+    const addedLooseKg = Math.round(segments
+      .filter(segment => segment.unit === 'kg')
+      .reduce((sum, segment) => sum + segment.count, 0));
+    const currentLooseKg = activeStockLevel?.looseKg || 0;
+    const palletWeight = activeProduct.defaultPalletWeight || 0;
+    const combinedLooseKg = currentLooseKg + addedLooseKg;
+    const closesPallets = palletWeight > 0 ? Math.floor(combinedLooseKg / palletWeight) : 0;
+    const remainingLooseKg = palletWeight > 0 ? Math.round(combinedLooseKg - (closesPallets * palletWeight)) : combinedLooseKg;
+    const exceptionCount = segments.filter(segment => {
+      if (segment.unit === 'kg') return false;
+      const expected = segment.unit === 'pad'
+        ? activeProduct.defaultPalletWeight
+        : segment.unit === 'bb'
+          ? activeProduct.defaultBagWeight
+          : 25000;
+      return Math.abs((segment.unitWeight || expected) - expected) > 0.001;
+    }).length;
+
+    if (currentLooseKg <= 0 && addedLooseKg <= 0 && exceptionCount === 0) return null;
+
+    return {
+      currentLooseKg,
+      addedLooseKg,
+      closesPallets,
+      remainingLooseKg,
+      exceptionCount,
+      palletWeight,
+    };
+  }, [activeProduct, activeStockLevel, parserPreview, pkgString]);
   const intakeDerived = useMemo(() => {
     return resolveEffectiveQuantityKg({
       quantityKg: Number(intakeKg),
@@ -1220,7 +1265,7 @@ export const InputTab: React.FC = () => {
             )}
             {displayedIntake.map(entry => (
               <div key={entry.id} className={`group flex items-center justify-between p-3 border rounded-lg transition-all shadow-sm ${entry.isDiscarded ? 'bg-red-50 border-red-200 opacity-75' : editingIntakeId === entry.id ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
-                {showBulkIntake && <input type="checkbox" checked={selectedIntakeIds.has(entry.id)} onChange={() => setSelectedIntakeIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />}
+                {showBulkIntake && <input type="checkbox" checked={selectedIntakeIds.has(entry.id)} onChange={() => setSelectedIntakeIds(prev => { const next = new Set(prev); if (next.has(entry.id)) next.delete(entry.id); else next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-semibold flex flex-wrap items-center gap-2 ${entry.isDiscarded ? 'text-red-800' : entry.isEcological ? 'text-red-600' : 'text-slate-800'}`}>
                     <span className="truncate">{entry.supplierName}</span>
@@ -1428,6 +1473,37 @@ export const InputTab: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {carryoverPreview && (
+              <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase text-blue-500">Open loose</div>
+                    <div className="font-mono font-bold">{carryoverPreview.currentLooseKg.toLocaleString()} kg</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase text-blue-500">Added loose</div>
+                    <div className="font-mono font-bold">+{carryoverPreview.addedLooseKg.toLocaleString()} kg</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase text-blue-500">Auto-closes</div>
+                    <div className="font-mono font-bold">
+                      {carryoverPreview.closesPallets.toLocaleString()} {t('common.pallet').toLowerCase()}
+                      {carryoverPreview.palletWeight ? ` @ ${carryoverPreview.palletWeight.toLocaleString()} kg` : ''}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase text-blue-500">Carryover</div>
+                    <div className="font-mono font-bold">{carryoverPreview.remainingLooseKg.toLocaleString()} kg</div>
+                  </div>
+                </div>
+                {carryoverPreview.exceptionCount > 0 && (
+                  <div className="mt-2 text-[11px] font-bold text-amber-700">
+                    {carryoverPreview.exceptionCount} package weight exception{carryoverPreview.exceptionCount === 1 ? '' : 's'} in this entry.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </GlassCard>
 
@@ -1469,7 +1545,7 @@ export const InputTab: React.FC = () => {
             )}
             {displayedOutput.map(entry => (
               <div key={entry.id} className={`group flex items-center justify-between p-3 border rounded-lg transition-all shadow-sm ${editingOutputId === entry.id ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200' : 'bg-white hover:bg-slate-50 border-slate-200'}`}>
-                {showBulkOutput && <input type="checkbox" checked={selectedOutputIds.has(entry.id)} onChange={() => setSelectedOutputIds(prev => { const next = new Set(prev); next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />}
+                {showBulkOutput && <input type="checkbox" checked={selectedOutputIds.has(entry.id)} onChange={() => setSelectedOutputIds(prev => { const next = new Set(prev); if (next.has(entry.id)) next.delete(entry.id); else next.add(entry.id); return next; })} className="rounded border-slate-300 mr-2 shrink-0" />}
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
                     {entry.productId}

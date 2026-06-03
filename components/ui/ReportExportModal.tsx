@@ -54,7 +54,10 @@ export default function ReportExportModal({ open, onClose }: { open: boolean; on
     const allSelected = groupKeys.every(k => selectedSheets.has(k));
     setSelectedSheets(prev => {
       const next = new Set(prev);
-      for (const k of groupKeys) allSelected ? next.delete(k) : next.add(k);
+      for (const k of groupKeys) {
+        if (allSelected) next.delete(k);
+        else next.add(k);
+      }
       return next;
     });
   };

@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePackagingString } from '../utils/parser';
+import { parsePackagingString, parsePackagingSegments } from '../utils/parser';
 import { getShippedKg, getShippedRevenue, isShippedStatus } from '../utils/dispatchMath';
 import { buildIntakeTags, getIntakeWarnings } from '../utils/intakeRules';
 import { calculateLabCoefficient, getEffectiveIntakeQuantityKg, resolveEffectiveQuantityKg } from '../utils/intakeCoefficient';
 import { resolveIntakeCost } from '../utils/intakePricing';
 import { validateDispatchForm, validateIntakeForm, validateProductForm } from '../utils/validation';
+import { buildStockLevels } from '../utils/stockLevels';
 
 test('calculateLabCoefficient follows the raw milk formula', () => {
   const coefficient = calculateLabCoefficient(4.2, 3.4);
@@ -42,6 +43,19 @@ test('parsePackagingString resolves weighted units', () => {
   assert.equal(parsed.totalWeight, 2500);
 });
 
+test('parsePackagingString does not double count kg suffixes on unit weights', () => {
+  const parsed = parsePackagingString('1 pad*750kg', 900, 850);
+  assert.equal(parsed.isValid, true);
+  assert.equal(parsed.pallets, 1);
+  assert.equal(parsed.totalWeight, 750);
+
+  const segments = parsePackagingSegments('1 pad*750kg; 20 kg', 900, 850);
+  assert.deepEqual(segments, [
+    { unit: 'pad', count: 1, unitWeight: 750 },
+    { unit: 'kg', count: 20 },
+  ]);
+});
+
 test('dispatch helpers compute shipped totals from shipments', () => {
   const dispatch = {
     quantityKg: 0,
@@ -52,6 +66,31 @@ test('dispatch helpers compute shipped totals from shipments', () => {
   assert.equal(isShippedStatus('confirmed'), true);
   assert.equal(getShippedKg(dispatch), 350);
   assert.equal(getShippedRevenue(dispatch), 1750);
+});
+
+test('stock levels deduct direct confirmed dispatches without shipment rows', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC85', name: 'MPC 85', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [{
+      id: 'out-1',
+      productId: 'MPC85',
+      packagingString: '2 pad*900',
+      timestamp: new Date('2026-04-03T12:00:00Z').getTime(),
+    }],
+    dispatchEntries: [{
+      id: 'disp-1',
+      productId: 'MPC85',
+      status: 'confirmed',
+      quantityKg: 900,
+      packagingString: '1 pad*900',
+      date: new Date('2026-04-04T12:00:00Z').getTime(),
+      shipments: [],
+    }],
+    stockAdjustments: [],
+  });
+
+  assert.equal(stock.currentStockKg, 900);
+  assert.equal(stock.currentStockPallets, 1);
 });
 
 test('intake rules add warnings and tags for out-of-range values', () => {

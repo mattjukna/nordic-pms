@@ -12,6 +12,7 @@ import { getPrimaryCompanyCode, normalizeCompanyCodes } from './utils/companyCod
 import { resolveEffectiveQuantityKg } from './utils/intakeCoefficient';
 import { resolveIntakeCost } from './utils/intakePricing';
 import { validateDispatchPayload, validateIntakePayload, validateOutputPayload, validateShipmentPayload } from './utils/serverValidation';
+import { buildStockLevels } from './utils/stockLevels';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -622,6 +623,21 @@ async function startServer() {
         }
     });
 
+    app.get('/api/stock-levels', async (req, res) => {
+        try {
+            const [products, outputEntries, dispatchEntries, stockAdjustments] = await Promise.all([
+                prisma.product.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
+                prisma.outputEntry.findMany({ orderBy: { timestamp: 'desc' } }),
+                prisma.dispatchEntry.findMany({ include: { shipments: true }, orderBy: { date: 'desc' } }),
+                prisma.stockAdjustment.findMany({ orderBy: { timestamp: 'desc' } }),
+            ]);
+
+            res.json(buildStockLevels({ products, outputEntries, dispatchEntries, stockAdjustments }));
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // Suppliers
     app.post('/api/suppliers', async (req, res) => {
         const body = req.body;
@@ -1136,6 +1152,13 @@ async function startServer() {
         const validation = validateDispatchPayload(b);
         if (!validation.ok) return res.status(400).json({ error: 'Invalid dispatch payload', details: validation.errors });
         try {
+            const product = await prisma.product.findUnique({ where: { id: b.productId } });
+            const parsed = b.packagingString
+                ? parsePackagingString(b.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850)
+                : { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0, isValid: false };
+            if (parsed.isValid && anyFractional(parsed)) {
+                return res.status(400).json({ error: 'Fractional unit counts in dispatch packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
+            }
             const created = await prisma.dispatchEntry.create({ data: {
                 date: b.date ? new Date(b.date) : new Date(),
                 createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
@@ -1148,10 +1171,10 @@ async function startServer() {
                 orderedQuantityKg: b.orderedQuantityKg ?? null,
                 batchRefId: b.batchRefId ?? null,
                 packagingString: b.packagingString ?? null,
-                pallets: b.pallets ?? null,
-                bigBags: b.bigBags ?? null,
-                tanks: b.tanks ?? null,
-                totalWeight: b.totalWeight ?? null,
+                pallets: parsed.isValid ? parsed.pallets : (b.pallets ?? null),
+                bigBags: parsed.isValid ? parsed.bigBags : (b.bigBags ?? null),
+                tanks: parsed.isValid ? parsed.tanks : (b.tanks ?? null),
+                totalWeight: parsed.isValid ? parsed.totalWeight : (b.totalWeight ?? null),
                 salesPricePerKg: b.salesPricePerKg ?? 0,
                 totalRevenue: b.totalRevenue ?? 0,
                 status: b.status ?? 'planned'
@@ -1175,6 +1198,24 @@ async function startServer() {
             if (data.createdAt) data.createdAt = new Date(data.createdAt);
             if (Object.prototype.hasOwnProperty.call(data, 'buyerCompanyCode')) {
                 data.buyerCompanyCode = normalizeCompanyCodes(data.buyerCompanyCode) ?? null;
+            }
+            if (Object.prototype.hasOwnProperty.call(data, 'packagingString')) {
+                if (typeof data.packagingString === 'string' && data.packagingString.trim() !== '') {
+                    const product = await prisma.product.findUnique({ where: { id: data.productId ?? existing.productId } });
+                    const parsed = parsePackagingString(data.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
+                    if (parsed.isValid && anyFractional(parsed)) {
+                        return res.status(400).json({ error: 'Fractional unit counts in dispatch packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
+                    }
+                    data.pallets = parsed.isValid ? parsed.pallets : null;
+                    data.bigBags = parsed.isValid ? parsed.bigBags : null;
+                    data.tanks = parsed.isValid ? parsed.tanks : null;
+                    data.totalWeight = parsed.isValid ? parsed.totalWeight : null;
+                } else {
+                    data.pallets = null;
+                    data.bigBags = null;
+                    data.tanks = null;
+                    data.totalWeight = null;
+                }
             }
             const mergedDispatch = {
                 productId: data.productId ?? existing.productId,
