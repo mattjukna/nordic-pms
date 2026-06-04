@@ -420,7 +420,7 @@ async function startServer() {
 
     app.use('/api', async (req: any, res: any, next: any) => {
         if (AUTH_DISABLED) return next();
-        if (req.path === '/health') return next();
+        if (req.path === '/health' || req.path === '/events') return next();
         const auth = req.headers?.authorization || '';
         if (!auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Missing Authorization Bearer token' });
         const token = auth.split(' ')[1];

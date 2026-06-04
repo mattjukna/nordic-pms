@@ -1,5 +1,13 @@
-import { getAccessToken } from '../auth/useAccessToken';
+import { beginInteractiveSignIn, getAccessToken, InteractiveAuthRequiredError } from '../auth/useAccessToken';
 import { emitSessionEvent } from './sessionEvents';
+
+function isInteractiveAuthRequired(err: any) {
+  return err instanceof InteractiveAuthRequiredError || err?.name === 'InteractiveAuthRequiredError';
+}
+
+function startInteractiveSignIn() {
+  void beginInteractiveSignIn().catch(() => undefined);
+}
 
 export async function apiFetchBlob(url: string): Promise<{ blob: Blob; filename?: string }> {
   const send = async (token: string) => fetch(url, {
@@ -7,12 +15,27 @@ export async function apiFetchBlob(url: string): Promise<{ blob: Blob; filename?
     headers: { Authorization: `Bearer ${token}` }
   });
 
-  let token = await getAccessToken({ interactive: false });
+  let token: string;
+  try {
+    token = await getAccessToken({ interactive: false });
+  } catch (err: any) {
+    if (isInteractiveAuthRequired(err)) {
+      startInteractiveSignIn();
+    }
+    throw err;
+  }
   let res = await send(token);
 
   if (res.status === 401 || res.status === 403) {
     emitSessionEvent({ level: 'warning', message: 'Session check failed during export. Retrying once.' });
-    token = await getAccessToken({ forceRefresh: true, interactive: false });
+    try {
+      token = await getAccessToken({ forceRefresh: true, interactive: false });
+    } catch (err: any) {
+      if (isInteractiveAuthRequired(err)) {
+        startInteractiveSignIn();
+      }
+      throw err;
+    }
     res = await send(token);
   }
 
@@ -20,7 +43,7 @@ export async function apiFetchBlob(url: string): Promise<{ blob: Blob; filename?
     const text = await res.text().catch(() => '');
     if (res.status === 401 || res.status === 403) {
       emitSessionEvent({ level: 'error', message: 'Session expired. Sign-in is required before export can continue.' });
-      void getAccessToken({ forceRefresh: true, interactive: true }).catch(() => undefined);
+      startInteractiveSignIn();
     }
     throw new Error(`Export failed: ${res.status} ${res.statusText}: ${text}`);
   }

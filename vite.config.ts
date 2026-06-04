@@ -50,19 +50,12 @@ export default defineConfig(({ mode }) => {
             ],
           },
           workbox: {
+            cleanupOutdatedCaches: true,
+            clientsClaim: true,
+            skipWaiting: true,
             navigateFallback: '/index.html',
+            navigateFallbackDenylist: [/^\/api\//, /^\/config$/],
             runtimeCaching: [
-              {
-                urlPattern: /\/api\/.*/,
-                handler: 'NetworkFirst',
-                options: {
-                  cacheName: 'api-cache',
-                  expiration: {
-                    maxEntries: 100,
-                    maxAgeSeconds: 60 * 60 * 24,
-                  },
-                },
-              },
               {
                 urlPattern: /\.(?:js|css|woff2?|png|jpg|jpeg|svg|gif|ico)$/,
                 handler: 'CacheFirst',

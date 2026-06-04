@@ -13,6 +13,7 @@ import { clearSessionEvent, readSessionEvent, SessionEvent, subscribeSessionEven
 import ToastContainer from './ui/ToastContainer';
 import OfflineBanner from './ui/OfflineBanner';
 import { useTranslation } from '../i18n/useTranslation';
+import { beginInteractiveSignIn } from '../auth/useAccessToken';
 
 const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) => {
   const activeTab = useStore((state) => state.activeTab);
@@ -126,7 +127,7 @@ const NordicLogApp: React.FC<{ isAuthed?: boolean }> = ({ isAuthed = false }) =>
                   <p className="text-slate-500 text-sm max-w-md">
                     {t('hydration.authFailedDesc')}
                   </p>
-                  <button onClick={() => window.location.reload()} className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                  <button onClick={() => void beginInteractiveSignIn().catch(() => window.location.reload())} className="mt-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
                     {t('hydration.reloadSignIn')}
                   </button>
                 </>

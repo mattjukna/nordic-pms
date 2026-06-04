@@ -1,4 +1,4 @@
-import { getAccessToken } from '../auth/useAccessToken';
+import { beginInteractiveSignIn, getAccessToken, InteractiveAuthRequiredError } from '../auth/useAccessToken';
 import { emitSessionEvent } from './sessionEvents';
 
 export class AuthError extends Error {
@@ -12,6 +12,14 @@ async function readResponseBody(res: Response) {
   return res.text().catch(() => '');
 }
 
+function isInteractiveAuthRequired(err: any) {
+  return err instanceof InteractiveAuthRequiredError || err?.name === 'InteractiveAuthRequiredError';
+}
+
+function startInteractiveSignIn() {
+  void beginInteractiveSignIn().catch(() => undefined);
+}
+
 export async function apiFetch(input: RequestInfo, init?: RequestInit) {
   const headers: Record<string,string> = { 'Content-Type': 'application/json', ...(init?.headers as Record<string,string> || {}) };
   const send = async (token: string) => fetch(input, { ...init, headers: { ...headers, Authorization: `Bearer ${token}` } });
@@ -20,6 +28,9 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit) {
   try {
     token = await getAccessToken({ interactive: false });
   } catch (e: any) {
+    if (isInteractiveAuthRequired(e)) {
+      startInteractiveSignIn();
+    }
     throw new AuthError(e?.message || 'Authentication required');
   }
   let res = await send(token);
@@ -27,14 +38,21 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit) {
 
   if (res.status === 401 || res.status === 403) {
     emitSessionEvent({ level: 'warning', message: 'Session check failed. Retrying once before redirecting to sign-in.' });
-    token = await getAccessToken({ forceRefresh: true, interactive: false });
+    try {
+      token = await getAccessToken({ forceRefresh: true, interactive: false });
+    } catch (e: any) {
+      if (isInteractiveAuthRequired(e)) {
+        startInteractiveSignIn();
+      }
+      throw new AuthError(e?.message || 'Authentication required');
+    }
     res = await send(token);
     bodyText = await readResponseBody(res);
   }
 
   if (res.status === 401 || res.status === 403) {
     emitSessionEvent({ level: 'error', message: 'Session expired. Sign-in is required to continue.' });
-    void getAccessToken({ forceRefresh: true, interactive: true }).catch(() => undefined);
+    startInteractiveSignIn();
     throw new AuthError(`API ${res.status} ${res.statusText}: ${bodyText}`);
   }
   if (!res.ok) {

@@ -764,7 +764,7 @@ export const InventoryTab: React.FC = () => {
     const item = dispatchEntries.find(d => d.id === id);
     if (!item) return;
     undoableDelete({
-      label: `${item.buyerName} dispatch (${(item.orderedQuantityKg ?? item.quantityKg).toLocaleString()} kg)`,
+      label: `${item.buyer} dispatch (${(item.orderedQuantityKg ?? item.quantityKg).toLocaleString()} kg)`,
       removeFromState: () => useStore.setState((s) => ({ dispatchEntries: s.dispatchEntries.filter(d => d.id !== id) })),
       restoreToState: () => useStore.setState((s) => ({ dispatchEntries: [item, ...s.dispatchEntries] })),
       apiEndpoint: `/api/dispatch-entries/${id}`,

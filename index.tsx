@@ -9,7 +9,19 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Could not find root element");
 
+async function clearLegacyRuntimeCaches() {
+  try {
+    if ('caches' in window) {
+      await caches.delete('api-cache');
+    }
+  } catch {
+    // Ignore cache cleanup failures.
+  }
+}
+
 (async () => {
+  await clearLegacyRuntimeCaches();
+
   const msalInstance = await initMsal();
   // Enable logout debug only when explicitly requested via VITE_AUTH_DEBUG_LOGOUT
   const enableLogoutDebug = (import.meta as any).env?.VITE_AUTH_DEBUG_LOGOUT === 'true';
