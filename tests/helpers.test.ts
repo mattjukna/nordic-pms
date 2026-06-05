@@ -56,6 +56,15 @@ test('parsePackagingString does not double count kg suffixes on unit weights', (
   ]);
 });
 
+test('parsePackagingString falls back when product default unit weights are missing', () => {
+  const parsed = parsePackagingString('1 pad; 1 bb', 0, 0);
+
+  assert.equal(parsed.isValid, true);
+  assert.equal(parsed.pallets, 1);
+  assert.equal(parsed.bigBags, 1);
+  assert.equal(parsed.totalWeight, 1750);
+});
+
 test('dispatch helpers compute shipped totals from shipments', () => {
   const dispatch = {
     quantityKg: 0,
@@ -91,6 +100,81 @@ test('stock levels deduct direct confirmed dispatches without shipment rows', ()
 
   assert.equal(stock.currentStockKg, 900);
   assert.equal(stock.currentStockPallets, 1);
+});
+
+test('stock levels keep kg and pallet views aligned for unmapped direct dispatches', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [{
+      id: 'out-1',
+      productId: 'MPC80',
+      packagingString: '2 pad',
+      timestamp: new Date('2026-04-03T12:00:00Z').getTime(),
+    }],
+    dispatchEntries: [{
+      id: 'disp-1',
+      productId: 'MPC80',
+      status: 'confirmed',
+      quantityKg: 1800,
+      date: new Date('2026-04-04T12:00:00Z').getTime(),
+      shipments: [],
+    }],
+    stockAdjustments: [],
+  });
+
+  assert.equal(stock.currentStockKg, 0);
+  assert.equal(stock.currentStockPallets, 0);
+  assert.deepEqual(stock.currentLots, []);
+});
+
+test('stock levels preserve partial unit weight after unmapped kg dispatches', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [{
+      id: 'out-1',
+      productId: 'MPC80',
+      packagingString: '1 pad',
+      timestamp: new Date('2026-04-03T12:00:00Z').getTime(),
+    }],
+    dispatchEntries: [{
+      id: 'disp-1',
+      productId: 'MPC80',
+      status: 'confirmed',
+      quantityKg: 500,
+      date: new Date('2026-04-04T12:00:00Z').getTime(),
+      shipments: [],
+    }],
+    stockAdjustments: [],
+  });
+
+  assert.equal(stock.currentStockKg, 400);
+  assert.equal(stock.currentStockPallets, 1);
+  assert.deepEqual(stock.currentLots, [{ unit: 'pad', weight: 400, count: 1 }]);
+  assert.equal(stock.expectedKgFromUnits, 400);
+});
+
+test('stock levels derive kg from adjustment unit counts when adjustmentKg is missing', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [],
+    dispatchEntries: [],
+    stockAdjustments: [{
+      id: 'adj-1',
+      productId: 'MPC80',
+      type: 'initial_balance',
+      adjustmentKg: 0,
+      pallets: 2,
+      bigBags: 1,
+      tanks: 0,
+      looseKg: 25,
+      timestamp: new Date('2026-04-02T12:00:00Z').getTime(),
+    }],
+  });
+
+  assert.equal(stock.currentStockKg, 2675);
+  assert.equal(stock.currentStockPallets, 2);
+  assert.equal(stock.currentStockBigBags, 1);
+  assert.equal(stock.looseKg, 25);
 });
 
 test('intake rules add warnings and tags for out-of-range values', () => {

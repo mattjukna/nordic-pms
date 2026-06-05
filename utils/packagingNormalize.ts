@@ -8,6 +8,10 @@ const overlaps = (start: number, end: number, spans: Array<{ start: number; end:
   return spans.some((span) => start < span.end && end > span.start);
 };
 
+const positiveWeight = (value: number, fallback: number) => {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
 export function parsePackagingSegments(rawInput: string, defaultPalletWeight: number, defaultBBWeight: number): Segment[] {
   const input = norm(rawInput || '');
   if (!input) return [];
@@ -15,6 +19,8 @@ export function parsePackagingSegments(rawInput: string, defaultPalletWeight: nu
   const unitSpans: Array<{ start: number; end: number }> = [];
   const segmentRegex = /(\d+(?:\.\d+)?)\s*(pad|pal|pl|bb|big\s*bag|tank|t)(?:\s*\*\s*(\d+(?:\.\d+)?)\s*(?:kg)?)?/g;
   const looseRegex = /(\d+(?:\.\d+)?)\s*(kg|loose)\b/g;
+  const palletWeight = positiveWeight(defaultPalletWeight, 900);
+  const bagWeight = positiveWeight(defaultBBWeight, 850);
 
   let m: RegExpExecArray | null;
   while ((m = segmentRegex.exec(input)) !== null) {
@@ -23,9 +29,9 @@ export function parsePackagingSegments(rawInput: string, defaultPalletWeight: nu
     const override = m[3] ? Number(m[3]) : undefined;
     if (!Number.isFinite(count) || count <= 0) continue;
 
-    if (typeRaw.startsWith('bb') || typeRaw.includes('big')) segs.push({ unit: 'bb', count, unitWeight: override ?? defaultBBWeight });
+    if (typeRaw.startsWith('bb') || typeRaw.includes('big')) segs.push({ unit: 'bb', count, unitWeight: override ?? bagWeight });
     else if (typeRaw === 'tank' || typeRaw === 't') segs.push({ unit: 'tank', count, unitWeight: override ?? 25000 });
-    else segs.push({ unit: 'pad', count, unitWeight: override ?? defaultPalletWeight });
+    else segs.push({ unit: 'pad', count, unitWeight: override ?? palletWeight });
 
     unitSpans.push({ start: m.index, end: m.index + m[0].length });
   }

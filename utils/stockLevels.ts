@@ -69,6 +69,11 @@ const asNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(next) ? next : fallback;
 };
 
+const positiveWeight = (value: unknown, fallback: number) => {
+  const next = asNumber(value);
+  return next > 0 ? next : fallback;
+};
+
 const toMillis = (value: unknown) => {
   if (value == null) return 0;
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -147,6 +152,18 @@ const addParsedFallbackToLots = (
   return { parsed, totalKg, hasFractional };
 };
 
+const getAdjustmentKg = (row: any, defPad: number, defBb: number) => {
+  const explicitKg = asNumber(row?.adjustmentKg);
+  if (Math.abs(explicitKg) > 1e-9) return explicitKg;
+
+  return (
+    asNumber(row?.pallets) * defPad
+    + asNumber(row?.bigBags) * defBb
+    + asNumber(row?.tanks) * 25000
+    + asNumber(row?.looseKg)
+  );
+};
+
 export function buildStockLevels({
   products,
   outputEntries,
@@ -161,8 +178,8 @@ export function buildStockLevels({
     const productId = product.id;
     const productOutputs = outputEntries.filter((entry) => entry.productId === productId);
     const productAdjustments = stockAdjustments.filter((entry) => entry.productId === productId);
-    const defPad = asNumber(product.defaultPalletWeight);
-    const defBb = asNumber(product.defaultBagWeight);
+    const defPad = positiveWeight(product.defaultPalletWeight, 900);
+    const defBb = positiveWeight(product.defaultBagWeight, 850);
 
     const initialBalances = productAdjustments.filter((entry) => entry.type === 'initial_balance');
     const latestIB = initialBalances.length > 0
@@ -198,6 +215,7 @@ export function buildStockLevels({
     let shippedLooseKg = 0;
     let shippedKg = 0;
     let unmappedKgForUnits = 0;
+    let unmappedKgForLotConsumption = 0;
     let hasLegacyUnmappedData = false;
     const problematicShipments: StockIssueRef[] = [];
     const unmappedDispatches: any[] = [];
@@ -235,6 +253,7 @@ export function buildStockLevels({
               }
             } else if (isAfterCutoff) {
               unmappedKgForUnits += shipmentQty;
+              unmappedKgForLotConsumption += shipmentQty;
               problematicShipments.push({ type: 'shipment', entry: shipment, dispatchId: dispatch.id });
             } else {
               hasLegacyUnmappedData = true;
@@ -260,6 +279,7 @@ export function buildStockLevels({
       } else if (isAfterCutoff) {
         unmappedDispatches.push(dispatch);
         unmappedKgForUnits += dispatchQty;
+        unmappedKgForLotConsumption += dispatchQty;
       } else {
         hasLegacyUnmappedData = true;
       }
@@ -270,7 +290,7 @@ export function buildStockLevels({
     const adjLots: StockLotGroup[] = [];
 
     if (latestIB) {
-      adjKg += asNumber(latestIB.adjustmentKg);
+      adjKg += getAdjustmentKg(latestIB, defPad, defBb);
       adjLooseKg += asNumber(latestIB.looseKg);
       addLot(adjLots, 'pad', defPad, asNumber(latestIB.pallets));
       addLot(adjLots, 'bb', defBb, asNumber(latestIB.bigBags));
@@ -280,7 +300,7 @@ export function buildStockLevels({
     for (const adjustment of productAdjustments) {
       if (adjustment.type === 'initial_balance') continue;
       if (resetTs && toMillis(adjustment.timestamp) <= resetTs) continue;
-      adjKg += asNumber(adjustment.adjustmentKg);
+      adjKg += getAdjustmentKg(adjustment, defPad, defBb);
       adjLooseKg += asNumber(adjustment.looseKg);
       addLot(adjLots, 'pad', defPad, asNumber(adjustment.pallets));
       addLot(adjLots, 'bb', defBb, asNumber(adjustment.bigBags));
@@ -320,6 +340,54 @@ export function buildStockLevels({
     }
 
     let netLooseKg = producedLooseKg - shippedLooseKg + adjLooseKg;
+
+    let unknownKgToConsume = Math.max(0, unmappedKgForLotConsumption);
+    if (unknownKgToConsume > 0 && netLooseKg > 0) {
+      const takeLoose = Math.min(netLooseKg, unknownKgToConsume);
+      netLooseKg -= takeLoose;
+      unknownKgToConsume -= takeLoose;
+    }
+
+    if (unknownKgToConsume > 0) {
+      const lotEntries = () => [...lotMap.entries()]
+        .filter(([, lot]) => lot.count > 0 && lot.weight > 0)
+        .sort(([, a], [, b]) => b.weight - a.weight);
+
+      while (unknownKgToConsume > 1e-6) {
+        const fullMatch = lotEntries().find(([, lot]) => lot.weight <= unknownKgToConsume + 1e-6);
+
+        if (fullMatch) {
+          const [, lot] = fullMatch;
+          const countToTake = Math.min(lot.count, Math.floor((unknownKgToConsume + 1e-6) / lot.weight));
+          if (countToTake <= 0) break;
+          lot.count -= countToTake;
+          unknownKgToConsume -= countToTake * lot.weight;
+          continue;
+        }
+
+        const partialMatch = lotEntries()[0];
+        if (!partialMatch) break;
+
+        const [, lot] = partialMatch;
+        const consumedKg = Math.min(unknownKgToConsume, lot.weight);
+        const remainingWeight = lot.weight - consumedKg;
+        lot.count -= 1;
+        unknownKgToConsume -= consumedKg;
+
+        if (remainingWeight > 1e-6) {
+          const roundedWeight = Math.round(remainingWeight * 100) / 100;
+          const partialKey = lotKey(lot.unit, roundedWeight);
+          const existing = lotMap.get(partialKey);
+          lotMap.set(
+            partialKey,
+            existing
+              ? { ...existing, count: existing.count + 1 }
+              : { unit: lot.unit, weight: roundedWeight, count: 1 },
+          );
+        }
+      }
+    }
+
     const realStockKg = producedKg - shippedKg + adjKg;
     const currentStockKg = Math.max(0, realStockKg);
 
