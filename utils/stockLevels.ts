@@ -256,6 +256,7 @@ export function buildStockLevels({
               unmappedKgForLotConsumption += shipmentQty;
               problematicShipments.push({ type: 'shipment', entry: shipment, dispatchId: dispatch.id });
             } else {
+              unmappedKgForLotConsumption += shipmentQty;
               hasLegacyUnmappedData = true;
             }
           }
@@ -281,6 +282,7 @@ export function buildStockLevels({
         unmappedKgForUnits += dispatchQty;
         unmappedKgForLotConsumption += dispatchQty;
       } else {
+        unmappedKgForLotConsumption += dispatchQty;
         hasLegacyUnmappedData = true;
       }
     }
@@ -388,8 +390,7 @@ export function buildStockLevels({
       }
     }
 
-    const realStockKg = producedKg - shippedKg + adjKg;
-    const currentStockKg = Math.max(0, realStockKg);
+    const ledgerStockKg = producedKg - shippedKg + adjKg;
 
     if (defPad > 0 && netLooseKg >= defPad) {
       const newPallets = Math.floor(netLooseKg / defPad);
@@ -412,6 +413,8 @@ export function buildStockLevels({
     const currentStockTanks = currentLots.filter((lot) => lot.unit === 'tank').reduce((sum, lot) => sum + lot.count, 0);
     const looseKg = Math.max(0, Math.round(netLooseKg));
     const expectedKgFromLots = currentLots.reduce((sum, lot) => sum + lot.count * lot.weight, 0) + looseKg;
+    const currentStockKg = Math.max(0, expectedKgFromLots > 0 ? expectedKgFromLots : ledgerStockKg);
+    const realStockKg = currentStockKg;
     const looseKgEstimate = currentStockKg - expectedKgFromLots;
 
     const hasFractionalInput = fractionalOutputs.length > 0 || problematicShipments.some((issue) => (

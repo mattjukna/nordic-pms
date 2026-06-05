@@ -127,6 +127,31 @@ test('stock levels keep kg and pallet views aligned for unmapped direct dispatch
   assert.deepEqual(stock.currentLots, []);
 });
 
+test('stock levels consume legacy kg-only dispatches from the unit ledger', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [{
+      id: 'out-1',
+      productId: 'MPC80',
+      packagingString: '2 pad',
+      timestamp: new Date('2026-03-30T12:00:00Z').getTime(),
+    }],
+    dispatchEntries: [{
+      id: 'disp-1',
+      productId: 'MPC80',
+      status: 'confirmed',
+      quantityKg: 900,
+      date: new Date('2026-04-01T12:00:00Z').getTime(),
+      shipments: [],
+    }],
+    stockAdjustments: [],
+  });
+
+  assert.equal(stock.currentStockKg, 900);
+  assert.equal(stock.currentStockPallets, 1);
+  assert.equal(stock.looseKgEstimate, 0);
+});
+
 test('stock levels preserve partial unit weight after unmapped kg dispatches', () => {
   const [stock] = buildStockLevels({
     products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
@@ -175,6 +200,29 @@ test('stock levels derive kg from adjustment unit counts when adjustmentKg is mi
   assert.equal(stock.currentStockPallets, 2);
   assert.equal(stock.currentStockBigBags, 1);
   assert.equal(stock.looseKg, 25);
+});
+
+test('stock levels use unit ledger kg when stored adjustmentKg disagrees with units', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [],
+    dispatchEntries: [],
+    stockAdjustments: [{
+      id: 'adj-1',
+      productId: 'MPC80',
+      type: 'initial_balance',
+      adjustmentKg: 100,
+      pallets: 2,
+      bigBags: 0,
+      tanks: 0,
+      looseKg: 0,
+      timestamp: new Date('2026-04-02T12:00:00Z').getTime(),
+    }],
+  });
+
+  assert.equal(stock.currentStockKg, 1800);
+  assert.equal(stock.currentStockPallets, 2);
+  assert.equal(stock.looseKgEstimate, 0);
 });
 
 test('intake rules add warnings and tags for out-of-range values', () => {

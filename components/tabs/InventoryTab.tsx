@@ -932,6 +932,9 @@ export const InventoryTab: React.FC = () => {
                        {item.looseKg.toLocaleString()} <span className="text-xs font-normal">kg {t('inventory.looseKg').toLowerCase()}</span>
                      </div>
                    )}
+                   <div className="text-xs font-mono font-bold text-slate-700 mt-1">
+                     {item.currentStockKg.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg total
+                   </div>
 
                    {/* Expand/collapse lot details */}
                    {item.currentLots.length > 0 && (
@@ -984,8 +987,20 @@ export const InventoryTab: React.FC = () => {
                    )}
                 </div>
               ) : (
-                <div className={`text-2xl font-mono font-bold ${item.realStockKg < 0 ? 'text-red-600' : 'text-slate-800'}`}>
-                  {item.currentStockKg.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                <div>
+                  <div className={`text-2xl font-mono font-bold ${item.realStockKg < 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                    {item.currentStockKg.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </div>
+                  {(item.currentStockPallets > 0 || item.currentStockBigBags > 0 || item.currentStockTanks > 0 || item.looseKg > 0) && (
+                    <div className="text-xs font-mono text-slate-500 mt-1 leading-tight">
+                      {[
+                        item.currentStockPallets > 0 ? `${Math.round(item.currentStockPallets).toLocaleString()} pad` : '',
+                        item.currentStockBigBags > 0 ? `${Math.round(item.currentStockBigBags).toLocaleString()} bb` : '',
+                        item.currentStockTanks > 0 ? `${Math.round(item.currentStockTanks).toLocaleString()} tank` : '',
+                        item.looseKg > 0 ? `${item.looseKg.toLocaleString()} kg loose` : '',
+                      ].filter(Boolean).join(' / ')}
+                    </div>
+                  )}
                 </div>
               )}
               
