@@ -28,6 +28,10 @@ const toParsed = (row: any) => ({
     pallets: typeof row?.pallets === 'number' ? row.pallets : 0,
     bigBags: typeof row?.bigBags === 'number' ? row.bigBags : 0,
     tanks: typeof row?.tanks === 'number' ? row.tanks : 0,
+    looseKg: 0,
+    loosePalletKg: 0,
+    looseBigBagKg: 0,
+    looseLegacyKg: 0,
     totalWeight: typeof row?.totalWeight === 'number' ? row.totalWeight : 0,
 });
 
@@ -1092,8 +1096,8 @@ async function startServer() {
         try {
             const product = await prisma.product.findUnique({ where: { id: body.productId } });
             const parsed = parsePackagingString(body.packagingString || '', product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
-            // Reject fractional unit counts in outputs — insist on discrete units or explicit kg
-            if (anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
+            // Reject fractional unit counts in outputs; insist on discrete units or typed loose kg.
+            if (anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700), loose pallet kg, or loose big bag kg.' });
             const created = await prisma.outputEntry.create({ data: {
                 productId: body.productId,
                 batchId: body.batchId || '',
@@ -1124,7 +1128,7 @@ async function startServer() {
             if (!validation.ok) return res.status(400).json({ error: 'Invalid output payload', details: validation.errors });
             const product = await prisma.product.findUnique({ where: { id: existing.productId } });
             const parsed = parsePackagingString(req.body.packagingString || existing.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
-            if (anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
+            if (anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in output packaging are not allowed. Use partial unit weights (e.g. 1 pad*700), loose pallet kg, or loose big bag kg.' });
             const updated = await prisma.outputEntry.update({ where: { id }, data: {
                 packagingString: req.body.packagingString ?? existing.packagingString,
                 batchId: req.body.batchId ?? existing.batchId,
@@ -1157,7 +1161,7 @@ async function startServer() {
                 ? parsePackagingString(b.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850)
                 : { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0, isValid: false };
             if (parsed.isValid && anyFractional(parsed)) {
-                return res.status(400).json({ error: 'Fractional unit counts in dispatch packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
+                return res.status(400).json({ error: 'Fractional unit counts in dispatch packaging are not allowed. Use partial unit weights (e.g. 1 pad*700), loose pallet kg, or loose big bag kg.' });
             }
             const created = await prisma.dispatchEntry.create({ data: {
                 date: b.date ? new Date(b.date) : new Date(),
@@ -1204,7 +1208,7 @@ async function startServer() {
                     const product = await prisma.product.findUnique({ where: { id: data.productId ?? existing.productId } });
                     const parsed = parsePackagingString(data.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
                     if (parsed.isValid && anyFractional(parsed)) {
-                        return res.status(400).json({ error: 'Fractional unit counts in dispatch packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
+                        return res.status(400).json({ error: 'Fractional unit counts in dispatch packaging are not allowed. Use partial unit weights (e.g. 1 pad*700), loose pallet kg, or loose big bag kg.' });
                     }
                     data.pallets = parsed.isValid ? parsed.pallets : null;
                     data.bigBags = parsed.isValid ? parsed.bigBags : null;
@@ -1260,11 +1264,11 @@ async function startServer() {
             // load parent dispatch to enforce ordered quantity limits
             const parent = await prisma.dispatchEntry.findUnique({ where: { id: dispatchId }, include: { shipments: true } });
             if (!parent) return res.status(404).json({ error: 'Dispatch not found' });
-            const product = await prisma.product.findUnique({ where: { id: s.productId ?? undefined } });
+            const product = await prisma.product.findUnique({ where: { id: parent.productId } });
             const parsed = s.packagingString ? parsePackagingString(s.packagingString, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850) : { pallets: 0, bigBags: 0, tanks: 0, totalWeight: 0, isValid: false };
             // If packagingString parsed -> enforce whole-unit policy for pallets/bigBags/tanks
             if (parsed.isValid && anyFractional(parsed)) {
-                return res.status(400).json({ error: 'Fractional unit counts in shipment packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
+                return res.status(400).json({ error: 'Fractional unit counts in shipment packaging are not allowed. Use partial unit weights (e.g. 1 pad*700), loose pallet kg, or loose big bag kg.' });
             }
             // If parsed is valid prefer parsed.totalWeight as truth for quantityKg
             const finalQty = (parsed.isValid && parsed.totalWeight > 0) ? parsed.totalWeight : s.quantityKg;
@@ -1348,7 +1352,7 @@ async function startServer() {
                 // reuse parsePackagingString to get parsed numbers
                 const { parsePackagingString } = await import('./utils/parser');
                 parsed = parsePackagingString(norm.normalized, product?.defaultPalletWeight ?? 900, product?.defaultBagWeight ?? 850);
-                if (parsed.isValid && anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in shipment packaging are not allowed. Use partial unit weights (e.g. 1 pad*700) or add an explicit kg segment if truly loose.' });
+                if (parsed.isValid && anyFractional(parsed)) return res.status(400).json({ error: 'Fractional unit counts in shipment packaging are not allowed. Use partial unit weights (e.g. 1 pad*700), loose pallet kg, or loose big bag kg.' });
             }
 
             const finalQty = (parsed.isValid && parsed.totalWeight > 0) ? parsed.totalWeight : (body.quantityKg ?? existing.quantityKg);
@@ -1411,6 +1415,8 @@ async function startServer() {
                 bigBags: body.bigBags ?? 0,
                 tanks: body.tanks ?? 0,
                 looseKg: body.looseKg ?? 0,
+                loosePalletKg: body.loosePalletKg ?? 0,
+                looseBigBagKg: body.looseBigBagKg ?? 0,
                 reason: body.reason || '',
                 type: body.type || 'correction',
                 performedBy: body.performedBy ?? null,
@@ -1433,6 +1439,8 @@ async function startServer() {
                 bigBags: body.bigBags ?? existing.bigBags,
                 tanks: body.tanks ?? existing.tanks,
                 looseKg: body.looseKg ?? existing.looseKg,
+                loosePalletKg: body.loosePalletKg ?? existing.loosePalletKg,
+                looseBigBagKg: body.looseBigBagKg ?? existing.looseBigBagKg,
                 reason: body.reason ?? existing.reason,
                 type: body.type ?? existing.type,
                 note: body.note ?? existing.note,

@@ -249,6 +249,8 @@ model StockAdjustment {
   bigBags      Float   @default(0)
   tanks        Float   @default(0)
   looseKg      Float   @default(0)
+  loosePalletKg Float  @default(0)
+  looseBigBagKg Float  @default(0)
 
   reason      String
   type        String   // 'initial_balance' | 'audit' | 'correction'

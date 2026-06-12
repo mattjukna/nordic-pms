@@ -520,14 +520,22 @@ export const InputTab: React.FC = () => {
     if (!activeProduct || !parserPreview?.isValid) return null;
 
     const segments = parsePackagingSegments(pkgString, activeProduct.defaultPalletWeight, activeProduct.defaultBagWeight);
-    const addedLooseKg = Math.round(segments
-      .filter(segment => segment.unit === 'kg')
+    const addedLoosePalletKg = Math.round(segments
+      .filter(segment => segment.unit === 'kg' && segment.looseTarget !== 'bb')
       .reduce((sum, segment) => sum + segment.count, 0));
-    const currentLooseKg = activeStockLevel?.looseKg || 0;
+    const addedLooseBigBagKg = Math.round(segments
+      .filter(segment => segment.unit === 'kg' && segment.looseTarget === 'bb')
+      .reduce((sum, segment) => sum + segment.count, 0));
+    const currentLoosePalletKg = activeStockLevel?.loosePalletKg || 0;
+    const currentLooseBigBagKg = activeStockLevel?.looseBigBagKg || 0;
     const palletWeight = activeProduct.defaultPalletWeight || 0;
-    const combinedLooseKg = currentLooseKg + addedLooseKg;
-    const closesPallets = palletWeight > 0 ? Math.floor(combinedLooseKg / palletWeight) : 0;
-    const remainingLooseKg = palletWeight > 0 ? Math.round(combinedLooseKg - (closesPallets * palletWeight)) : combinedLooseKg;
+    const bigBagWeight = activeProduct.defaultBagWeight || 0;
+    const combinedLoosePalletKg = currentLoosePalletKg + addedLoosePalletKg;
+    const combinedLooseBigBagKg = currentLooseBigBagKg + addedLooseBigBagKg;
+    const closesPallets = palletWeight > 0 ? Math.floor(combinedLoosePalletKg / palletWeight) : 0;
+    const closesBigBags = bigBagWeight > 0 ? Math.floor(combinedLooseBigBagKg / bigBagWeight) : 0;
+    const remainingLoosePalletKg = palletWeight > 0 ? Math.round(combinedLoosePalletKg - (closesPallets * palletWeight)) : combinedLoosePalletKg;
+    const remainingLooseBigBagKg = bigBagWeight > 0 ? Math.round(combinedLooseBigBagKg - (closesBigBags * bigBagWeight)) : combinedLooseBigBagKg;
     const exceptionCount = segments.filter(segment => {
       if (segment.unit === 'kg') return false;
       const expected = segment.unit === 'pad'
@@ -538,17 +546,32 @@ export const InputTab: React.FC = () => {
       return Math.abs((segment.unitWeight || expected) - expected) > 0.001;
     }).length;
 
-    if (currentLooseKg <= 0 && addedLooseKg <= 0 && exceptionCount === 0) return null;
+    if (currentLoosePalletKg <= 0 && currentLooseBigBagKg <= 0 && addedLoosePalletKg <= 0 && addedLooseBigBagKg <= 0 && exceptionCount === 0) return null;
 
     return {
-      currentLooseKg,
-      addedLooseKg,
-      closesPallets,
-      remainingLooseKg,
+      rows: [
+        {
+          label: t('inventory.loosePalletKg'),
+          currentKg: currentLoosePalletKg,
+          addedKg: addedLoosePalletKg,
+          closes: closesPallets,
+          remainingKg: remainingLoosePalletKg,
+          unitLabel: t('common.pallet').toLowerCase(),
+          targetWeight: palletWeight,
+        },
+        {
+          label: t('inventory.looseBigBagKg'),
+          currentKg: currentLooseBigBagKg,
+          addedKg: addedLooseBigBagKg,
+          closes: closesBigBags,
+          remainingKg: remainingLooseBigBagKg,
+          unitLabel: t('common.bigBag').toLowerCase(),
+          targetWeight: bigBagWeight,
+        },
+      ].filter(row => row.currentKg > 0 || row.addedKg > 0 || row.closes > 0 || row.remainingKg > 0),
       exceptionCount,
-      palletWeight,
     };
-  }, [activeProduct, activeStockLevel, parserPreview, pkgString]);
+  }, [activeProduct, activeStockLevel, parserPreview, pkgString, t]);
   const intakeDerived = useMemo(() => {
     return resolveEffectiveQuantityKg({
       quantityKg: Number(intakeKg),
@@ -814,7 +837,7 @@ export const InputTab: React.FC = () => {
   const confirmOutputSubmit = () => {
     if (Object.keys(outputErrors).length > 0) return;
     if (anyFractional(parserPreview)) {
-      setConfirmModal({ isOpen: true, title: t('input.outputEntry'), message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder.", action: () => setConfirmModal(prev => ({ ...prev, isOpen: false })), isDanger: false });
+      setConfirmModal({ isOpen: true, title: t('input.outputEntry'), message: "Fractional pallets/bigbags/tanks not allowed. Use loose pallet kg or loose big bag kg for remainder.", action: () => setConfirmModal(prev => ({ ...prev, isOpen: false })), isDanger: false });
       return;
     }
     setConfirmModal({
@@ -1409,7 +1432,7 @@ export const InputTab: React.FC = () => {
             
             <div className="relative">
               <label className="text-xs font-semibold text-slate-600 block mb-1.5 flex items-center gap-2">
-                {t('input.logString')} <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "34,96 pad; 2 bb")</span>
+                {t('input.logString')} <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "10 pad; 450 kg loose pad")</span>
               </label>
               <div className="flex gap-2 h-[42px]">
                 <div className="relative flex-1">
@@ -1417,7 +1440,7 @@ export const InputTab: React.FC = () => {
                       type="text" 
                       value={pkgString}
                       onChange={(e) => setPkgString(e.target.value)}
-                      placeholder="e.g. 10 pad; 2 bb *1100"
+                      placeholder="e.g. 10 pad; 2 bb *1100; 450 kg loose pad"
                       className="font-mono pr-10"
                     />
                     <button 
@@ -1467,6 +1490,9 @@ export const InputTab: React.FC = () => {
                 <div className="flex flex-col md:flex-row gap-1 md:gap-3">
                   <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.pallets} {t('common.pallets')}</span>
                   <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.bigBags} {t('common.bigBag')}s</span>
+                  {parserPreview.loosePalletKg > 0 && <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.loosePalletKg.toLocaleString()} kg {t('inventory.loosePalletKg').toLowerCase()}</span>}
+                  {parserPreview.looseBigBagKg > 0 && <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.looseBigBagKg.toLocaleString()} kg {t('inventory.looseBigBagKg').toLowerCase()}</span>}
+                  {parserPreview.looseLegacyKg > 0 && <span className="flex items-center gap-1 font-medium"><Tag size={12}/> {parserPreview.looseLegacyKg.toLocaleString()} kg {t('inventory.looseKg').toLowerCase()}</span>}
                 </div>
                 <div className="font-bold font-mono text-sm">
                   {parserPreview.totalWeight.toLocaleString()} kg
@@ -1476,26 +1502,31 @@ export const InputTab: React.FC = () => {
 
             {carryoverPreview && (
               <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase text-blue-500">Open loose</div>
-                    <div className="font-mono font-bold">{carryoverPreview.currentLooseKg.toLocaleString()} kg</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold uppercase text-blue-500">Added loose</div>
-                    <div className="font-mono font-bold">+{carryoverPreview.addedLooseKg.toLocaleString()} kg</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold uppercase text-blue-500">Auto-closes</div>
-                    <div className="font-mono font-bold">
-                      {carryoverPreview.closesPallets.toLocaleString()} {t('common.pallet').toLowerCase()}
-                      {carryoverPreview.palletWeight ? ` @ ${carryoverPreview.palletWeight.toLocaleString()} kg` : ''}
+                <div className="space-y-2">
+                  {carryoverPreview.rows.map(row => (
+                    <div key={row.label} className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                      <div className="md:col-span-1">
+                        <div className="text-[10px] font-bold uppercase text-blue-500">{row.label}</div>
+                        <div className="font-mono font-bold">{row.targetWeight ? `${row.targetWeight.toLocaleString()} kg target` : 'No target'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-blue-500">Open</div>
+                        <div className="font-mono font-bold">{row.currentKg.toLocaleString()} kg</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-blue-500">Added</div>
+                        <div className="font-mono font-bold">+{row.addedKg.toLocaleString()} kg</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-blue-500">Auto-closes</div>
+                        <div className="font-mono font-bold">{row.closes.toLocaleString()} {row.unitLabel}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-blue-500">Carryover</div>
+                        <div className="font-mono font-bold">{row.remainingKg.toLocaleString()} kg</div>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold uppercase text-blue-500">Carryover</div>
-                    <div className="font-mono font-bold">{carryoverPreview.remainingLooseKg.toLocaleString()} kg</div>
-                  </div>
+                  ))}
                 </div>
                 {carryoverPreview.exceptionCount > 0 && (
                   <div className="mt-2 text-[11px] font-bold text-amber-700">

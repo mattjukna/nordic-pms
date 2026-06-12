@@ -1,11 +1,18 @@
-import { parsePackagingSegments } from './packagingNormalize';
+import { parsePackagingSegments, type Segment } from './packagingNormalize';
 
 export type StockUnit = 'pad' | 'bb' | 'tank';
+export type StockLooseTarget = 'pad' | 'bb';
 
 export type StockLotGroup = {
   unit: StockUnit;
   weight: number;
   count: number;
+};
+
+export type StockLooseGroup = {
+  target: StockLooseTarget;
+  targetWeight: number;
+  kg: number;
 };
 
 export type StockIssueRef = {
@@ -30,6 +37,9 @@ export type StockLevel = {
   currentStockTanks: number;
   currentLots: StockLotGroup[];
   looseKg: number;
+  loosePalletKg: number;
+  looseBigBagKg: number;
+  looseGroups: StockLooseGroup[];
   expectedKgFromUnits: number;
   looseKgEstimate: number;
   unmappedKgForUnits: number;
@@ -95,11 +105,38 @@ const addLot = (lots: StockLotGroup[], unit: StockUnit, weight: number, count: n
   else lots.push({ unit, weight, count });
 };
 
+const looseKey = (target: StockLooseTarget, targetWeight: number) => `${target}:${targetWeight}`;
+
+const addLoosePool = (
+  pools: Map<string, StockLooseGroup>,
+  target: StockLooseTarget,
+  targetWeight: number,
+  kg: number,
+) => {
+  if (!Number.isFinite(kg) || Math.abs(kg) <= 1e-9) return;
+  const resolvedWeight = positiveWeight(targetWeight, target === 'bb' ? 850 : 900);
+  const key = looseKey(target, resolvedWeight);
+  const existing = pools.get(key);
+  pools.set(key, existing ? { ...existing, kg: existing.kg + kg } : { target, targetWeight: resolvedWeight, kg });
+};
+
+const addSegmentLoosePool = (
+  pools: Map<string, StockLooseGroup>,
+  segment: Segment,
+  defPad: number,
+  defBb: number,
+) => {
+  const target: StockLooseTarget = segment.looseTarget === 'bb' ? 'bb' : 'pad';
+  const fallbackWeight = target === 'bb' ? defBb : defPad;
+  addLoosePool(pools, target, segment.unitWeight || fallbackWeight, segment.count);
+};
+
 const addSegmentsToLots = (
   packagingString: string | null | undefined,
   defPad: number,
   defBb: number,
   lots: StockLotGroup[],
+  loosePools?: Map<string, StockLooseGroup>,
 ) => {
   let looseKg = 0;
   let totalKg = 0;
@@ -108,6 +145,7 @@ const addSegmentsToLots = (
   for (const seg of segs) {
     if (seg.unit === 'kg') {
       looseKg += seg.count;
+      if (loosePools) addSegmentLoosePool(loosePools, seg, defPad, defBb);
       totalKg += seg.count;
       continue;
     }
@@ -160,6 +198,8 @@ const getAdjustmentKg = (row: any, defPad: number, defBb: number) => {
     asNumber(row?.pallets) * defPad
     + asNumber(row?.bigBags) * defBb
     + asNumber(row?.tanks) * 25000
+    + asNumber(row?.loosePalletKg)
+    + asNumber(row?.looseBigBagKg)
     + asNumber(row?.looseKg)
   );
 };
@@ -188,7 +228,7 @@ export function buildStockLevels({
     const resetTs = latestIB ? toMillis(latestIB.timestamp) : 0;
 
     const producedLots: StockLotGroup[] = [];
-    let producedLooseKg = 0;
+    const producedLoosePools = new Map<string, StockLooseGroup>();
     let producedKg = 0;
     const batchKgs: { timestamp: number; kg: number }[] = [];
     const fractionalOutputs: any[] = [];
@@ -196,10 +236,9 @@ export function buildStockLevels({
     const activeOutputs = resetTs > 0 ? productOutputs.filter((entry) => toMillis(entry.timestamp) > resetTs) : productOutputs;
     for (const output of activeOutputs) {
       const prevProducedKg = producedKg;
-      const fromSegments = addSegmentsToLots(output.packagingString, defPad, defBb, producedLots);
+      const fromSegments = addSegmentsToLots(output.packagingString, defPad, defBb, producedLots, producedLoosePools);
 
       if (fromSegments.segs.length > 0) {
-        producedLooseKg += fromSegments.looseKg;
         producedKg += fromSegments.totalKg;
       } else {
         const fallback = addParsedFallbackToLots(output, defPad, defBb, producedLots);
@@ -212,7 +251,7 @@ export function buildStockLevels({
     }
 
     const shippedLots: StockLotGroup[] = [];
-    let shippedLooseKg = 0;
+    const shippedLoosePools = new Map<string, StockLooseGroup>();
     let shippedKg = 0;
     let unmappedKgForUnits = 0;
     let unmappedKgForLotConsumption = 0;
@@ -234,10 +273,9 @@ export function buildStockLevels({
         for (const shipment of shipments) {
           const shipmentQty = asNumber(shipment.quantityKg);
           shippedKg += shipmentQty;
-          const fromSegments = addSegmentsToLots(shipment.packagingString, defPad, defBb, shippedLots);
+          const fromSegments = addSegmentsToLots(shipment.packagingString, defPad, defBb, shippedLots, shippedLoosePools);
 
           if (fromSegments.segs.length > 0) {
-            shippedLooseKg += fromSegments.looseKg;
             const parsed = getParsed(shipment);
             if (isAfterCutoff && parsed.totalWeight && Math.abs(parsed.totalWeight - shipmentQty) > 25) {
               problematicShipments.push({ type: 'shipment', entry: shipment, dispatchId: dispatch.id });
@@ -271,9 +309,8 @@ export function buildStockLevels({
         || asNumber(dispatch.orderedQuantityKg);
       shippedKg += dispatchQty;
 
-      const fromSegments = addSegmentsToLots(dispatch.packagingString, defPad, defBb, shippedLots);
+      const fromSegments = addSegmentsToLots(dispatch.packagingString, defPad, defBb, shippedLots, shippedLoosePools);
       if (fromSegments.segs.length > 0) {
-        shippedLooseKg += fromSegments.looseKg;
         if (isAfterCutoff && Math.abs(fromSegments.totalKg - dispatchQty) > 25) {
           problematicShipments.push({ type: 'dispatch', entry: dispatch });
         }
@@ -288,12 +325,17 @@ export function buildStockLevels({
     }
 
     let adjKg = 0;
-    let adjLooseKg = 0;
     const adjLots: StockLotGroup[] = [];
+    const adjLoosePools = new Map<string, StockLooseGroup>();
+
+    const addAdjustmentLoosePools = (adjustment: any) => {
+      addLoosePool(adjLoosePools, 'pad', defPad, asNumber(adjustment?.loosePalletKg) + asNumber(adjustment?.looseKg));
+      addLoosePool(adjLoosePools, 'bb', defBb, asNumber(adjustment?.looseBigBagKg));
+    };
 
     if (latestIB) {
       adjKg += getAdjustmentKg(latestIB, defPad, defBb);
-      adjLooseKg += asNumber(latestIB.looseKg);
+      addAdjustmentLoosePools(latestIB);
       addLot(adjLots, 'pad', defPad, asNumber(latestIB.pallets));
       addLot(adjLots, 'bb', defBb, asNumber(latestIB.bigBags));
       addLot(adjLots, 'tank', 25000, asNumber(latestIB.tanks));
@@ -303,7 +345,7 @@ export function buildStockLevels({
       if (adjustment.type === 'initial_balance') continue;
       if (resetTs && toMillis(adjustment.timestamp) <= resetTs) continue;
       adjKg += getAdjustmentKg(adjustment, defPad, defBb);
-      adjLooseKg += asNumber(adjustment.looseKg);
+      addAdjustmentLoosePools(adjustment);
       addLot(adjLots, 'pad', defPad, asNumber(adjustment.pallets));
       addLot(adjLots, 'bb', defBb, asNumber(adjustment.bigBags));
       addLot(adjLots, 'tank', 25000, asNumber(adjustment.tanks));
@@ -341,29 +383,21 @@ export function buildStockLevels({
       }
     }
 
-    let netLooseKg = producedLooseKg - shippedLooseKg + adjLooseKg;
-
-    let unknownKgToConsume = Math.max(0, unmappedKgForLotConsumption);
-    if (unknownKgToConsume > 0 && netLooseKg > 0) {
-      const takeLoose = Math.min(netLooseKg, unknownKgToConsume);
-      netLooseKg -= takeLoose;
-      unknownKgToConsume -= takeLoose;
-    }
-
-    if (unknownKgToConsume > 0) {
+    const consumeKgFromLots = (kgToConsume: number, unit?: StockUnit) => {
+      let remainingKg = Math.max(0, kgToConsume);
       const lotEntries = () => [...lotMap.entries()]
-        .filter(([, lot]) => lot.count > 0 && lot.weight > 0)
+        .filter(([, lot]) => lot.count > 0 && lot.weight > 0 && (!unit || lot.unit === unit))
         .sort(([, a], [, b]) => b.weight - a.weight);
 
-      while (unknownKgToConsume > 1e-6) {
-        const fullMatch = lotEntries().find(([, lot]) => lot.weight <= unknownKgToConsume + 1e-6);
+      while (remainingKg > 1e-6) {
+        const fullMatch = lotEntries().find(([, lot]) => lot.weight <= remainingKg + 1e-6);
 
         if (fullMatch) {
           const [, lot] = fullMatch;
-          const countToTake = Math.min(lot.count, Math.floor((unknownKgToConsume + 1e-6) / lot.weight));
+          const countToTake = Math.min(lot.count, Math.floor((remainingKg + 1e-6) / lot.weight));
           if (countToTake <= 0) break;
           lot.count -= countToTake;
-          unknownKgToConsume -= countToTake * lot.weight;
+          remainingKg -= countToTake * lot.weight;
           continue;
         }
 
@@ -371,10 +405,10 @@ export function buildStockLevels({
         if (!partialMatch) break;
 
         const [, lot] = partialMatch;
-        const consumedKg = Math.min(unknownKgToConsume, lot.weight);
+        const consumedKg = Math.min(remainingKg, lot.weight);
         const remainingWeight = lot.weight - consumedKg;
         lot.count -= 1;
-        unknownKgToConsume -= consumedKg;
+        remainingKg -= consumedKg;
 
         if (remainingWeight > 1e-6) {
           const roundedWeight = Math.round(remainingWeight * 100) / 100;
@@ -388,16 +422,50 @@ export function buildStockLevels({
           );
         }
       }
+
+      return remainingKg;
+    };
+
+    const loosePoolMap = new Map<string, StockLooseGroup>();
+    const mergeLoosePools = (pools: Map<string, StockLooseGroup>, sign = 1) => {
+      for (const pool of pools.values()) {
+        addLoosePool(loosePoolMap, pool.target, pool.targetWeight, pool.kg * sign);
+      }
+    };
+    mergeLoosePools(producedLoosePools, 1);
+    mergeLoosePools(adjLoosePools, 1);
+    mergeLoosePools(shippedLoosePools, -1);
+
+    for (const pool of loosePoolMap.values()) {
+      if (pool.kg >= -1e-6) continue;
+      let unresolvedKg = consumeKgFromLots(Math.abs(pool.kg), pool.target);
+      if (unresolvedKg > 1e-6) unresolvedKg = consumeKgFromLots(unresolvedKg);
+      pool.kg = unresolvedKg > 1e-6 ? -unresolvedKg : 0;
+    }
+
+    let unknownKgToConsume = Math.max(0, unmappedKgForLotConsumption);
+    if (unknownKgToConsume > 0) {
+      for (const pool of [...loosePoolMap.values()].filter(pool => pool.kg > 0).sort((a, b) => b.kg - a.kg)) {
+        if (unknownKgToConsume <= 0) break;
+        const takeLoose = Math.min(pool.kg, unknownKgToConsume);
+        pool.kg -= takeLoose;
+        unknownKgToConsume -= takeLoose;
+      }
+    }
+
+    if (unknownKgToConsume > 0) {
+      unknownKgToConsume = consumeKgFromLots(unknownKgToConsume);
     }
 
     const ledgerStockKg = producedKg - shippedKg + adjKg;
 
-    if (defPad > 0 && netLooseKg >= defPad) {
-      const newPallets = Math.floor(netLooseKg / defPad);
-      netLooseKg -= newPallets * defPad;
-      const key = lotKey('pad', defPad);
+    for (const pool of loosePoolMap.values()) {
+      if (pool.kg < pool.targetWeight || pool.targetWeight <= 0) continue;
+      const newUnits = Math.floor(pool.kg / pool.targetWeight);
+      pool.kg -= newUnits * pool.targetWeight;
+      const key = lotKey(pool.target, pool.targetWeight);
       const existing = lotMap.get(key);
-      lotMap.set(key, existing ? { ...existing, count: existing.count + newPallets } : { unit: 'pad', weight: defPad, count: newPallets });
+      lotMap.set(key, existing ? { ...existing, count: existing.count + newUnits } : { unit: pool.target, weight: pool.targetWeight, count: newUnits });
     }
 
     const currentLots: StockLotGroup[] = [...lotMap.values()]
@@ -411,7 +479,16 @@ export function buildStockLevels({
     const currentStockPallets = currentLots.filter((lot) => lot.unit === 'pad').reduce((sum, lot) => sum + lot.count, 0);
     const currentStockBigBags = currentLots.filter((lot) => lot.unit === 'bb').reduce((sum, lot) => sum + lot.count, 0);
     const currentStockTanks = currentLots.filter((lot) => lot.unit === 'tank').reduce((sum, lot) => sum + lot.count, 0);
-    const looseKg = Math.max(0, Math.round(netLooseKg));
+    const looseGroups: StockLooseGroup[] = [...loosePoolMap.values()]
+      .map((pool) => ({ ...pool, kg: Math.max(0, Math.round(pool.kg)) }))
+      .filter((pool) => pool.kg > 0)
+      .sort((a, b) => {
+        if (a.target !== b.target) return a.target === 'pad' ? -1 : 1;
+        return b.targetWeight - a.targetWeight;
+      });
+    const loosePalletKg = looseGroups.filter((pool) => pool.target === 'pad').reduce((sum, pool) => sum + pool.kg, 0);
+    const looseBigBagKg = looseGroups.filter((pool) => pool.target === 'bb').reduce((sum, pool) => sum + pool.kg, 0);
+    const looseKg = loosePalletKg + looseBigBagKg;
     const expectedKgFromLots = currentLots.reduce((sum, lot) => sum + lot.count * lot.weight, 0) + looseKg;
     const currentStockKg = Math.max(0, expectedKgFromLots > 0 ? expectedKgFromLots : ledgerStockKg);
     const realStockKg = currentStockKg;
@@ -469,6 +546,9 @@ export function buildStockLevels({
       currentStockTanks,
       currentLots,
       looseKg,
+      loosePalletKg,
+      looseBigBagKg,
+      looseGroups,
       expectedKgFromUnits: expectedKgFromLots,
       looseKgEstimate,
       unmappedKgForUnits,

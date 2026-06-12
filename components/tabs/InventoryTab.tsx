@@ -103,7 +103,8 @@ export const InventoryTab: React.FC = () => {
   const [corrPallets, setCorrPallets] = useState('');
   const [corrBigBags, setCorrBigBags] = useState('');
   const [corrTanks, setCorrTanks] = useState('');
-  const [corrLooseKg, setCorrLooseKg] = useState('');
+  const [corrLoosePalletKg, setCorrLoosePalletKg] = useState('');
+  const [corrLooseBigBagKg, setCorrLooseBigBagKg] = useState('');
   const [corrReason, setCorrReason] = useState<'initial_balance' | 'audit' | 'correction'>('correction');
   const [corrNote, setCorrNote] = useState('');
   const [corrSubmitting, setCorrSubmitting] = useState(false);
@@ -416,7 +417,7 @@ export const InventoryTab: React.FC = () => {
     };
     // Prevent fractional unit submits
     if (pendingData.parsed && anyFractional(pendingData.parsed)) {
-      setConfirmState({ isOpen: true, type: 'standard', message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder." });
+      setConfirmState({ isOpen: true, type: 'standard', message: "Fractional pallets/bigbags/tanks not allowed. Use loose pallet kg or loose big bag kg for remainder." });
       return;
     }
     if (dispatchStatus === 'confirmed' && isNegativeStock) {
@@ -551,7 +552,7 @@ export const InventoryTab: React.FC = () => {
       : undefined;
 
     if (parsed && parsed.isValid && anyFractional(parsed)) {
-      setConfirmState({ isOpen: true, type: 'standard', message: "Fractional pallets/bigbags/tanks not allowed. Use 'loose kg' for remainder." });
+      setConfirmState({ isOpen: true, type: 'standard', message: "Fractional pallets/bigbags/tanks not allowed. Use loose pallet kg or loose big bag kg for remainder." });
       return;
     }
 
@@ -745,6 +746,11 @@ export const InventoryTab: React.FC = () => {
     return data.slice(0, 10); // Show 10 recent
   }, [dispatchEntries, showFilter, filters]);
 
+  const getLooseDisplayParts = (item: any) => [
+    item.loosePalletKg > 0 ? `${item.loosePalletKg.toLocaleString()} kg ${t('inventory.loosePalletShort')}` : '',
+    item.looseBigBagKg > 0 ? `${item.looseBigBagKg.toLocaleString()} kg ${t('inventory.looseBigBagShort')}` : '',
+  ].filter(Boolean);
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       
@@ -901,7 +907,9 @@ export const InventoryTab: React.FC = () => {
 
       {/* Stock Cards with Silo Aging */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
-        {stockLevels.map(item => (
+        {stockLevels.map(item => {
+          const looseParts = getLooseDisplayParts(item);
+          return (
           <GlassCard key={item.id} className={`p-4 flex flex-col justify-between min-h-[100px] border-b-4 ${
             item.ageStatus === 'red' ? 'border-b-red-500 bg-red-50/50' :
             item.ageStatus === 'yellow' ? 'border-b-amber-400' : 'border-b-emerald-500'
@@ -927,17 +935,17 @@ export const InventoryTab: React.FC = () => {
                        {Math.round(item.currentStockTanks).toLocaleString()} <span className="text-xs font-normal text-slate-400">tank</span>
                      </div>
                    )}
-                   {item.looseKg > 0 && (
-                     <div className="text-sm font-mono font-bold text-amber-600">
-                       {item.looseKg.toLocaleString()} <span className="text-xs font-normal">kg {t('inventory.looseKg').toLowerCase()}</span>
+                   {looseParts.map(part => (
+                     <div key={part} className="text-sm font-mono font-bold text-amber-600">
+                       {part}
                      </div>
-                   )}
+                   ))}
                    <div className="text-xs font-mono font-bold text-slate-700 mt-1">
                      {item.currentStockKg.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg total
                    </div>
 
                    {/* Expand/collapse lot details */}
-                   {item.currentLots.length > 0 && (
+                   {(item.currentLots.length > 0 || item.looseGroups.length > 0) && (
                      <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -959,12 +967,18 @@ export const InventoryTab: React.FC = () => {
                    )}
 
                    {/* Lot detail rows */}
-                   {expandedCards.has(item.id) && item.currentLots.length > 0 && (
+                   {expandedCards.has(item.id) && (item.currentLots.length > 0 || item.looseGroups.length > 0) && (
                      <div className="mt-1 border-t border-slate-200 pt-1 space-y-0.5">
                        {item.currentLots.map((lot, idx) => (
                          <div key={`${lot.unit}-${lot.weight}-${idx}`} className="text-[10px] font-mono text-slate-600 flex justify-between">
                            <span>{lot.count}× {lot.unit}</span>
                            <span className="text-slate-400">{lot.weight.toLocaleString()} kg</span>
+                         </div>
+                       ))}
+                       {item.looseGroups.map((group, idx) => (
+                         <div key={`loose-${group.target}-${group.targetWeight}-${idx}`} className="text-[10px] font-mono text-amber-700 flex justify-between">
+                           <span>{group.kg.toLocaleString()} kg loose {group.target}</span>
+                           <span className="text-amber-500">{group.targetWeight.toLocaleString()} kg target</span>
                          </div>
                        ))}
                      </div>
@@ -991,13 +1005,13 @@ export const InventoryTab: React.FC = () => {
                   <div className={`text-2xl font-mono font-bold ${item.realStockKg < 0 ? 'text-red-600' : 'text-slate-800'}`}>
                     {item.currentStockKg.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </div>
-                  {(item.currentStockPallets > 0 || item.currentStockBigBags > 0 || item.currentStockTanks > 0 || item.looseKg > 0) && (
+                  {(item.currentStockPallets > 0 || item.currentStockBigBags > 0 || item.currentStockTanks > 0 || looseParts.length > 0) && (
                     <div className="text-xs font-mono text-slate-500 mt-1 leading-tight">
                       {[
                         item.currentStockPallets > 0 ? `${Math.round(item.currentStockPallets).toLocaleString()} pad` : '',
                         item.currentStockBigBags > 0 ? `${Math.round(item.currentStockBigBags).toLocaleString()} bb` : '',
                         item.currentStockTanks > 0 ? `${Math.round(item.currentStockTanks).toLocaleString()} tank` : '',
-                        item.looseKg > 0 ? `${item.looseKg.toLocaleString()} kg loose` : '',
+                        ...looseParts,
                       ].filter(Boolean).join(' / ')}
                     </div>
                   )}
@@ -1010,7 +1024,8 @@ export const InventoryTab: React.FC = () => {
               </div>
             </div>
           </GlassCard>
-        ))}
+          );
+        })}
       </div>
 
       {/* Stock Adjustments Section */}
@@ -1060,8 +1075,12 @@ export const InventoryTab: React.FC = () => {
                 <input type="number" value={corrTanks} onChange={e => setCorrTanks(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">{t('inventory.looseKgAdj')}</label>
-                <input type="number" value={corrLooseKg} onChange={e => setCorrLooseKg(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('inventory.loosePalletKgAdj')}</label>
+                <input type="number" value={corrLoosePalletKg} onChange={e => setCorrLoosePalletKg(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('inventory.looseBigBagKgAdj')}</label>
+                <input type="number" value={corrLooseBigBagKg} onChange={e => setCorrLooseBigBagKg(e.target.value)} placeholder="0" className="w-full p-2 text-sm border rounded-lg" />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-slate-500 mb-1">{t('common.note')}</label>
@@ -1076,8 +1095,9 @@ export const InventoryTab: React.FC = () => {
                   const pads = Number(corrPallets) || 0;
                   const bbs = Number(corrBigBags) || 0;
                   const tnks = Number(corrTanks) || 0;
-                  const loose = Number(corrLooseKg) || 0;
-                  const totalKg = (pads * (prod.defaultPalletWeight || 0)) + (bbs * (prod.defaultBagWeight || 0)) + (tnks * 25000) + loose;
+                  const loosePallet = Number(corrLoosePalletKg) || 0;
+                  const looseBigBag = Number(corrLooseBigBagKg) || 0;
+                  const totalKg = (pads * (prod.defaultPalletWeight || 0)) + (bbs * (prod.defaultBagWeight || 0)) + (tnks * 25000) + loosePallet + looseBigBag;
                   return <span>{t('inventory.totalAdjustment')}: <strong>{totalKg >= 0 ? '+' : ''}{totalKg.toLocaleString()} kg</strong></span>;
                 })()}
               </div>
@@ -1092,8 +1112,9 @@ export const InventoryTab: React.FC = () => {
                   const pads = Number(corrPallets) || 0;
                   const bbs = Number(corrBigBags) || 0;
                   const tnks = Number(corrTanks) || 0;
-                  const loose = Number(corrLooseKg) || 0;
-                  const totalKg = (pads * (prod.defaultPalletWeight || 0)) + (bbs * (prod.defaultBagWeight || 0)) + (tnks * 25000) + loose;
+                  const loosePallet = Number(corrLoosePalletKg) || 0;
+                  const looseBigBag = Number(corrLooseBigBagKg) || 0;
+                  const totalKg = (pads * (prod.defaultPalletWeight || 0)) + (bbs * (prod.defaultBagWeight || 0)) + (tnks * 25000) + loosePallet + looseBigBag;
                   if (totalKg === 0 && pads === 0 && bbs === 0 && tnks === 0) { setCorrError(t('inventory.enterAdjustment')); return; }
                   setCorrSubmitting(true);
                   setCorrError('');
@@ -1104,11 +1125,13 @@ export const InventoryTab: React.FC = () => {
                       pallets: pads,
                       bigBags: bbs,
                       tanks: tnks,
-                      looseKg: loose,
+                      looseKg: 0,
+                      loosePalletKg: loosePallet,
+                      looseBigBagKg: looseBigBag,
                       reason: corrNote || corrReason,
                       type: corrReason,
                     });
-                    setCorrProductId(''); setCorrPallets(''); setCorrBigBags(''); setCorrTanks(''); setCorrLooseKg(''); setCorrNote('');
+                    setCorrProductId(''); setCorrPallets(''); setCorrBigBags(''); setCorrTanks(''); setCorrLoosePalletKg(''); setCorrLooseBigBagKg(''); setCorrNote('');
                     setShowCorrectionForm(false);
                   } catch (err: any) {
                     setCorrError(err?.message || t('inventory.failedSaveCorrection'));
@@ -1135,7 +1158,9 @@ export const InventoryTab: React.FC = () => {
                   <th className="p-1">{t('common.status')}</th>
                   <th className="p-1 text-right">{t('common.pallets')}</th>
                   <th className="p-1 text-right">{t('inventory.bigBags')}</th>
-                  <th className="p-1 text-right">{t('inventory.looseKg')}</th>
+                  <th className="p-1 text-right">{t('inventory.loosePalletShort')}</th>
+                  <th className="p-1 text-right">{t('inventory.looseBigBagShort')}</th>
+                  <th className="p-1 text-right">{t('inventory.legacyLoose')}</th>
                   <th className="p-1 text-right">{t('inventory.totalKg')}</th>
                   <th className="p-1">{t('common.note')}</th>
                   <th className="p-1 w-8"></th>
@@ -1151,6 +1176,8 @@ export const InventoryTab: React.FC = () => {
                       <td className="p-1"><span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${adj.type === 'initial_balance' ? 'bg-blue-100 text-blue-700' : adj.type === 'audit' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{adj.type.replace('_', ' ')}</span></td>
                       <td className="p-1 text-right font-mono">{adj.pallets !== 0 ? (adj.pallets > 0 ? '+' : '') + adj.pallets : '—'}</td>
                       <td className="p-1 text-right font-mono">{adj.bigBags !== 0 ? (adj.bigBags > 0 ? '+' : '') + adj.bigBags : '—'}</td>
+                      <td className="p-1 text-right font-mono">{adj.loosePalletKg !== 0 ? (adj.loosePalletKg > 0 ? '+' : '') + adj.loosePalletKg : '—'}</td>
+                      <td className="p-1 text-right font-mono">{adj.looseBigBagKg !== 0 ? (adj.looseBigBagKg > 0 ? '+' : '') + adj.looseBigBagKg : '—'}</td>
                       <td className="p-1 text-right font-mono">{adj.looseKg !== 0 ? (adj.looseKg > 0 ? '+' : '') + adj.looseKg : '—'}</td>
                       <td className="p-1 text-right font-mono font-bold">{adj.adjustmentKg >= 0 ? '+' : ''}{adj.adjustmentKg.toLocaleString()}</td>
                       <td className="p-1 text-slate-500 truncate max-w-[120px]" title={adj.reason}>{adj.reason}</td>
@@ -1454,7 +1481,7 @@ export const InventoryTab: React.FC = () => {
 
                 <div className="relative">
                   <label className="text-xs font-semibold text-slate-500 block mb-1 flex items-center gap-2">
-                    {t('common.quantity')} <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "10 pad")</span>
+                    {t('common.quantity')} <span className="text-slate-400 font-normal italic text-[10px] md:text-xs">(e.g. "10 pad; 300 kg loose bb")</span>
                   </label>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
@@ -1462,7 +1489,7 @@ export const InventoryTab: React.FC = () => {
                           type="text" 
                           value={pkgString}
                           onChange={(e) => setPkgString(e.target.value)}
-                          placeholder="e.g. 10 pad"
+                          placeholder="e.g. 10 pad; 300 kg loose bb"
                           className={`w-full bg-white border text-slate-900 rounded-md pl-3 pr-10 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${dispatchErrors.packagingString || dispatchErrors.quantity ? INVALID_FIELD_CLASS : 'border-slate-300'}`}
                         />
                         <button 
@@ -1545,7 +1572,7 @@ export const InventoryTab: React.FC = () => {
                                   if (parsed.isValid) setShipmentQty(parsed.totalWeight.toString());
                                 }
                               }}
-                              placeholder="e.g. 2 pad; 1 bb"
+                              placeholder="e.g. 2 pad; 1 bb; 300 kg loose bb"
                               className={`w-full bg-white border rounded p-1.5 text-xs font-mono pr-8 ${shipmentErrors.shipmentPkgString ? INVALID_FIELD_CLASS : 'border-slate-200'}`}
                             />
                             <button 

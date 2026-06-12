@@ -188,6 +188,13 @@ const parseDispatchEntry = (d: any): DispatchEntry => ({
 
 const parseStockAdjustment = (a: any): StockAdjustment => ({
   ...a,
+  adjustmentKg: Number.isFinite(Number(a?.adjustmentKg)) ? Number(a.adjustmentKg) : 0,
+  pallets: Number.isFinite(Number(a?.pallets)) ? Number(a.pallets) : 0,
+  bigBags: Number.isFinite(Number(a?.bigBags)) ? Number(a.bigBags) : 0,
+  tanks: Number.isFinite(Number(a?.tanks)) ? Number(a.tanks) : 0,
+  looseKg: Number.isFinite(Number(a?.looseKg)) ? Number(a.looseKg) : 0,
+  loosePalletKg: Number.isFinite(Number(a?.loosePalletKg)) ? Number(a.loosePalletKg) : 0,
+  looseBigBagKg: Number.isFinite(Number(a?.looseBigBagKg)) ? Number(a.looseBigBagKg) : 0,
   timestamp: parseDate(a?.timestamp),
 });
 

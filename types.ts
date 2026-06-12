@@ -86,6 +86,8 @@ export interface StockAdjustment {
   bigBags: number;
   tanks: number;
   looseKg: number;
+  loosePalletKg: number;
+  looseBigBagKg: number;
   reason: string;
   type: 'initial_balance' | 'audit' | 'correction';
   performedBy?: string;
@@ -182,6 +184,10 @@ export interface ParsedOutput {
   pallets: number;
   bigBags: number;
   tanks: number;
+  looseKg: number;
+  loosePalletKg: number;
+  looseBigBagKg: number;
+  looseLegacyKg: number;
   totalWeight: number;
   isValid: boolean;
 }

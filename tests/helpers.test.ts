@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePackagingString, parsePackagingSegments } from '../utils/parser';
+import { normalizePackagingString, parsePackagingString, parsePackagingSegments } from '../utils/parser';
 import { getShippedKg, getShippedRevenue, isShippedStatus } from '../utils/dispatchMath';
 import { buildIntakeTags, getIntakeWarnings } from '../utils/intakeRules';
 import { calculateLabCoefficient, getEffectiveIntakeQuantityKg, resolveEffectiveQuantityKg } from '../utils/intakeCoefficient';
@@ -52,8 +52,28 @@ test('parsePackagingString does not double count kg suffixes on unit weights', (
   const segments = parsePackagingSegments('1 pad*750kg; 20 kg', 900, 850);
   assert.deepEqual(segments, [
     { unit: 'pad', count: 1, unitWeight: 750 },
-    { unit: 'kg', count: 20 },
+    { unit: 'kg', count: 20, looseTarget: 'legacy' },
   ]);
+});
+
+test('parsePackagingString tracks typed loose pallet and big bag pools', () => {
+  const parsed = parsePackagingString('1 pad; 300 kg loose pad; 200 kg loose bb', 900, 850);
+
+  assert.equal(parsed.isValid, true);
+  assert.equal(parsed.pallets, 1);
+  assert.equal(parsed.looseKg, 500);
+  assert.equal(parsed.loosePalletKg, 300);
+  assert.equal(parsed.looseBigBagKg, 200);
+  assert.equal(parsed.looseLegacyKg, 0);
+  assert.equal(parsed.totalWeight, 1400);
+});
+
+test('normalizePackagingString preserves typed loose target weights', () => {
+  const normalized = normalizePackagingString('300 kg loose pallet*750; 200 kg loose big bag', 900, 850);
+
+  assert.equal(normalized.normalized, '300 kg loose pad *750; 200 kg loose bb *850');
+  assert.equal(normalized.loosePalletKgAdded, 300);
+  assert.equal(normalized.looseBigBagKgAdded, 200);
 });
 
 test('parsePackagingString falls back when product default unit weights are missing', () => {
@@ -176,6 +196,156 @@ test('stock levels preserve partial unit weight after unmapped kg dispatches', (
   assert.equal(stock.currentStockPallets, 1);
   assert.deepEqual(stock.currentLots, [{ unit: 'pad', weight: 400, count: 1 }]);
   assert.equal(stock.expectedKgFromUnits, 400);
+});
+
+test('stock levels auto-close typed loose pools into their own package types', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [
+      {
+        id: 'out-1',
+        productId: 'MPC80',
+        packagingString: '500 kg loose pad; 500 kg loose pad',
+        timestamp: new Date('2026-04-03T12:00:00Z').getTime(),
+      },
+      {
+        id: 'out-2',
+        productId: 'MPC80',
+        packagingString: '500 kg loose bb; 400 kg loose bb',
+        timestamp: new Date('2026-04-04T12:00:00Z').getTime(),
+      },
+    ],
+    dispatchEntries: [],
+    stockAdjustments: [],
+  });
+
+  assert.equal(stock.currentStockPallets, 1);
+  assert.equal(stock.currentStockBigBags, 1);
+  assert.equal(stock.loosePalletKg, 100);
+  assert.equal(stock.looseBigBagKg, 50);
+  assert.equal(stock.currentStockKg, 1900);
+});
+
+test('stock levels keep loose pools separate when target weights differ', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [{
+      id: 'out-1',
+      productId: 'MPC80',
+      packagingString: '600 kg loose pad*750; 200 kg loose pad*750; 500 kg loose pad',
+      timestamp: new Date('2026-04-03T12:00:00Z').getTime(),
+    }],
+    dispatchEntries: [],
+    stockAdjustments: [],
+  });
+
+  assert.deepEqual(stock.currentLots, [{ unit: 'pad', weight: 750, count: 1 }]);
+  assert.deepEqual(stock.looseGroups, [
+    { target: 'pad', targetWeight: 900, kg: 500 },
+    { target: 'pad', targetWeight: 750, kg: 50 },
+  ]);
+  assert.equal(stock.currentStockKg, 1300);
+});
+
+test('stock levels deduct typed loose shipments from matching loose pools', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [{
+      id: 'out-1',
+      productId: 'MPC80',
+      packagingString: '500 kg loose bb',
+      timestamp: new Date('2026-04-03T12:00:00Z').getTime(),
+    }],
+    dispatchEntries: [{
+      id: 'disp-1',
+      productId: 'MPC80',
+      status: 'confirmed',
+      quantityKg: 200,
+      date: new Date('2026-04-04T12:00:00Z').getTime(),
+      packagingString: '200 kg loose bb',
+      shipments: [],
+    }],
+    stockAdjustments: [],
+  });
+
+  assert.equal(stock.looseBigBagKg, 300);
+  assert.equal(stock.loosePalletKg, 0);
+  assert.equal(stock.currentStockKg, 300);
+});
+
+test('stock levels create partial lots when typed loose shipments exceed loose pool', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [{
+      id: 'out-1',
+      productId: 'MPC80',
+      packagingString: '1 bb',
+      timestamp: new Date('2026-04-03T12:00:00Z').getTime(),
+    }],
+    dispatchEntries: [{
+      id: 'disp-1',
+      productId: 'MPC80',
+      status: 'confirmed',
+      quantityKg: 300,
+      date: new Date('2026-04-04T12:00:00Z').getTime(),
+      packagingString: '300 kg loose bb',
+      shipments: [],
+    }],
+    stockAdjustments: [],
+  });
+
+  assert.equal(stock.currentStockKg, 550);
+  assert.deepEqual(stock.currentLots, [{ unit: 'bb', weight: 550, count: 1 }]);
+});
+
+test('stock levels fall back to any lot when typed loose shipment has no matching unit', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [{
+      id: 'out-1',
+      productId: 'MPC80',
+      packagingString: '1 pad',
+      timestamp: new Date('2026-04-03T12:00:00Z').getTime(),
+    }],
+    dispatchEntries: [{
+      id: 'disp-1',
+      productId: 'MPC80',
+      status: 'confirmed',
+      quantityKg: 300,
+      date: new Date('2026-04-04T12:00:00Z').getTime(),
+      packagingString: '300 kg loose bb',
+      shipments: [],
+    }],
+    stockAdjustments: [],
+  });
+
+  assert.equal(stock.currentStockKg, 600);
+  assert.deepEqual(stock.currentLots, [{ unit: 'pad', weight: 600, count: 1 }]);
+});
+
+test('stock levels add typed loose stock adjustments to the correct pool', () => {
+  const [stock] = buildStockLevels({
+    products: [{ id: 'MPC80', name: 'MPC 80', defaultPalletWeight: 900, defaultBagWeight: 850 }],
+    outputEntries: [],
+    dispatchEntries: [],
+    stockAdjustments: [{
+      id: 'adj-1',
+      productId: 'MPC80',
+      type: 'initial_balance',
+      adjustmentKg: 500,
+      pallets: 0,
+      bigBags: 0,
+      tanks: 0,
+      looseKg: 0,
+      loosePalletKg: 100,
+      looseBigBagKg: 400,
+      timestamp: new Date('2026-04-02T12:00:00Z').getTime(),
+    }],
+  });
+
+  assert.equal(stock.loosePalletKg, 100);
+  assert.equal(stock.looseBigBagKg, 400);
+  assert.equal(stock.currentStockKg, 500);
 });
 
 test('stock levels derive kg from adjustment unit counts when adjustmentKg is missing', () => {

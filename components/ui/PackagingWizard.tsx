@@ -4,6 +4,8 @@ import { LayoutGrid, X, Plus, Trash2 } from 'lucide-react';
 import { normalizePackagingString } from '../../utils/parser';
 import { useTranslation } from '../../i18n/useTranslation';
 
+type LineType = 'pad' | 'bb' | 'tank' | 'loose_pad' | 'loose_bb';
+
 interface PackagingWizardProps {
   isOpen: boolean;
   onClose: () => void;
@@ -14,7 +16,7 @@ interface PackagingWizardProps {
 
 export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClose, onApply, defaultPallet, defaultBag }) => {
    const { t } = useTranslation();
-   const [lines, setLines] = useState<{ count: string; type: 'pad' | 'bb' | 'tank' | 'kg'; weight: string }[]>([
+   const [lines, setLines] = useState<{ count: string; type: LineType; weight: string }[]>([
       { count: '', type: 'pad', weight: defaultPallet?.toString() || '0' }
    ]);
 
@@ -25,7 +27,8 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
        if (next.type === 'pad') next.weight = (defaultPallet || 0).toString();
        if (next.type === 'bb') next.weight = (defaultBag || 0).toString();
        if (next.type === 'tank') next.weight = '25000';
-       if (next.type === 'kg') next.weight = '1';
+       if (next.type === 'loose_pad') next.weight = (defaultPallet || 0).toString();
+       if (next.type === 'loose_bb') next.weight = (defaultBag || 0).toString();
        return next;
      }));
    }, [defaultPallet, defaultBag, isOpen]);
@@ -40,7 +43,8 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
         if (val === 'pad') newLines[idx].weight = defaultPallet.toString();
         else if (val === 'bb') newLines[idx].weight = defaultBag.toString();
         else if (val === 'tank') newLines[idx].weight = '25000';
-        else if (val === 'kg') newLines[idx].weight = '1';
+        else if (val === 'loose_pad') newLines[idx].weight = defaultPallet.toString();
+        else if (val === 'loose_bb') newLines[idx].weight = defaultBag.toString();
      }
      setLines(newLines);
   };
@@ -50,7 +54,8 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
       .filter(l => l.count && parseFloat(l.count) > 0)
       .map(l => {
         const n = parseFloat(l.count || '0');
-        if (l.type === 'kg') return `${n} kg`;
+        if (l.type === 'loose_pad') return `${n} kg loose pad *${l.weight}`;
+        if (l.type === 'loose_bb') return `${n} kg loose bb *${l.weight}`;
         return `${n} ${l.type} *${l.weight}`;
       })
       .filter(Boolean)
@@ -82,8 +87,8 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
                <div key={idx} className="flex gap-2 items-end">
                   <div className="w-16">
                      <label className="text-[10px] font-bold text-slate-400 uppercase">{t('packagingWizard.count')}</label>
-                               <input type="number" step={line.type === 'kg' ? '1' : '1'} min={0} className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.count} onChange={e => updateLine(idx, 'count', e.target.value)} />
-                               {hasDecimal && line.type !== 'kg' && (
+                               <input type="number" step="1" min={0} className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.count} onChange={e => updateLine(idx, 'count', e.target.value)} />
+                               {hasDecimal && !line.type.startsWith('loose_') && (
                                   <div className="text-[10px] text-amber-600 mt-1">{t('packagingWizard.fractionalWarning')}</div>
                                )}
                   </div>
@@ -93,12 +98,13 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
                         <option value="pad">Pallet</option>
                         <option value="bb">Big Bag</option>
                         <option value="tank">Tank</option>
-                        <option value="kg">Loose (kg)</option>
+                        <option value="loose_pad">{t('packagingWizard.loosePallet')}</option>
+                        <option value="loose_bb">{t('packagingWizard.looseBigBag')}</option>
                      </select>
                   </div>
                   <div className="flex-1">
                      <label className="text-[10px] font-bold text-slate-400 uppercase">{t('packagingWizard.unitWeight')}</label>
-                     <input type="number" className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.weight} onChange={e => updateLine(idx, 'weight', e.target.value)} disabled={line.type === 'kg'} />
+                     <input type="number" className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.weight} onChange={e => updateLine(idx, 'weight', e.target.value)} />
                   </div>
                   <button onClick={() => removeLine(idx)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={14}/></button>
                </div>

@@ -484,7 +484,9 @@ export async function buildExportWorkbook({ sheets, startDate, endDateExclusive 
       { header: 'Pallets', key: 'pallets', width: 10 },
       { header: 'Big Bags', key: 'bigBags', width: 10 },
       { header: 'Tanks', key: 'tanks', width: 10 },
-      { header: 'Loose Kg', key: 'looseKg', width: 12 },
+      { header: 'Loose Pallet Kg', key: 'loosePalletKg', width: 16 },
+      { header: 'Loose Big Bag Kg', key: 'looseBigBagKg', width: 17 },
+      { header: 'Legacy Loose Kg', key: 'looseKg', width: 16 },
       { header: 'Type', key: 'type', width: 16 },
       { header: 'Reason', key: 'reason', width: 30 },
       { header: 'Performed By', key: 'performedBy', width: 22 },
@@ -494,7 +496,7 @@ export async function buildExportWorkbook({ sheets, startDate, endDateExclusive 
       sheet.addRow({
         date: fmtDate(a.timestamp), product: a.product?.name || a.productId,
         adjustmentKg: a.adjustmentKg, pallets: a.pallets, bigBags: a.bigBags,
-        tanks: a.tanks, looseKg: a.looseKg,
+        tanks: a.tanks, loosePalletKg: a.loosePalletKg, looseBigBagKg: a.looseBigBagKg, looseKg: a.looseKg,
         type: a.type, reason: a.reason,
         performedBy: a.performedBy || '', note: a.note || '',
       });
