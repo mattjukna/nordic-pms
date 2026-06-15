@@ -793,7 +793,7 @@ export const InventoryTab: React.FC = () => {
                   <div className="text-xs text-slate-500">Issues found: {item.fractionalOutputs.length + item.problematicShipments.length + item.unmappedDispatches.length}</div>
                 </div>
                 <div>
-                  <button onClick={() => setShowInvestigateModal(false)} className="text-slate-400 hover:text-slate-700">Close</button>
+                  <button onClick={() => setShowInvestigateModal(false)} className="text-slate-400 hover:text-slate-700">{t("common.close")}</button>
                 </div>
               </div>
               <div className="p-4 space-y-3">
@@ -809,7 +809,7 @@ export const InventoryTab: React.FC = () => {
                             <div className="text-xs text-slate-500">pallets:{o.parsed?.pallets} bb:{o.parsed?.bigBags} tanks:{o.parsed?.tanks} total:{o.parsed?.totalWeight}kg</div>
                           </div>
                           <div className="text-right">
-                            <button onClick={() => { setActiveTab('input'); setEditingOutputId(o.id); }} className="text-xs text-blue-600 font-bold">Edit</button>
+                            <button onClick={() => { setActiveTab('input'); setEditingOutputId(o.id); }} className="text-xs text-blue-600 font-bold">{t("common.edit")}</button>
                           </div>
                         </div>
                       ))}
@@ -832,18 +832,18 @@ export const InventoryTab: React.FC = () => {
                             {s.type === 'shipment' ? (
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex gap-2">
-                                  <button onClick={() => { recomputeShipment(s.dispatchId, s.entry); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">Recompute</button>
-                                  <button onClick={() => { autoMapShipment(s.dispatchId, s.entry.id, s.entry.quantityKg); }} className="text-xs text-blue-600 font-bold">Auto-map</button>
+                                  <button onClick={() => { recomputeShipment(s.dispatchId, s.entry); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">{t("inventory.recompute")}</button>
+                                  <button onClick={() => { autoMapShipment(s.dispatchId, s.entry.id, s.entry.quantityKg); }} className="text-xs text-blue-600 font-bold">{t("inventory.autoMap")}</button>
                                 </div>
-                                <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(s.dispatchId || s.entry?.dispatchEntryId); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit Dispatch</button>
+                                <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(s.dispatchId || s.entry?.dispatchEntryId); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">{t("inventory.editDispatch")}</button>
                               </div>
                             ) : (
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex gap-2">
-                                  <button onClick={() => { recomputeDispatch(s.entry); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">Recompute</button>
-                                  <button onClick={() => { autoMapDispatch(s.entry.id, s.entry.quantityKg); }} className="text-xs text-blue-600 font-bold">Auto-map</button>
+                                  <button onClick={() => { recomputeDispatch(s.entry); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">{t("inventory.recompute")}</button>
+                                  <button onClick={() => { autoMapDispatch(s.entry.id, s.entry.quantityKg); }} className="text-xs text-blue-600 font-bold">{t("inventory.autoMap")}</button>
                                 </div>
-                                <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(s.dispatchId || s.entry?.dispatchEntryId); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit Dispatch</button>
+                                <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(s.dispatchId || s.entry?.dispatchEntryId); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">{t("inventory.editDispatch")}</button>
                               </div>
                             )}
                           </div>
@@ -855,7 +855,7 @@ export const InventoryTab: React.FC = () => {
 
                 {item.unmappedDispatches.length > 0 && (
                   <div>
-                    <div className="text-xs font-bold text-amber-600">Unmapped dispatches</div>
+                    <div className="text-xs font-bold text-amber-600">{t("inventory.unmappedDispatches")}</div>
                     <div className="mt-2 space-y-1">
                       {item.unmappedDispatches.map((d:any) => (
                         <div key={d.id} className="flex items-center justify-between bg-slate-50 p-2 rounded text-sm">
@@ -867,10 +867,10 @@ export const InventoryTab: React.FC = () => {
                           <div className="text-right">
                             <div className="flex flex-col items-end gap-1">
                               <div className="flex gap-2">
-                                <button onClick={() => { recomputeDispatch(d); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">Recompute</button>
-                                <button onClick={() => { autoMapDispatch(d.id, d.quantityKg); }} className="text-xs text-blue-600 font-bold">Auto-map</button>
+                                <button onClick={() => { recomputeDispatch(d); }} className="text-xs text-slate-700 bg-slate-100 px-2 py-1 rounded">{t("inventory.recompute")}</button>
+                                <button onClick={() => { autoMapDispatch(d.id, d.quantityKg); }} className="text-xs text-blue-600 font-bold">{t("inventory.autoMap")}</button>
                               </div>
-                              <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(d.id); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">Edit</button>
+                              <button onClick={() => { setInvestigateTarget(null); setShowInvestigateModal(false); setEditingDispatchId(d.id); setShowDispatchForm(true); setActiveTab('inventory'); }} className="text-xs text-blue-600 font-bold">{t("common.edit")}</button>
                             </div>
                           </div>
                         </div>
@@ -1256,7 +1256,7 @@ export const InventoryTab: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Buyer</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">{t("common.buyer")}</label>
                   <select 
                     value={selectedBuyerId}
                     onChange={(e) => {
@@ -1900,7 +1900,7 @@ export const InventoryTab: React.FC = () => {
                                    const total = entry.orderedQuantityKg ?? entry.quantityKg ?? 0;
                                    const remaining = total - shipped;
                                    return (
-                                     <span>Shipped: {shipped.toLocaleString()} / {total.toLocaleString()} kg • Remaining: {remaining.toLocaleString()} kg {remaining < 0 && <span className="ml-2 text-red-600 font-bold">OVER-SHIPPED</span>}</span>
+                                     <span>Shipped: {shipped.toLocaleString()} / {total.toLocaleString()} kg • Remaining: {remaining.toLocaleString()} kg {remaining < 0 && <span className="ml-2 text-red-600 font-bold">{t("inventory.overShipped")}</span>}</span>
                                    );
                                  })()}
                                </div>

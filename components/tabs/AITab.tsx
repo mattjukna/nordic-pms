@@ -452,7 +452,7 @@ export const AITab: React.FC = () => {
         <button onClick={() => toggleSection('alerts')} className="w-full flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <div className="text-sm font-extrabold text-slate-800">System Alerts</div>
+            <div className="text-sm font-extrabold text-slate-800">{tr("ai.systemAlerts")}</div>
             {alerts.length > 0 && <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-bold">{alerts.length}</span>}
           </div>
           {expandedSections.alerts ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
@@ -460,7 +460,7 @@ export const AITab: React.FC = () => {
         {expandedSections.alerts && (
           <div className="mt-4 space-y-3">
             {alerts.length === 0 ? (
-              <div className="text-sm text-slate-400 italic p-4 text-center">No system alerts</div>
+              <div className="text-sm text-slate-400 italic p-4 text-center">{tr("ai.noAlerts")}</div>
             ) : (
               alerts.map(alert => (
                 <div key={alert.id} className={`p-4 rounded-lg border text-sm shadow-sm transition-all duration-200 ${

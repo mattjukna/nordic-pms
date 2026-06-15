@@ -95,9 +95,9 @@ export const PackagingWizard: React.FC<PackagingWizardProps> = ({ isOpen, onClos
                   <div className="w-28">
                      <label className="text-[10px] font-bold text-slate-400 uppercase">{t('packagingWizard.type')}</label>
                      <select className="w-full bg-white text-slate-900 border border-slate-300 rounded p-1.5 text-sm" value={line.type} onChange={e => updateLine(idx, 'type', e.target.value as any)}>
-                        <option value="pad">Pallet</option>
-                        <option value="bb">Big Bag</option>
-                        <option value="tank">Tank</option>
+                        <option value="pad">{t("common.pallet")}</option>
+                        <option value="bb">{t("common.bigBag")}</option>
+                        <option value="tank">{t("common.tank")}</option>
                         <option value="loose_pad">{t('packagingWizard.loosePallet')}</option>
                         <option value="loose_bb">{t('packagingWizard.looseBigBag')}</option>
                      </select>

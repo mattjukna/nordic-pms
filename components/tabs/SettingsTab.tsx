@@ -1158,7 +1158,7 @@ export const SettingsTab: React.FC = () => {
           <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
             <Droplets size={16} /> {t('settings.milkTypes')}
           </h3>
-          <div className="text-[11px] text-slate-500">Drag chips to control the milk type order shown in supplier and intake forms.</div>
+          <div className="text-[11px] text-slate-500">{t("settings.dragToReorderMilk")}</div>
           
           <GlassCard className="p-3 bg-slate-50 border-slate-200">
              <div className="flex gap-2 mb-3">

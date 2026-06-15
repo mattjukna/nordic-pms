@@ -837,7 +837,7 @@ export const InputTab: React.FC = () => {
   const confirmOutputSubmit = () => {
     if (Object.keys(outputErrors).length > 0) return;
     if (anyFractional(parserPreview)) {
-      setConfirmModal({ isOpen: true, title: t('input.outputEntry'), message: "Fractional pallets/bigbags/tanks not allowed. Use loose pallet kg or loose big bag kg for remainder.", action: () => setConfirmModal(prev => ({ ...prev, isOpen: false })), isDanger: false });
+      setConfirmModal({ isOpen: true, title: t('input.outputEntry'), message: t("input.fractionalWarningModal"), action: () => setConfirmModal(prev => ({ ...prev, isOpen: false })), isDanger: false });
       return;
     }
     setConfirmModal({
@@ -1197,14 +1197,14 @@ export const InputTab: React.FC = () => {
 
             {/* Ecological Toggle */}
             <div className="col-span-8 md:col-span-3 flex flex-col justify-end">
-               <label className="text-xs font-semibold text-slate-600 block mb-1.5 md:opacity-0">Eco</label>
+               <label className="text-xs font-semibold text-slate-600 block mb-1.5 md:opacity-0">{t("input.filterEcologicalShort")}</label>
                <button
                   onClick={() => setIsEcological(!isEcological)}
                   className={`h-[42px] px-3 rounded-md border flex items-center justify-center gap-2 transition-all w-full ${isEcological ? 'bg-green-100 border-green-300 text-green-700' : 'bg-white border-slate-300 text-slate-400'}`}
                   title="Is Ecological Milk?"
               >
                 <Leaf size={18} />
-                <span className="text-xs font-bold">ECO</span>
+                <span className="text-xs font-bold">{t("input.filterEcologicalShort").toUpperCase()}</span>
               </button>
            </div>
             
@@ -1510,11 +1510,11 @@ export const InputTab: React.FC = () => {
                         <div className="font-mono font-bold">{row.targetWeight ? `${row.targetWeight.toLocaleString()} kg target` : 'No target'}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold uppercase text-blue-500">Open</div>
+                        <div className="text-[10px] font-bold uppercase text-blue-500">{t("input.carryoverOpen")}</div>
                         <div className="font-mono font-bold">{row.currentKg.toLocaleString()} kg</div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold uppercase text-blue-500">Added</div>
+                        <div className="text-[10px] font-bold uppercase text-blue-500">{t("input.carryoverAdded")}</div>
                         <div className="font-mono font-bold">+{row.addedKg.toLocaleString()} kg</div>
                       </div>
                       <div>
@@ -1522,7 +1522,7 @@ export const InputTab: React.FC = () => {
                         <div className="font-mono font-bold">{row.closes.toLocaleString()} {row.unitLabel}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-bold uppercase text-blue-500">Carryover</div>
+                        <div className="text-[10px] font-bold uppercase text-blue-500">{t("input.carryoverRemaining")}</div>
                         <div className="font-mono font-bold">{row.remainingKg.toLocaleString()} kg</div>
                       </div>
                     </div>
